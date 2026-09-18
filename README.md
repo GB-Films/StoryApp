@@ -1,15 +1,18 @@
 # Storyboard Studio
 
-Una app web simple para organizar fotos en un storyboard visual.
+Un espacio de trabajo visual para organizar fotos y armar storyboards como si fuera un artboard.
 
 ## Funciones
 
-- Arrastrar o seleccionar varias fotos.
-- Reordenar las tomas arrastrando las tarjetas.
-- Editar título, descripción, tipo de plano, cámara y duración.
-- Vista de cuadrícula y vista de planilla.
-- Guardado automático en el navegador.
-- Exportar como PNG, JPG, PDF mediante impresión o proyecto JSON editable.
+- Biblioteca lateral para cargar todas las fotos del proyecto.
+- Artboards 16:9, 9:16 y 1:1.
+- Arrastrar fotos desde la biblioteca al artboard.
+- Mover y redimensionar imágenes libremente.
+- Encuadre `Recortar` o `Completa`, con punto focal configurable.
+- Autoordenado por 1, 2, 4, 6 o 9 fotos por hoja.
+- Distribución en cuadrícula, columnas o filas.
+- Páginas múltiples, guardado local e importación/exportación del proyecto.
+- Exportar la hoja como PNG/JPG o imprimir todas las páginas a PDF.
 
 ## Uso local
 

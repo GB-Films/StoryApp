@@ -3,106 +3,79 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Storyboard Studio: organiza tus fotos en un storyboard y expórtalo." />
+    <meta name="description" content="Storyboard Studio: organizá tus fotos sobre un artboard y exportá tu composición." />
     <title>Storyboard Studio</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="#" aria-label="Storyboard Studio">
-          <span class="brand-mark"><span></span><span></span><span></span></span>
-          <span>Storyboard <em>Studio</em></span>
-        </a>
-        <div class="topbar-actions">
-          <span class="save-state" id="saveState"><span class="status-dot"></span>Guardado local</span>
-          <button class="button button-ghost" id="newProjectBtn" type="button">Nuevo proyecto</button>
-          <button class="button button-primary" id="exportBtn" type="button"><span class="button-icon">↗</span> Exportar</button>
-        </div>
+        <a class="brand" href="#" aria-label="Storyboard Studio"><span class="brand-mark"><i></i><i></i><i></i></span><span>Storyboard <em>Studio</em></span></a>
+        <div class="breadcrumbs"><span>PROYECTOS</span><b>/</b><strong id="breadcrumbTitle">Mi nuevo video</strong></div>
+        <div class="top-actions"><span class="save-state" id="saveState"><span class="status-dot"></span>Guardado local</span><button class="button button-ghost" id="importBtn" type="button">Importar</button><button class="button button-ghost" id="newProjectBtn" type="button">Nuevo proyecto</button><button class="button button-primary" id="exportBtn" type="button"><span>↗</span> Exportar</button><input id="projectInput" type="file" accept="application/json,.json" hidden /></div>
       </header>
 
-      <main>
-        <section class="hero container">
-          <div>
-            <div class="eyebrow"><span class="eyebrow-line"></span> ORGANIZADOR VISUAL</div>
-            <h1>Arma tu historia,<br /><span>cuadro a cuadro.</span></h1>
-            <p class="hero-copy">Arrastra tus fotos, ordénalas y dales el contexto necesario para que tu equipo entienda la escena.</p>
+      <main class="workspace-app">
+        <aside class="library-panel">
+          <div class="panel-heading"><div><div class="eyebrow">BIBLIOTECA</div><h2>Fotos del proyecto</h2></div><span class="asset-counter" id="assetCount">0</span></div>
+          <p class="panel-copy">Subí todo tu material. Después arrastrá cada foto al artboard para armar la secuencia.</p>
+          <button class="upload-zone" id="uploadZone" type="button"><span class="upload-symbol">＋</span><strong>Agregar fotos</strong><small>o arrastralas acá · JPG, PNG, WEBP</small></button>
+          <input id="fileInput" type="file" accept="image/*" multiple hidden />
+          <div class="library-toolbar"><span>Todos los archivos</span><button id="clearLibraryBtn" class="text-button" type="button" hidden>Limpiar</button></div>
+          <div id="assetGrid" class="asset-grid"></div>
+          <div id="libraryEmpty" class="library-empty"><span>▧</span><p>Todavía no hay fotos.<br />Empezá cargando tu material.</p></div>
+          <div class="library-tip"><span>✦</span><p><strong>Tip</strong> Doble click en una foto para agregarla al artboard.</p></div>
+        </aside>
+
+        <section class="editor-area">
+          <div class="project-header">
+            <div><label for="projectTitle">PROYECTO</label><input id="projectTitle" value="Mi nuevo video" autocomplete="off" /><div class="project-subtitle"><input id="projectAuthor" value="Tu nombre" autocomplete="off" /><span>·</span><input id="projectDate" type="date" /></div></div>
+            <div class="page-nav"><button id="prevPageBtn" class="round-button" type="button" aria-label="Página anterior">‹</button><span>PÁGINA <strong id="pageNumber">1</strong> / <strong id="pageTotal">1</strong></span><button id="nextPageBtn" class="round-button" type="button" aria-label="Página siguiente">›</button><button id="addPageBtn" class="button button-small button-secondary" type="button">＋ Página</button></div>
           </div>
-          <div class="project-meta-card">
-            <label for="projectTitle">PROYECTO</label>
-            <input id="projectTitle" class="project-title-input" value="Mi nuevo storyboard" autocomplete="off" />
-            <div class="meta-row">
-              <label for="projectAuthor">DIRECCIÓN</label>
-              <input id="projectAuthor" value="Tu nombre" autocomplete="off" />
-            </div>
-            <div class="meta-row">
-              <label for="projectDate">FECHA</label>
-              <input id="projectDate" type="date" />
-            </div>
+
+          <div class="editor-toolbar">
+            <div class="toolbar-group"><span class="toolbar-label">FORMATO</span><div class="format-switcher" role="group" aria-label="Formato del artboard"><button class="format-btn is-active" data-format="landscape" type="button">16:9</button><button class="format-btn" data-format="portrait" type="button">9:16</button><button class="format-btn" data-format="square" type="button">1:1</button></div></div>
+            <span class="toolbar-divider"></span>
+            <div class="toolbar-group"><label class="toolbar-label" for="photosPerPage">FOTOS POR HOJA</label><select id="photosPerPage" class="toolbar-select"><option value="1">1 foto</option><option value="2">2 fotos</option><option value="4" selected>4 fotos</option><option value="6">6 fotos</option><option value="9">9 fotos</option></select></div>
+            <div class="toolbar-group"><label class="toolbar-label" for="layoutDirection">DISTRIBUCIÓN</label><select id="layoutDirection" class="toolbar-select"><option value="grid">Cuadrícula</option><option value="columns">Columnas</option><option value="rows">Filas</option></select></div>
+            <button id="autoArrangeBtn" class="button button-secondary auto-arrange" type="button"><span>✦</span> Auto ordenar</button>
+            <div class="zoom-control"><button id="zoomOutBtn" class="zoom-btn" type="button">−</button><span id="zoomValue">100%</span><button id="zoomInBtn" class="zoom-btn" type="button">＋</button></div>
           </div>
+
+          <div class="canvas-workspace" id="canvasWorkspace">
+            <div class="canvas-stage" id="canvasStage"><div class="canvas-page" id="canvasPage" aria-label="Artboard del storyboard"></div><div class="drop-hint" id="canvasDropHint">Soltá una foto para sumarla al artboard</div></div>
+          </div>
+
+          <div class="editor-footer"><div class="selection-status" id="selectionStatus">Seleccioná una foto para editarla</div><div class="keyboard-hints"><span><kbd>⌘</kbd><kbd>S</kbd> Guardar</span><span><kbd>Del</kbd> Eliminar foto</span><span><kbd>Arrastrar</kbd> Mover</span></div></div>
         </section>
 
-        <section class="toolbar container">
-          <div class="toolbar-left">
-            <div class="view-switcher" role="group" aria-label="Vista">
-              <button class="view-btn is-active" data-view="grid" type="button"><span>▦</span> Cuadrícula</button>
-              <button class="view-btn" data-view="table" type="button"><span>☷</span> Planilla</button>
-            </div>
-            <span class="divider"></span>
-            <span class="shot-count"><strong id="shotCount">0</strong> fotos en el storyboard</span>
+        <aside class="inspector-panel">
+          <div class="inspector-tabs"><button class="inspector-tab is-active" data-inspector="page" type="button">Página</button><button class="inspector-tab" data-inspector="photo" type="button">Foto</button></div>
+          <div id="pageInspector" class="inspector-content">
+            <div class="inspector-heading"><div class="inspector-icon">▦</div><div><h2>Configuración</h2><p>Del artboard actual</p></div></div>
+            <div class="inspector-section"><label for="backgroundColor">FONDO DEL ARTBOARD</label><div class="color-field"><input id="backgroundColor" type="color" value="#f4f4ef" /><span id="backgroundValue">#F4F4EF</span></div></div>
+            <div class="inspector-section"><label for="pageGap">ESPACIO ENTRE FOTOS <output id="pageGapValue">16 px</output></label><input id="pageGap" type="range" min="0" max="48" value="16" /></div>
+            <div class="inspector-section"><label for="pagePadding">MARGEN DEL ARTBOARD <output id="pagePaddingValue">4%</output></label><input id="pagePadding" type="range" min="0" max="12" value="4" /></div>
+            <div class="inspector-section"><label>ENCUADRE AUTOMÁTICO</label><div class="segmented-control"><button class="fit-default-btn is-active" data-fit="cover" type="button">Recortar</button><button class="fit-default-btn" data-fit="contain" type="button">Completa</button></div><p class="field-help">Define cómo entran las fotos nuevas al artboard.</p></div>
+            <div class="inspector-section"><label for="showLabels">DATOS DE LAS TOMAS</label><label class="switch-row"><input id="showLabels" type="checkbox" /><span class="switch"></span><span>Mostrar títulos sobre las fotos</span></label></div>
+            <button class="button button-outline full-button" id="clearPageBtn" type="button">Limpiar página</button>
           </div>
-          <div class="toolbar-right">
-            <button class="button button-secondary" id="importBtn" type="button"><span>↓</span> Importar proyecto</button>
-            <button class="button button-primary" id="addPhotosBtn" type="button"><span>＋</span> Agregar fotos</button>
-            <input id="fileInput" type="file" accept="image/*" multiple hidden />
-            <input id="projectInput" type="file" accept="application/json,.json" hidden />
-          </div>
-        </section>
-
-        <section class="workspace container">
-          <div id="dropZone" class="drop-zone">
-            <div class="drop-content">
-              <div class="drop-icon"><span>↥</span></div>
-              <h2>Arrastrá tus fotos acá</h2>
-              <p>o elegilas desde tu computadora</p>
-              <button class="button button-outline" id="dropBrowseBtn" type="button">Elegir archivos</button>
-              <small>JPG, PNG o WEBP · Podés subir varias a la vez</small>
+          <div id="photoInspector" class="inspector-content" hidden>
+            <div id="noSelection" class="no-selection"><div class="no-selection-icon">↖</div><h2>Elegí una foto</h2><p>Seleccioná una imagen del artboard para cambiar su tamaño, encuadre y posición.</p></div>
+            <div id="selectedPhotoForm" hidden>
+              <div class="inspector-heading"><div class="selected-photo-preview" id="selectedPreview"></div><div><h2 id="selectedPhotoName">Foto</h2><p id="selectedPhotoSize">—</p></div></div>
+              <div class="inspector-section"><label>ENCUADRE</label><div class="segmented-control"><button class="fit-btn is-active" data-fit="cover" type="button">Recortar</button><button class="fit-btn" data-fit="contain" type="button">Completa</button></div></div>
+              <div class="inspector-section"><label for="photoWidth">TAMAÑO <span class="inline-values"><output id="photoWidthValue">—</output> × <output id="photoHeightValue">—</output></span></label><div class="dimension-fields"><input id="photoWidth" type="number" min="8" max="100" /><span>×</span><input id="photoHeight" type="number" min="8" max="100" /><span>%</span></div><label class="switch-row lock-row"><input id="lockRatio" type="checkbox" checked /><span class="switch"></span><span>Mantener proporción</span></label></div>
+              <div class="inspector-section"><label for="photoFocusX">FOCO DE RECORTE <output id="focusValue">50% / 50%</output></label><input id="photoFocusX" type="range" min="0" max="100" value="50" /><input id="photoFocusY" type="range" min="0" max="100" value="50" /></div>
+              <div class="inspector-section"><label for="photoTitle">TÍTULO DE LA TOMA</label><input id="photoTitle" class="text-field" placeholder="Ej. Plano general de la escena" /></div>
+              <div class="photo-actions"><button class="button button-secondary full-button" id="duplicatePhotoBtn" type="button">⧉ Duplicar</button><button class="button button-danger full-button" id="deletePhotoBtn" type="button">⌫ Quitar del artboard</button></div>
             </div>
           </div>
-          <div id="gridView" class="storyboard-grid" aria-live="polite"></div>
-          <div id="tableView" class="storyboard-table" hidden></div>
-          <div id="emptyState" class="empty-state" hidden>
-            <div class="empty-illustration"><span>▱</span><span>✦</span></div>
-            <h2>Tu storyboard empieza acá</h2>
-            <p>Subí las fotos de tu escena para convertirlas en una secuencia visual.</p>
-            <button class="button button-primary" id="emptyAddBtn" type="button">＋ Agregar primeras fotos</button>
-          </div>
-        </section>
-
-        <section class="notes-section container">
-          <div class="notes-heading"><span class="notes-icon">✎</span><div><div class="eyebrow">NOTAS GENERALES</div><p>Ideas, referencias o indicaciones para el equipo</p></div></div>
-          <textarea id="projectNotes" placeholder="Escribí una nota para acompañar este storyboard…"></textarea>
-        </section>
+        </aside>
       </main>
-
-      <footer class="footer container"><span>STORYBOARD STUDIO</span><span>Tu material queda en este dispositivo</span></footer>
     </div>
 
-    <div class="modal-backdrop" id="exportModal" hidden>
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
-        <button class="modal-close" data-close-modal type="button" aria-label="Cerrar">×</button>
-        <div class="eyebrow"><span class="eyebrow-line"></span> SALIDA</div>
-        <h2 id="exportTitle">Exportar storyboard</h2>
-        <p class="modal-copy">Elegí el formato que mejor se adapte a tu flujo de trabajo.</p>
-        <div class="export-options">
-          <button class="export-option" data-export="png" type="button"><span class="option-icon orange">▧</span><span><strong>Imagen PNG</strong><small>Una lámina de tu storyboard</small></span><span class="option-arrow">→</span></button>
-          <button class="export-option" data-export="jpg" type="button"><span class="option-icon blue">▧</span><span><strong>Imagen JPG</strong><small>Archivo liviano para compartir</small></span><span class="option-arrow">→</span></button>
-          <button class="export-option" data-export="print" type="button"><span class="option-icon purple">▤</span><span><strong>PDF / Imprimir</strong><small>Formato de planilla para rodaje</small></span><span class="option-arrow">→</span></button>
-          <button class="export-option" data-export="json" type="button"><span class="option-icon green">{ }</span><span><strong>Proyecto editable</strong><small>Guardá y continuá después</small></span><span class="option-arrow">→</span></button>
-        </div>
-      </div>
-    </div>
-
+    <div class="modal-backdrop" id="exportModal" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="exportTitle"><button class="modal-close" data-close-modal type="button" aria-label="Cerrar">×</button><div class="eyebrow"><span class="eyebrow-line"></span> SALIDA</div><h2 id="exportTitle">Exportar storyboard</h2><p class="modal-copy">Elegí si querés exportar la hoja actual, imprimir todas las páginas o guardar el proyecto.</p><div class="export-options"><button class="export-option" data-export="png" type="button"><span class="option-icon orange">▧</span><span><strong>Esta hoja como PNG</strong><small>Exporta el artboard tal como lo ves</small></span><span class="option-arrow">→</span></button><button class="export-option" data-export="jpg" type="button"><span class="option-icon blue">▧</span><span><strong>Esta hoja como JPG</strong><small>Archivo liviano para compartir</small></span><span class="option-arrow">→</span></button><button class="export-option" data-export="print" type="button"><span class="option-icon purple">▤</span><span><strong>PDF / Imprimir todas</strong><small>Plancha de rodaje con todas las páginas</small></span><span class="option-arrow">→</span></button><button class="export-option" data-export="json" type="button"><span class="option-icon green">{ }</span><span><strong>Proyecto editable</strong><small>Biblioteca, páginas y encuadres</small></span><span class="option-arrow">→</span></button></div></div></div>
     <div class="toast" id="toast" role="status"></div>
     <script src="app.js"></script>
   </body>
