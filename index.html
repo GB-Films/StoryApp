@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Storyboard Studio: organiza tus fotos en un storyboard y expórtalo." />
+    <title>Storyboard Studio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Storyboard Studio">
+          <span class="brand-mark"><span></span><span></span><span></span></span>
+          <span>Storyboard <em>Studio</em></span>
+        </a>
+        <div class="topbar-actions">
+          <span class="save-state" id="saveState"><span class="status-dot"></span>Guardado local</span>
+          <button class="button button-ghost" id="newProjectBtn" type="button">Nuevo proyecto</button>
+          <button class="button button-primary" id="exportBtn" type="button"><span class="button-icon">↗</span> Exportar</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero container">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-line"></span> ORGANIZADOR VISUAL</div>
+            <h1>Arma tu historia,<br /><span>cuadro a cuadro.</span></h1>
+            <p class="hero-copy">Arrastra tus fotos, ordénalas y dales el contexto necesario para que tu equipo entienda la escena.</p>
+          </div>
+          <div class="project-meta-card">
+            <label for="projectTitle">PROYECTO</label>
+            <input id="projectTitle" class="project-title-input" value="Mi nuevo storyboard" autocomplete="off" />
+            <div class="meta-row">
+              <label for="projectAuthor">DIRECCIÓN</label>
+              <input id="projectAuthor" value="Tu nombre" autocomplete="off" />
+            </div>
+            <div class="meta-row">
+              <label for="projectDate">FECHA</label>
+              <input id="projectDate" type="date" />
+            </div>
+          </div>
+        </section>
+
+        <section class="toolbar container">
+          <div class="toolbar-left">
+            <div class="view-switcher" role="group" aria-label="Vista">
+              <button class="view-btn is-active" data-view="grid" type="button"><span>▦</span> Cuadrícula</button>
+              <button class="view-btn" data-view="table" type="button"><span>☷</span> Planilla</button>
+            </div>
+            <span class="divider"></span>
+            <span class="shot-count"><strong id="shotCount">0</strong> fotos en el storyboard</span>
+          </div>
+          <div class="toolbar-right">
+            <button class="button button-secondary" id="importBtn" type="button"><span>↓</span> Importar proyecto</button>
+            <button class="button button-primary" id="addPhotosBtn" type="button"><span>＋</span> Agregar fotos</button>
+            <input id="fileInput" type="file" accept="image/*" multiple hidden />
+            <input id="projectInput" type="file" accept="application/json,.json" hidden />
+          </div>
+        </section>
+
+        <section class="workspace container">
+          <div id="dropZone" class="drop-zone">
+            <div class="drop-content">
+              <div class="drop-icon"><span>↥</span></div>
+              <h2>Arrastrá tus fotos acá</h2>
+              <p>o elegilas desde tu computadora</p>
+              <button class="button button-outline" id="dropBrowseBtn" type="button">Elegir archivos</button>
+              <small>JPG, PNG o WEBP · Podés subir varias a la vez</small>
+            </div>
+          </div>
+          <div id="gridView" class="storyboard-grid" aria-live="polite"></div>
+          <div id="tableView" class="storyboard-table" hidden></div>
+          <div id="emptyState" class="empty-state" hidden>
+            <div class="empty-illustration"><span>▱</span><span>✦</span></div>
+            <h2>Tu storyboard empieza acá</h2>
+            <p>Subí las fotos de tu escena para convertirlas en una secuencia visual.</p>
+            <button class="button button-primary" id="emptyAddBtn" type="button">＋ Agregar primeras fotos</button>
+          </div>
+        </section>
+
+        <section class="notes-section container">
+          <div class="notes-heading"><span class="notes-icon">✎</span><div><div class="eyebrow">NOTAS GENERALES</div><p>Ideas, referencias o indicaciones para el equipo</p></div></div>
+          <textarea id="projectNotes" placeholder="Escribí una nota para acompañar este storyboard…"></textarea>
+        </section>
+      </main>
+
+      <footer class="footer container"><span>STORYBOARD STUDIO</span><span>Tu material queda en este dispositivo</span></footer>
+    </div>
+
+    <div class="modal-backdrop" id="exportModal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+        <button class="modal-close" data-close-modal type="button" aria-label="Cerrar">×</button>
+        <div class="eyebrow"><span class="eyebrow-line"></span> SALIDA</div>
+        <h2 id="exportTitle">Exportar storyboard</h2>
+        <p class="modal-copy">Elegí el formato que mejor se adapte a tu flujo de trabajo.</p>
+        <div class="export-options">
+          <button class="export-option" data-export="png" type="button"><span class="option-icon orange">▧</span><span><strong>Imagen PNG</strong><small>Una lámina de tu storyboard</small></span><span class="option-arrow">→</span></button>
+          <button class="export-option" data-export="jpg" type="button"><span class="option-icon blue">▧</span><span><strong>Imagen JPG</strong><small>Archivo liviano para compartir</small></span><span class="option-arrow">→</span></button>
+          <button class="export-option" data-export="print" type="button"><span class="option-icon purple">▤</span><span><strong>PDF / Imprimir</strong><small>Formato de planilla para rodaje</small></span><span class="option-arrow">→</span></button>
+          <button class="export-option" data-export="json" type="button"><span class="option-icon green">{ }</span><span><strong>Proyecto editable</strong><small>Guardá y continuá después</small></span><span class="option-arrow">→</span></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
