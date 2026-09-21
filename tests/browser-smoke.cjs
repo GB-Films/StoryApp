@@ -159,6 +159,14 @@ const fixture = () => {
     await page.keyboard.up('Alt');
     assert.equal(await page.locator('#pageTotal').textContent(), '3');
     assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
+    await page.locator('#deletePageBtn').click();
+    assert.equal(await page.locator('#deletePageConfirmModal').isVisible(), true);
+    assert.match(await page.locator('#deletePageConfirmModal').textContent(), /Ctrl/);
+    await page.locator('#confirmDeletePageBtn').click();
+    assert.equal(await page.locator('#pageTotal').textContent(), '2');
+    await page.keyboard.press('Control+Z');
+    assert.equal(await page.locator('#pageTotal').textContent(), '3');
+    assert.equal(await page.locator('#deletePageConfirmModal').isVisible(), false);
     // Check real-browser layout for mixed orientations on vertical and square pages too.
     for (const ratio of ['portrait', 'square']) {
       await page.evaluate(ratio => {

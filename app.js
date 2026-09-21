@@ -30,6 +30,8 @@ let zoom = 1;
 let toastTimer;
 let saveTimer;
 let pendingDeleteProjectId = null;
+let pendingDeletePageIndex = null;
+let lastUndoState = null;
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -176,6 +178,29 @@ function showToast(message) {
   const toast = $('#toast'); toast.textContent = message; toast.classList.add('is-visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('is-visible'), 2600);
 }
 
+function captureUndoState() {
+  lastUndoState = { project: JSON.parse(JSON.stringify(project)), currentPageIndex, selectedItemId, activeInspector };
+}
+
+function closeDeletePageConfirm() {
+  pendingDeletePageIndex = null;
+  $('#deletePageConfirmModal').hidden = true;
+}
+
+function restoreLastUndo() {
+  if (!lastUndoState || !project) { showToast('No hay una acción para deshacer'); return; }
+  project = normalizeProject(lastUndoState.project);
+  currentProjectId = project.id;
+  currentPageIndex = Math.min(lastUndoState.currentPageIndex, project.pages.length - 1);
+  selectedItemId = lastUndoState.selectedItemId;
+  activeInspector = lastUndoState.activeInspector;
+  lastUndoState = null;
+  closeDeletePageConfirm();
+  render();
+  saveProject();
+  showToast('Página recuperada');
+}
+
 function pageFormatClass() { return project.ratio === 'portrait' ? 'format-portrait' : project.ratio === 'square' ? 'format-square' : ''; }
 function getPageAspect() { return project.ratio === 'portrait' ? 9 / 16 : project.ratio === 'square' ? 1 : 16 / 9; }
 function renumberItems(page) { page.items.forEach((item, index) => { item.slot = index; }); }
@@ -227,6 +252,8 @@ function renderDashboard() {
 function showDashboard() {
   if (project) saveProject();
   project = null;
+  lastUndoState = null;
+  closeDeletePageConfirm();
   currentProjectId = null;
   $('#dashboardView').hidden = false;
   $('#editorView').hidden = true;
@@ -268,6 +295,7 @@ function openProject(id) {
   const stored = projects.find(entry => entry.id === id);
   if (!stored) return;
   project = normalizeProject(stored);
+  lastUndoState = null;
   currentProjectId = project.id;
   currentPageIndex = 0;
   selectedItemId = null;
@@ -612,14 +640,22 @@ function deleteSelected() { if (!selectedItemId) return; const page = currentPag
 function duplicateSelected() { const item = findItem(selectedItemId); if (!item) return; const copy = { ...item, id: createId('item') }; currentPage().items.splice(item.slot + 1, 0, copy); renumberItems(currentPage()); selectedItemId = copy.id; render(); saveProject(); showToast('Foto duplicada · distribución ajustada'); }
 function deleteCurrentPage() {
   if (project.pages.length <= 1) { showToast('El proyecto necesita al menos una página'); return; }
-  if (!window.confirm(`¿Eliminar ${currentPage().title || `Página ${currentPageIndex + 1}`}? Esta acción no se puede deshacer.`)) return;
-  project.pages.splice(currentPageIndex, 1);
-  currentPageIndex = Math.min(currentPageIndex, project.pages.length - 1);
+  pendingDeletePageIndex = currentPageIndex;
+  $('#deletePageName').textContent = currentPage().title || `Página ${currentPageIndex + 1}`;
+  $('#deletePageConfirmModal').hidden = false;
+}
+
+function confirmDeletePage() {
+  if (pendingDeletePageIndex === null || project.pages.length <= 1) return;
+  captureUndoState();
+  project.pages.splice(pendingDeletePageIndex, 1);
+  currentPageIndex = Math.min(pendingDeletePageIndex, project.pages.length - 1);
   selectedItemId = null;
   activeInspector = 'page';
+  closeDeletePageConfirm();
   render();
   saveProject();
-  showToast('Página eliminada');
+  showToast('Página eliminada · Ctrl + Z para recuperar');
 }
 
 function downloadBlob(blob, filename) { const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
@@ -737,6 +773,7 @@ function selectProjectFormat(format) {
 }
 function createProjectDraft() {
   project = normalizeProject(defaultProject());
+  lastUndoState = null;
   project.title = 'Storyboard X';
   currentProjectId = project.id;
   currentPageIndex = 0;
@@ -761,7 +798,7 @@ $('#uploadZone').addEventListener('drop', event => { event.preventDefault(); $('
 $('#importBtn').addEventListener('click', () => $('#projectInput').click());
 $('#projectInput').addEventListener('change', event => {
   const file = event.target.files[0]; if (!file) return;
-  const reader = new FileReader(); reader.onload = () => { try { const imported = JSON.parse(reader.result); if (!Array.isArray(imported.assets) || !Array.isArray(imported.pages)) throw new Error(); project = normalizeProject(imported); project.id = createId('project'); project.createdAt = new Date().toISOString(); project.updatedAt = project.createdAt; currentProjectId = project.id; currentPageIndex = 0; selectedItemId = null; activeInspector = 'page'; showEditor(); render(); saveProject(); showToast('Proyecto importado correctamente'); } catch { showToast('Ese archivo no parece un proyecto válido'); } }; reader.readAsText(file); event.target.value = '';
+  const reader = new FileReader(); reader.onload = () => { try { const imported = JSON.parse(reader.result); if (!Array.isArray(imported.assets) || !Array.isArray(imported.pages)) throw new Error(); project = normalizeProject(imported); project.id = createId('project'); project.createdAt = new Date().toISOString(); project.updatedAt = new Date().toISOString(); lastUndoState = null; currentProjectId = project.id; currentPageIndex = 0; selectedItemId = null; activeInspector = 'page'; showEditor(); render(); saveProject(); showToast('Proyecto importado correctamente'); } catch { showToast('Ese archivo no parece un proyecto válido'); } }; reader.readAsText(file); event.target.value = '';
 });
 
 $('#canvasPage').addEventListener('click', event => { if (event.target === $('#canvasPage')) { selectedItemId = null; activeInspector = 'page'; render(); } });
@@ -790,9 +827,9 @@ $$('.fit-btn').forEach(button => button.addEventListener('click', () => { const 
 $('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoShotType').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.shotType = event.target.value; renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); });
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
 
-$('#newProjectBtn').addEventListener('click', resetProject); $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
+$('#newProjectBtn').addEventListener('click', resetProject); $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
 $$('[data-export]').forEach(button => button.addEventListener('click', async () => { const type = button.dataset.export; closeExport(); if (type === 'json') downloadProject(); else if (type === 'print') printAllPages(); else await exportImage(type); }));
 
-document.addEventListener('keydown', event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if (event.key === 'Delete' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) && !document.activeElement.isContentEditable) { if (selectedItemId) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); } if (event.key === 'Escape') { closeExport(); closeNewProjectConfirm(); closeDeleteProjectModal(); } });
+document.addEventListener('keydown', event => { const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editing) { event.preventDefault(); restoreLastUndo(); } if (event.key === 'Delete' && !editing) { if (selectedItemId) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); } if (event.key === 'Escape') { closeExport(); closeNewProjectConfirm(); closeDeletePageConfirm(); closeDeleteProjectModal(); } });
 
 showDashboard();
