@@ -55,7 +55,7 @@
             <div class="page-carousel" id="pageCarousel" aria-label="Páginas del storyboard"><div class="page-carousel-heading"><span>PÁGINAS</span><small id="carouselCount">1 página</small></div><div class="page-carousel-track" id="pageCarouselTrack"></div></div>
           </div>
 
-          <div class="editor-footer"><div class="selection-status" id="selectionStatus">Seleccioná una foto para editarla</div><div class="keyboard-hints"><span><kbd>⌘</kbd><kbd>S</kbd> Guardar</span><span><kbd>Del</kbd> Eliminar foto</span><span><kbd>Arrastrar</kbd> Mover</span></div></div>
+          <div class="editor-footer"><div class="selection-status" id="selectionStatus">Seleccioná una foto para editarla</div><div class="keyboard-hints"><span><kbd>⌘</kbd><kbd>S</kbd> Guardar</span><span><kbd>Alt + arrastrar</kbd> Duplicar</span><span><kbd>Del</kbd> Eliminar selección / página</span></div></div>
         </section>
 
         <aside class="inspector-panel">
@@ -68,7 +68,7 @@
             <div class="inspector-section"><label for="showProjectTitle">TÍTULO DEL PROYECTO</label><label class="switch-row"><input id="showProjectTitle" type="checkbox" /><span class="switch"></span><span>Mostrar título arriba a la derecha</span></label></div>
             <div class="inspector-section"><label>ENCUADRE AUTOMÁTICO</label><div class="segmented-control"><button class="fit-default-btn" data-fit="cover" type="button">Recortar</button><button class="fit-default-btn is-active" data-fit="contain" type="button">Completa</button></div><p class="field-help">Completa respeta la proporción real y adapta el marco de la foto. El recorte usa todo el casillero.</p></div>
             <div class="inspector-section"><label for="showDescriptions">DATOS DE LAS TOMAS</label><label class="switch-row"><input id="showDescriptions" type="checkbox" /><span class="switch"></span><span>Mostrar recuadro de descripción</span></label></div>
-            <button class="button button-outline full-button" id="clearPageBtn" type="button">Limpiar página</button>
+            <button class="button button-outline full-button" id="clearPageBtn" type="button">Limpiar página</button><button class="button button-danger full-button page-delete-button" id="deletePageBtn" type="button">⌫ Eliminar página actual</button>
           </div>
           <div id="photoInspector" class="inspector-content" hidden>
             <div id="noSelection" class="no-selection"><div class="no-selection-icon">↖</div><h2>Elegí una foto</h2><p>Seleccioná una imagen del artboard para cambiar su tamaño, encuadre y posición.</p></div>

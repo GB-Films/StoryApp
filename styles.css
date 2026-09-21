@@ -203,6 +203,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .format-preview-landscape { height:40px; }
 .format-preview-portrait { width:42px; height:68px; }
 .format-preview-square { width:56px; height:56px; }
+.page-delete-button { margin-top:8px; }
+.page-delete-button:disabled { opacity:.45; cursor:not-allowed; }
 @media (max-width:600px) {
   .topbar { height:auto; min-height:54px; }
   .workspace-app { min-height:calc(100vh - 54px); }
