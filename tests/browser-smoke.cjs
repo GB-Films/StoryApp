@@ -69,6 +69,18 @@ const fixture = () => {
     assert.equal(await page.locator('#canvasPage .design-item').count(), 15);
     await page.locator('[data-asset-id="asset-14"]').dragTo(page.locator('#canvasPage'), { targetPosition: { x: 500, y: 300 } });
     assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
+    // Dragging an existing shot outside the artboard removes it; a deliberate duplicate restores it.
+    const removable = page.locator('#canvasPage .design-item').last();
+    const removableBox = await removable.boundingBox();
+    const boardBox = await page.locator('#canvasPage').boundingBox();
+    await page.mouse.move(removableBox.x + removableBox.width / 2, removableBox.y + removableBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(boardBox.x - 80, boardBox.y - 80, { steps: 10 });
+    await page.mouse.up();
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 15);
+    await page.locator('#canvasPage .design-item').first().click();
+    await page.locator('#duplicatePhotoBtn').click();
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
     const first = await page.locator('#canvasPage .design-item').first().boundingBox();
     const last = await page.locator('#canvasPage .design-item').last().boundingBox();
     await page.mouse.move(first.x + first.width / 2, first.y + first.height / 3);
@@ -79,8 +91,12 @@ const fixture = () => {
     assert.match(await page.locator('#canvasPage .design-item').last().textContent(), /PD · Título que debe conservarse/);
 
     await page.locator('[data-inspector="page"]').click();
+    await page.locator('#infoStyle').selectOption('light');
+    assert.equal(await page.locator('#canvasPage .description-style-light').count(), 16);
+    assert.deepEqual(await page.locator('#canvasPage .description-style-light').first().evaluate(node => [getComputedStyle(node).backgroundColor, getComputedStyle(node).color]), ['rgb(255, 255, 255)', 'rgb(0, 0, 0)']);
     await page.locator('#infoPlacement').selectOption('overlay');
     assert.equal(await page.locator('#canvasPage .description-overlay').count(), 16);
+    assert.equal(await page.locator('#infoStyle').isDisabled(), true);
     assert.equal(await page.locator('#canvasPage .description-overlay.is-empty').first().evaluate(node => getComputedStyle(node).color), 'rgb(255, 255, 255)');
     await page.locator('#infoPlacement').selectOption('below');
     assert.equal(await page.locator('#canvasPage .description-overlay').count(), 0);
@@ -122,6 +138,18 @@ const fixture = () => {
     await page.locator('#addPageBtn').click();
     assert.equal(await page.locator('#pageTotal').textContent(), '2');
     assert.equal(await page.locator('#canvasPage .design-item').count(), 0);
+    const pageSource = page.locator('[data-page-index="0"]');
+    const pageTarget = page.locator('[data-page-index="1"]');
+    const pageTargetBox = await pageTarget.boundingBox();
+    await page.keyboard.down('Alt');
+    const pageSourceBox = await pageSource.boundingBox();
+    await page.mouse.move(pageSourceBox.x + pageSourceBox.width / 2, pageSourceBox.y + pageSourceBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(pageTargetBox.x + pageTargetBox.width * .8, pageTargetBox.y + pageTargetBox.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await page.keyboard.up('Alt');
+    assert.equal(await page.locator('#pageTotal').textContent(), '3');
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
     // Check real-browser layout for mixed orientations on vertical and square pages too.
     for (const ratio of ['portrait', 'square']) {
       await page.evaluate(ratio => {
