@@ -3,6 +3,20 @@ const LEGACY_KEY = 'storyboard-studio-project-v1';
 const PROJECTS_KEY = 'storyboard-studio-projects-v1';
 const CURRENT_PROJECT_KEY = 'storyboard-studio-current-project-v1';
 
+const SHOT_TYPES = [
+  { value: 'PG', label: 'Plano general' },
+  { value: 'PE', label: 'Plano entero' },
+  { value: 'PA', label: 'Plano americano' },
+  { value: 'PM', label: 'Plano medio' },
+  { value: 'PP', label: 'Primer plano' },
+  { value: 'PD', label: 'Plano detalle' },
+  { value: 'POV', label: 'Plano subjetivo / POV' },
+  { value: 'OTS', label: 'Sobre hombro' },
+  { value: 'CEN', label: 'Cenital' },
+  { value: 'NAD', label: 'Nadir' },
+  { value: 'TRK', label: 'Seguimiento' }
+];
+
 let currentPageIndex = 0;
 let selectedItemId = null;
 let activeInspector = 'page';
@@ -19,6 +33,12 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const createId = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
+function shotTypeInfo(value) { return SHOT_TYPES.find(type => type.value === value) || SHOT_TYPES[0]; }
+function itemDisplayTitle(item, asset) {
+  const type = shotTypeInfo(item.shotType);
+  const base = item.title?.trim() || asset?.name || `Plano ${(item.slot ?? 0) + 1}`;
+  return base.startsWith(`${type.value} ·`) ? base : `${type.value} · ${base}`;
+}
 let project = null;
 let projects = loadProjects();
 let currentProjectId = null;
@@ -45,7 +65,7 @@ function normalizeProject(data) {
   const legacyPageSettings = { photosPerPage: Number(data.photosPerPage) || 4, layoutDirection: data.layoutDirection || 'grid' };
   normalized.pages = Array.isArray(data.pages) && data.pages.length ? data.pages.map((page, index) => {
     const settings = { photosPerPage: Number(page.photosPerPage) || legacyPageSettings.photosPerPage, layoutDirection: page.layoutDirection || legacyPageSettings.layoutDirection };
-    return { ...blankPage(`Página ${index + 1}`, settings), ...page, ...settings, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => ({ ...item, title: item.title || '', description: item.description || '', slot: Number.isFinite(item.slot) ? item.slot : itemIndex, fit: migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit) })) : [] };
+    return { ...blankPage(`Página ${index + 1}`, settings), ...page, ...settings, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => ({ ...item, shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', slot: Number.isFinite(item.slot) ? item.slot : itemIndex, fit: migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit) })) : [] };
   }) : [blankPage('Página 1', legacyPageSettings)];
   return normalized;
 }
@@ -256,7 +276,7 @@ function slotAtPoint(clientX, clientY) { const rect = $('#canvasPage').getBoundi
 
 function itemMarkup(item, page = currentPage()) {
   const asset = findAsset(item.assetId); if (!asset) return '';
-  const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`;
+  const label = itemDisplayTitle(item, asset);
   const number = String((item.slot ?? 0) + 1).padStart(2, '0');
   const layout = itemLayout(item, page);
   const imageHeight = layout.image.height / layout.card.height * 100;
@@ -319,7 +339,7 @@ function pageThumbnailMarkup(page) {
   return page.items.map(item => {
     const asset = findAsset(item.assetId); if (!asset) return '';
     const layout = itemLayout(item, page);
-    const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`;
+    const label = itemDisplayTitle(item, asset);
     const number = String((item.slot ?? 0) + 1).padStart(2, '0');
     const imageHeight = layout.image.height / layout.card.height * 100;
     const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
@@ -377,11 +397,13 @@ function renderInspector() {
   if (!item) return;
   const asset = findAsset(item.assetId);
   $('#selectedPreview').innerHTML = asset ? `<img src="${asset.image}" alt="" />` : '';
-  $('#selectedPhotoName').textContent = item.title || asset?.name || 'Foto';
+  $('#selectedPhotoName').textContent = itemDisplayTitle(item, asset) || 'Foto';
   $('#selectedPhotoSize').textContent = asset ? `${asset.width} × ${asset.height} px` : '—';
   $('#slotNumber').textContent = String((item.slot ?? 0) + 1).padStart(2, '0');
   $('#photoFocusX').value = item.focusX ?? 50; $('#photoFocusY').value = item.focusY ?? 50;
   $('#focusValue').textContent = `${Math.round(item.focusX ?? 50)}% / ${Math.round(item.focusY ?? 50)}%`;
+  $('#photoShotType').innerHTML = SHOT_TYPES.map(type => `<option value="${type.value}">${type.value} · ${type.label}</option>`).join('');
+  $('#photoShotType').value = item.shotType || 'PG';
   $('#photoTitle').value = item.title || '';
   $('#photoDescription').value = item.description || '';
   $$('.fit-btn').forEach(button => button.classList.toggle('is-active', button.dataset.fit === item.fit));
@@ -445,12 +467,12 @@ function addAssetToPage(assetId, targetSlot = null) {
   let slot = targetSlot === null ? firstEmptySlot(page) : targetSlot;
   if (slot === undefined || slot === null) { project.pages.push(blankPage(`Página ${project.pages.length + 1}`, pageSettings(page))); currentPageIndex = project.pages.length - 1; page = currentPage(); slot = 0; }
   const occupant = page.items.find(item => item.slot === slot); if (occupant) slot = firstEmptySlot(page); if (slot === undefined) { project.pages.push(blankPage(`Página ${project.pages.length + 1}`, pageSettings(page))); currentPageIndex = project.pages.length - 1; page = currentPage(); slot = 0; }
-  const item = { id: createId('item'), assetId, slot, fit: project.defaultFit, focusX: 50, focusY: 50, title: '', description: '' };
+  const item = { id: createId('item'), assetId, slot, fit: project.defaultFit, focusX: 50, focusY: 50, shotType: 'PG', title: '', description: '' };
   page.items.push(item); selectedItemId = item.id; activeInspector = 'photo'; render(); saveProject(); showToast('Foto colocada en el siguiente casillero');
 }
 
 function createAutoItems(assets) {
-  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, fit: project.defaultFit, focusX: 50, focusY: 50, title: '', description: '' }));
+  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, fit: project.defaultFit, focusX: 50, focusY: 50, shotType: 'PG', title: '', description: '' }));
 }
 
 function autoArrange() {
@@ -512,7 +534,7 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.fillText(number, x + 27, y + 26);
   ctx.textAlign = 'left';
   if (!project.showDescriptions || !layout.caption) return;
-  const title = item.title || asset.name || `Plano ${Number(item.slot ?? 0) + 1}`;
+  const title = itemDisplayTitle(item, asset);
   const description = item.description || '';
   const caption = layout.caption;
   const captionX = caption.x / 100 * width;
@@ -548,7 +570,7 @@ async function exportImage(type) { const canvas = await renderPageCanvas(current
 
 function printAllPages() {
   const layer = document.createElement('div'); layer.className = 'print-layer';
-  project.pages.forEach(page => { const sheet = document.createElement('div'); sheet.className = `canvas-page print-page ${pageFormatClass()}`; sheet.style.background = project.background; page.items.forEach(item => { const asset = findAsset(item.assetId); if (!asset) return; const layout = itemLayout(item, page); const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`; const number = String((item.slot ?? 0) + 1).padStart(2, '0'); const imageHeight = layout.image.height / layout.card.height * 100; const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0; const node = document.createElement('div'); node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`; node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`; node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span></div>${project.showDescriptions ? `<div class="description-box ${item.description ? '' : 'is-empty'}" style="height:${captionHeight}%"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : ''}`; sheet.appendChild(node); }); if (project.showProjectTitle && project.title.trim()) { const title = document.createElement('div'); title.className = 'project-title-overlay'; title.textContent = project.title; sheet.appendChild(title); } layer.appendChild(sheet); });
+  project.pages.forEach(page => { const sheet = document.createElement('div'); sheet.className = `canvas-page print-page ${pageFormatClass()}`; sheet.style.background = project.background; page.items.forEach(item => { const asset = findAsset(item.assetId); if (!asset) return; const layout = itemLayout(item, page); const label = itemDisplayTitle(item, asset); const number = String((item.slot ?? 0) + 1).padStart(2, '0'); const imageHeight = layout.image.height / layout.card.height * 100; const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0; const node = document.createElement('div'); node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`; node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`; node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span></div>${project.showDescriptions ? `<div class="description-box ${item.description ? '' : 'is-empty'}" style="height:${captionHeight}%"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : ''}`; sheet.appendChild(node); }); if (project.showProjectTitle && project.title.trim()) { const title = document.createElement('div'); title.className = 'project-title-overlay'; title.textContent = project.title; sheet.appendChild(title); } layer.appendChild(sheet); });
   document.body.appendChild(layer); const cleanup = () => layer.remove(); window.addEventListener('afterprint', cleanup, { once: true }); window.print(); setTimeout(cleanup, 2500);
 }
 
@@ -624,7 +646,7 @@ $('#deletePageBtn').addEventListener('click', deleteCurrentPage);
 
 $$('.inspector-tab').forEach(tab => tab.addEventListener('click', () => { activeInspector = tab.dataset.inspector; renderInspector(); }));
 $$('.fit-btn').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; item.fit = button.dataset.fit; renderPage(); renderInspector(); saveProject(); }));
-$('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); });
+$('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoShotType').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.shotType = event.target.value; renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); });
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
 
 $('#newProjectBtn').addEventListener('click', resetProject); $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
