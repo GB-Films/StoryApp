@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Storyboard Studio: organizá tus fotos sobre un artboard y exportá tu composición." />
-    <title>Storyboard Studio</title>
+    <meta name="description" content="GB Films Storyboard Studio: organizá tus fotos sobre un artboard y exportá tu composición." />
+    <title>GB Films · Storyboard Studio</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="#" aria-label="Storyboard Studio"><span class="brand-mark"><i></i><i></i><i></i></span><span>Storyboard <em>Studio</em></span></a>
+        <a class="brand" href="#" aria-label="GB Films Storyboard Studio"><img class="brand-logo" src="assets/gb-films-logo-white.png" alt="GB Films" /><span class="brand-divider"></span><span class="brand-product">STORYBOARD<br /><em>STUDIO</em></span></a>
         <div class="breadcrumbs"><span>PROYECTOS</span><b>/</b><strong id="breadcrumbTitle">Mi nuevo video</strong></div>
         <div class="top-actions"><span class="save-state" id="saveState"><span class="status-dot"></span>Guardado local</span><button class="button button-ghost" id="importBtn" type="button">Importar</button><button class="button button-ghost" id="newProjectBtn" type="button">Nuevo proyecto</button><button class="button button-primary" id="exportBtn" type="button"><span>↗</span> Exportar</button><input id="projectInput" type="file" accept="application/json,.json" hidden /></div>
       </header>
@@ -53,7 +53,7 @@
           <div class="inspector-tabs"><button class="inspector-tab is-active" data-inspector="page" type="button">Página</button><button class="inspector-tab" data-inspector="photo" type="button">Foto</button></div>
           <div id="pageInspector" class="inspector-content">
             <div class="inspector-heading"><div class="inspector-icon">▦</div><div><h2>Configuración</h2><p>Del artboard actual</p></div></div>
-            <div class="inspector-section"><label for="backgroundColor">FONDO DEL ARTBOARD</label><div class="color-field"><input id="backgroundColor" type="color" value="#f4f4ef" /><span id="backgroundValue">#F4F4EF</span></div></div>
+            <div class="inspector-section"><label for="backgroundColor">FONDO DEL ARTBOARD</label><div class="color-field"><input id="backgroundColor" type="color" value="#ffffff" /><span id="backgroundValue">#FFFFFF</span></div></div>
             <div class="inspector-section"><label for="pageGap">ESPACIO ENTRE FOTOS <output id="pageGapValue">16 px</output></label><input id="pageGap" type="range" min="0" max="48" value="16" /></div>
             <div class="inspector-section"><label for="pagePadding">MARGEN DEL ARTBOARD <output id="pagePaddingValue">4%</output></label><input id="pagePadding" type="range" min="0" max="12" value="4" /></div>
             <div class="inspector-section"><label>ENCUADRE AUTOMÁTICO</label><div class="segmented-control"><button class="fit-default-btn" data-fit="cover" type="button">Recortar</button><button class="fit-default-btn is-active" data-fit="contain" type="button">Completa</button></div><p class="field-help">Por defecto respeta la proporción original. El recorte es opcional.</p></div>

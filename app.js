@@ -19,7 +19,7 @@ const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, char => ({ 
 let project = loadProject();
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, title: 'Mi nuevo video', author: 'Tu nombre', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', background: '#f4f4ef', gap: 16, padding: 4, defaultFit: 'contain', showLabels: false, photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, title: 'Mi nuevo video', author: 'Tu nombre', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', background: '#ffffff', gap: 16, padding: 4, defaultFit: 'contain', showLabels: false, photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
 
 function normalizeProject(data) {
   const base = defaultProject();
@@ -118,7 +118,7 @@ function renderLibrary() {
 function renderPage() {
   const page = currentPage();
   $('#canvasPage').className = `canvas-page ${pageFormatClass()} ${slotMode ? 'is-slot-mode' : ''}`;
-  $('#canvasPage').style.background = page ? project.background : '#f4f4ef';
+  $('#canvasPage').style.background = page ? project.background : '#ffffff';
   const guides = slotMode ? Array.from({ length: Number(project.photosPerPage) || 4 }, (_, index) => { const rect = slotRect(index); return `<div class="slot-guide ${hoverSlotIndex === index ? 'is-target' : ''}" data-slot-index="${index}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%"><span>${String(index + 1).padStart(2, '0')}</span></div>`; }).join('') : '';
   const content = page?.items.length ? page.items.map(itemMarkup).join('') : '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>';
   $('#canvasPage').innerHTML = guides + content;
