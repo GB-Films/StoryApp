@@ -190,9 +190,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .project-header > div:first-child input:first-of-type { width:min(300px,35vw); font-size:18px; }
 .editor-toolbar { min-height:42px; padding:6px 16px; gap:10px; }
 .canvas-workspace { padding:20px 28px 10px; }
-.canvas-page { width:min(900px,76vw); }
-.canvas-page.format-portrait { width:min(520px,48vw); }
-.canvas-page.format-square { width:min(680px,58vw); }
+.canvas-page { width:min(1100px,82vw); }
+.canvas-page.format-portrait { width:min(620px,54vw); }
+.canvas-page.format-square { width:min(820px,66vw); }
 .format-btn:disabled { opacity:.65; cursor:not-allowed; }
 .project-title-overlay { position:absolute; z-index:7; top:2%; right:2.5%; max-width:42%; color:#fff; mix-blend-mode:difference; font:500 clamp(8px,1.15vw,14px)/1.2 'DM Mono',monospace; letter-spacing:.7px; text-align:right; text-transform:uppercase; outline:0; cursor:text; }
 .project-title-overlay:empty::before { content:'Título del proyecto'; opacity:.45; }

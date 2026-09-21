@@ -2,6 +2,8 @@ const STORAGE_KEY = 'storyboard-studio-workspace-v2';
 const LEGACY_KEY = 'storyboard-studio-project-v1';
 const PROJECTS_KEY = 'storyboard-studio-projects-v1';
 const CURRENT_PROJECT_KEY = 'storyboard-studio-current-project-v1';
+const MIN_CANVAS_PADDING = 6;
+const PHOTO_SAFE_MARGIN = 1.6;
 
 const SHOT_TYPES = [
   { value: 'PG', label: 'Plano general' },
@@ -44,7 +46,7 @@ let projects = loadProjects();
 let currentProjectId = null;
 
 function blankPage(title = 'Página 1', settings = {}) { return { id: createId('page'), title, photosPerPage: Number(settings.photosPerPage) || 4, layoutDirection: settings.layoutDirection || 'grid', items: [] }; }
-function defaultProject() { return { version: 2, title: 'Storyboard X', producer: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, background: '#ffffff', padding: 4, gap: 16, defaultFit: 'contain', showDescriptions: true, photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, title: 'Storyboard X', producer: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', showDescriptions: true, photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
 
 function normalizeProject(data) {
   const base = defaultProject();
@@ -60,6 +62,7 @@ function normalizeProject(data) {
   normalized.formatLocked = typeof data.formatLocked === 'boolean' ? data.formatLocked : true;
   normalized.showProjectTitle = typeof data.showProjectTitle === 'boolean' ? data.showProjectTitle : true;
   normalized.showDescriptions = typeof data.showDescriptions === 'boolean' ? data.showDescriptions : true;
+  normalized.padding = Math.max(MIN_CANVAS_PADDING, Number(normalized.padding) || MIN_CANVAS_PADDING);
   if (migrateOldCropDefault) normalized.defaultFit = 'contain';
   normalized.assets = Array.isArray(data.assets) ? data.assets : [];
   const legacyPageSettings = { photosPerPage: Number(data.photosPerPage) || 4, layoutDirection: data.layoutDirection || 'grid' };
@@ -249,11 +252,13 @@ function openProject(id) {
 }
 function itemLayout(item, page = currentPage()) {
   const slot = slotRect(item.slot ?? 0, page);
-  const descriptionHeight = project.showDescriptions ? Math.min(slot.height * .24, 11) : 0;
-  const imageSlot = { x: slot.x, y: slot.y, width: slot.width, height: Math.max(1, slot.height - descriptionHeight) };
+  const safeMargin = Math.min(PHOTO_SAFE_MARGIN, slot.width * .12, slot.height * .12);
+  const safeSlot = { x: slot.x + safeMargin, y: slot.y + safeMargin, width: Math.max(1, slot.width - safeMargin * 2), height: Math.max(1, slot.height - safeMargin * 2) };
+  const descriptionHeight = project.showDescriptions ? Math.min(safeSlot.height * .24, 11) : 0;
+  const imageSlot = { x: safeSlot.x, y: safeSlot.y, width: safeSlot.width, height: Math.max(1, safeSlot.height - descriptionHeight) };
   if (item.fit === 'cover') {
-    const card = { x: slot.x, y: slot.y, width: slot.width, height: imageSlot.height + descriptionHeight };
-    return { card, image: imageSlot, caption: descriptionHeight ? { x: slot.x, y: slot.y + imageSlot.height, width: slot.width, height: descriptionHeight } : null };
+    const card = { x: safeSlot.x, y: safeSlot.y, width: safeSlot.width, height: imageSlot.height + descriptionHeight };
+    return { card, image: imageSlot, caption: descriptionHeight ? { x: safeSlot.x, y: safeSlot.y + imageSlot.height, width: safeSlot.width, height: descriptionHeight } : null };
   }
   const aspect = assetAspect(findAsset(item.assetId));
   const slotAspect = getPageAspect() * imageSlot.width / imageSlot.height;
@@ -261,8 +266,8 @@ function itemLayout(item, page = currentPage()) {
     ? { x: 0, y: 0, width: imageSlot.width, height: getPageAspect() * imageSlot.width / aspect }
     : { x: 0, y: 0, width: imageSlot.height * aspect / getPageAspect(), height: imageSlot.height };
   const card = { width: image.width, height: image.height + descriptionHeight };
-  card.x = slot.x + (slot.width - card.width) / 2;
-  card.y = slot.y + (slot.height - card.height) / 2;
+  card.x = safeSlot.x + (safeSlot.width - card.width) / 2;
+  card.y = safeSlot.y + (safeSlot.height - card.height) / 2;
   image.x = card.x;
   image.y = card.y;
   return { card, image, caption: descriptionHeight ? { x: card.x, y: card.y + image.height, width: card.width, height: descriptionHeight } : null };
