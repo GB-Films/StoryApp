@@ -4,6 +4,7 @@ const PROJECTS_KEY = 'storyboard-studio-projects-v1';
 const CURRENT_PROJECT_KEY = 'storyboard-studio-current-project-v1';
 const MIN_CANVAS_PADDING = 6;
 const PHOTO_SAFE_MARGIN = 1.6;
+const PHOTO_INFO_OVERLAY_HEIGHT = 18;
 
 const SHOT_TYPES = [
   { value: 'PG', label: 'Plano general' },
@@ -46,7 +47,7 @@ let projects = loadProjects();
 let currentProjectId = null;
 
 function blankPage(title = 'Página 1', settings = {}) { return { id: createId('page'), title, photosPerPage: Number(settings.photosPerPage) || 4, layoutDirection: settings.layoutDirection || 'grid', items: [] }; }
-function defaultProject() { return { version: 2, title: 'Storyboard X', producer: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', showDescriptions: true, photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, title: 'Storyboard X', producer: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', showDescriptions: true, infoPlacement: 'below', photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
 
 function normalizeProject(data) {
   const base = defaultProject();
@@ -62,6 +63,7 @@ function normalizeProject(data) {
   normalized.formatLocked = typeof data.formatLocked === 'boolean' ? data.formatLocked : true;
   normalized.showProjectTitle = typeof data.showProjectTitle === 'boolean' ? data.showProjectTitle : true;
   normalized.showDescriptions = typeof data.showDescriptions === 'boolean' ? data.showDescriptions : true;
+  normalized.infoPlacement = data.infoPlacement === 'overlay' ? 'overlay' : 'below';
   normalized.padding = Math.max(MIN_CANVAS_PADDING, Number(normalized.padding) || MIN_CANVAS_PADDING);
   if (migrateOldCropDefault) normalized.defaultFit = 'contain';
   normalized.assets = Array.isArray(data.assets) ? data.assets : [];
@@ -254,7 +256,7 @@ function itemLayout(item, page = currentPage()) {
   const slot = slotRect(item.slot ?? 0, page);
   const safeMargin = Math.min(PHOTO_SAFE_MARGIN, slot.width * .12, slot.height * .12);
   const safeSlot = { x: slot.x + safeMargin, y: slot.y + safeMargin, width: Math.max(1, slot.width - safeMargin * 2), height: Math.max(1, slot.height - safeMargin * 2) };
-  const descriptionHeight = project.showDescriptions ? Math.min(safeSlot.height * .24, 11) : 0;
+  const descriptionHeight = project.showDescriptions && project.infoPlacement !== 'overlay' ? Math.min(safeSlot.height * .24, 11) : 0;
   const imageSlot = { x: safeSlot.x, y: safeSlot.y, width: safeSlot.width, height: Math.max(1, safeSlot.height - descriptionHeight) };
   if (item.fit === 'cover') {
     const card = { x: safeSlot.x, y: safeSlot.y, width: safeSlot.width, height: imageSlot.height + descriptionHeight };
@@ -287,9 +289,11 @@ function itemMarkup(item, page = currentPage()) {
   const imageHeight = layout.image.height / layout.card.height * 100;
   const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
   const description = item.description?.trim() || '';
+  const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
+  const infoMarkup = project.showDescriptions ? `<div class="description-box ${overlayInfo ? 'description-overlay ' : ''}${description ? '' : 'is-empty'}" style="height:${overlayInfo ? PHOTO_INFO_OVERLAY_HEIGHT : captionHeight}%"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : '';
   return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${item.id === selectedItemId ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%" draggable="false">
-    <div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span></div>
-    ${project.showDescriptions ? `<div class="description-box ${description ? '' : 'is-empty'}" style="height:${captionHeight}%"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : ''}
+    <div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${overlayInfo ? infoMarkup : ''}</div>
+    ${overlayInfo ? '' : infoMarkup}
   </div>`;
 }
 
@@ -348,7 +352,9 @@ function pageThumbnailMarkup(page) {
     const number = String((item.slot ?? 0) + 1).padStart(2, '0');
     const imageHeight = layout.image.height / layout.card.height * 100;
     const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
-    return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%"><div class="page-thumb-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" /><span>${number}</span></div>${project.showDescriptions ? `<div class="page-thumb-caption" style="height:${captionHeight}%">${escapeHtml(label)}</div>` : ''}</div>`;
+    const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
+    const caption = project.showDescriptions ? `<div class="page-thumb-caption ${overlayInfo ? 'page-thumb-caption-overlay' : ''}" style="height:${overlayInfo ? PHOTO_INFO_OVERLAY_HEIGHT : captionHeight}%">${escapeHtml(label)}</div>` : '';
+    return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%"><div class="page-thumb-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${overlayInfo ? '' : caption}</div>`;
   }).join('');
 }
 
@@ -385,6 +391,8 @@ function renderControls() {
   $('#pagePadding').value = project.padding;
   $('#pagePaddingValue').textContent = `${project.padding}%`;
   $('#showDescriptions').checked = project.showDescriptions;
+  $('#infoPlacement').value = project.infoPlacement || 'below';
+  $('#infoPlacement').disabled = !project.showDescriptions;
   $('#showProjectTitle').checked = project.showProjectTitle;
   $('#deletePageBtn').disabled = project.pages.length <= 1;
   $$('.format-btn').forEach(button => { button.classList.toggle('is-active', button.dataset.format === project.ratio); button.disabled = project.formatLocked; button.title = project.formatLocked ? 'El formato queda fijo durante este proyecto' : 'Elegí el formato del proyecto'; });
@@ -538,10 +546,10 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.textAlign = 'center';
   ctx.fillText(number, x + 27, y + 26);
   ctx.textAlign = 'left';
-  if (!project.showDescriptions || !layout.caption) return;
   const title = itemDisplayTitle(item, asset);
   const description = item.description || '';
-  const caption = layout.caption;
+  if (!project.showDescriptions) return;
+  const caption = layout.caption || { x: image.x, y: image.y + image.height * (1 - PHOTO_INFO_OVERLAY_HEIGHT / 100), width: image.width, height: image.height * PHOTO_INFO_OVERLAY_HEIGHT / 100 };
   const captionX = caption.x / 100 * width;
   const captionY = caption.y / 100 * height;
   const captionWidth = caption.width / 100 * width;
@@ -575,7 +583,7 @@ async function exportImage(type) { const canvas = await renderPageCanvas(current
 
 function printAllPages() {
   const layer = document.createElement('div'); layer.className = 'print-layer';
-  project.pages.forEach(page => { const sheet = document.createElement('div'); sheet.className = `canvas-page print-page ${pageFormatClass()}`; sheet.style.background = project.background; page.items.forEach(item => { const asset = findAsset(item.assetId); if (!asset) return; const layout = itemLayout(item, page); const label = itemDisplayTitle(item, asset); const number = String((item.slot ?? 0) + 1).padStart(2, '0'); const imageHeight = layout.image.height / layout.card.height * 100; const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0; const node = document.createElement('div'); node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`; node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`; node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span></div>${project.showDescriptions ? `<div class="description-box ${item.description ? '' : 'is-empty'}" style="height:${captionHeight}%"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : ''}`; sheet.appendChild(node); }); if (project.showProjectTitle && project.title.trim()) { const title = document.createElement('div'); title.className = 'project-title-overlay'; title.textContent = project.title; sheet.appendChild(title); } layer.appendChild(sheet); });
+  project.pages.forEach(page => { const sheet = document.createElement('div'); sheet.className = `canvas-page print-page ${pageFormatClass()}`; sheet.style.background = project.background; page.items.forEach(item => { const asset = findAsset(item.assetId); if (!asset) return; const layout = itemLayout(item, page); const label = itemDisplayTitle(item, asset); const number = String((item.slot ?? 0) + 1).padStart(2, '0'); const imageHeight = layout.image.height / layout.card.height * 100; const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0; const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay'; const infoMarkup = project.showDescriptions ? `<div class="description-box ${overlayInfo ? 'description-overlay ' : ''}${item.description ? '' : 'is-empty'}" style="height:${overlayInfo ? PHOTO_INFO_OVERLAY_HEIGHT : captionHeight}%"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : ''; const node = document.createElement('div'); node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`; node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`; node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${overlayInfo ? infoMarkup : ''}</div>${overlayInfo ? '' : infoMarkup}`; sheet.appendChild(node); }); if (project.showProjectTitle && project.title.trim()) { const title = document.createElement('div'); title.className = 'project-title-overlay'; title.textContent = project.title; sheet.appendChild(title); } layer.appendChild(sheet); });
   document.body.appendChild(layer); const cleanup = () => layer.remove(); window.addEventListener('afterprint', cleanup, { once: true }); window.print(); setTimeout(cleanup, 2500);
 }
 
@@ -644,7 +652,7 @@ $('#addPageBtn').addEventListener('click', addNewPage);
 
 ['projectTitle', 'projectProducer'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer' }[id]; project[key] = event.target.value; if (id === 'projectProducer') project.author = project.producer; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; if (id === 'projectTitle' && $('#canvasProjectTitle')) $('#canvasProjectTitle').textContent = project.title; saveProject(); }));
 $('#backgroundColor').addEventListener('input', event => { project.background = event.target.value; render(); saveProject(); });
-$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
+$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = event.target.value === 'overlay' ? 'overlay' : 'below'; render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
 $$('.fit-default-btn').forEach(button => button.addEventListener('click', () => { project.defaultFit = button.dataset.fit; renderControls(); saveProject(); }));
 $('#clearPageBtn').addEventListener('click', () => { if (!currentPage().items.length || window.confirm('¿Limpiar todas las fotos de esta página?')) { currentPage().items = []; selectedItemId = null; render(); saveProject(); } });
 $('#deletePageBtn').addEventListener('click', deleteCurrentPage);
