@@ -192,6 +192,14 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .format-btn:disabled { opacity:.65; cursor:not-allowed; }
 .project-title-overlay { position:absolute; z-index:7; top:2%; right:2.5%; max-width:42%; color:#fff; mix-blend-mode:difference; font:500 clamp(8px,1.15vw,14px)/1.2 'DM Mono',monospace; letter-spacing:.7px; text-align:right; text-transform:uppercase; outline:0; cursor:text; }
 .project-title-overlay:empty::before { content:'Título del proyecto'; opacity:.45; }
+.project-fields { display:flex; flex-direction:column; align-items:flex-start; min-width:240px; }
+.project-fields label { display:flex; align-items:center; gap:7px; margin:0 0 3px; }
+.project-fields .producer-label { margin-top:8px; }
+.editable-label { color:#aaa; font-size:8px; letter-spacing:.6px; }
+.project-fields input { padding:0; border:0; outline:0; color:var(--ink); background:transparent; }
+.project-fields #projectTitle { width:min(330px,35vw); font:600 21px 'Space Grotesk',sans-serif; letter-spacing:-.5px; }
+.project-fields #projectProducer { width:min(270px,30vw); font:500 13px 'Space Grotesk',sans-serif; }
+.project-fields input::placeholder { color:#9b9b9b; opacity:1; }
 .format-modal-backdrop { background:rgba(0,0,0,.72); }
 .format-modal { width:min(620px,100%); }
 .format-options { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:24px; }
@@ -205,6 +213,15 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .format-preview-square { width:56px; height:56px; }
 .page-delete-button { margin-top:8px; }
 .page-delete-button:disabled { opacity:.45; cursor:not-allowed; }
+.project-card-footer { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:end; gap:10px; padding:12px 15px 14px; border-top:1px solid #e4e4e4; background:#fafafa; }
+.project-card-edit-label { grid-column:1 / -1; color:#777; font:500 8px 'DM Mono',monospace; letter-spacing:.7px; }
+.project-card-edit-label span { color:#aaa; margin-left:5px; }
+.project-card-title-input { min-width:0; width:100%; padding:6px 7px; border:1px solid #c9c9c9; outline:0; color:#000; background:#fff; font:500 12px 'Space Grotesk',sans-serif; }
+.project-card-title-input:focus { border-color:#000; box-shadow:0 0 0 2px rgba(0,0,0,.08); }
+.project-card-delete { padding:6px 7px; border:1px solid #aaa; color:#555; background:transparent; font:500 8px 'DM Mono',monospace; cursor:pointer; }
+.project-card-delete:hover { border-color:#000; color:#fff; background:#000; }
+.delete-modal-mark { background:#000; }
+.delete-project-backdrop { background:rgba(0,0,0,.74); }
 @media (max-width:600px) {
   .topbar { height:auto; min-height:54px; }
   .workspace-app { min-height:calc(100vh - 54px); }
@@ -214,6 +231,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
   .canvas-page.format-square { width:min(520px,78vw); }
   .format-options { grid-template-columns:1fr; }
   .format-option { min-height:0; }
+  .project-fields { min-width:0; width:100%; }
+  .project-fields #projectTitle,.project-fields #projectProducer { width:100%; }
 }
 .dashboard-view { min-height:calc(100vh - 54px); padding:clamp(34px,6vw,76px) clamp(24px,7vw,110px) 70px; background:#ececec; background-image:linear-gradient(135deg,rgba(255,255,255,.62) 0 25%,transparent 25% 75%,rgba(255,255,255,.62) 75%),linear-gradient(45deg,transparent 0 25%,rgba(0,0,0,.035) 25% 75%,transparent 75%); background-size:420px 420px; }
 .dashboard-view[hidden],.workspace-app[hidden],.modal-backdrop[hidden] { display:none !important; }
