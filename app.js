@@ -475,7 +475,7 @@ function createProjectDraft() {
   openFormatModal();
 }
 function resetProject() {
-  if (projectHasContent()) { $('#newProjectConfirmModal').hidden = false; return; }
+  if (project) { $('#newProjectConfirmModal').hidden = false; return; }
   createProjectDraft();
 }
 function closeNewProjectConfirm() { $('#newProjectConfirmModal').hidden = true; }
