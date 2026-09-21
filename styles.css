@@ -44,7 +44,7 @@ body { color:var(--ink); background:var(--paper); }
 button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#000; }
 .topbar { height:72px; padding:0 30px; gap:28px; border-bottom:1px solid #000; background:#050505; }
 .brand { gap:13px; color:#fff; font-size:15px; letter-spacing:.8px; }
-.brand-logo { width:42px; height:42px; display:block; object-fit:contain; filter:invert(1); }
+.brand-logo { width:42px; height:42px; display:block; object-fit:contain; filter:brightness(0) invert(1); }
 .brand-divider { width:1px; height:29px; background:#505050; }
 .brand-product { color:#fff; font:600 10px/1.08 'DM Mono',monospace; letter-spacing:1.5px; }
 .brand-product em { color:#fff; font-style:normal; }
