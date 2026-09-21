@@ -155,6 +155,10 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .description-box.is-empty.description-style-light small { color:#555; }
 .description-box.description-overlay.is-empty { border:0; color:#fff; background:rgba(0,0,0,.78); }
 .description-box.description-overlay.is-empty small,.description-overlay .description-editor:empty::before { color:#ddd; }
+.description-box.description-overlay.description-style-dark { border:0; color:#fff; background:rgba(0,0,0,.78); }
+.description-box.description-overlay.description-style-dark small { color:#d0d0d0; }
+.description-box.description-overlay.description-style-light { border:0; color:#000; background:rgba(255,255,255,.92); }
+.description-box.description-overlay.description-style-light small,.description-box.description-overlay.description-style-light .description-editor:empty::before { color:#555; }
 .canvas-workspace { flex-direction:column; align-items:stretch; justify-content:space-between; padding:32px 35px 14px; }
 .canvas-stage { flex:1 1 auto; width:100%; min-height:260px; }
 .page-carousel { flex:0 0 auto; display:grid; grid-template-columns:58px minmax(0,1fr); align-items:start; gap:10px; width:100%; padding-top:11px; border-top:1px solid rgba(0,0,0,.12); }
@@ -182,6 +186,16 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .page-thumb-caption-style-light { color:#000; background:#fff; }
 .page-thumb-caption-style-dark { color:#fff; background:#000; }
 .page-thumb-caption-overlay { position:absolute; z-index:2; left:0; bottom:0; background:rgba(0,0,0,.78); }
+.page-thumb-caption-overlay.page-thumb-caption-style-dark { color:#fff; background:rgba(0,0,0,.78); }
+.page-thumb-caption-overlay.page-thumb-caption-style-light { color:#000; background:rgba(255,255,255,.92); }
+.producer-brand-overlay { position:absolute; z-index:7; top:6%; left:6%; display:flex; align-items:center; gap:7px; max-width:42%; padding:5px 8px; overflow:hidden; color:#000; background:rgba(255,255,255,.92); font:600 clamp(8px,1vw,13px)/1.15 'DM Mono',monospace; letter-spacing:.4px; text-overflow:ellipsis; text-transform:uppercase; }
+.producer-brand-overlay img { width:22px; height:22px; flex:0 0 auto; object-fit:contain; }
+.producer-brand-overlay span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.producer-logo-actions { display:flex; gap:7px; margin-top:9px; }
+.producer-logo-actions .button { padding:7px 9px; font-size:10px; }
+.producer-logo-preview { display:flex; align-items:center; gap:8px; margin-top:9px; padding:7px; border:1px solid #c9c9c9; color:#555; background:#fff; font:9px 'DM Mono',monospace; }
+.producer-logo-preview img { width:30px; height:30px; object-fit:contain; background:#eee; }
+.producer-logo-preview span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .info-placement-select { margin-top:10px; }
 .info-style-select { margin-top:7px; }
 .auto-layout-status { display:flex; flex-direction:column; gap:3px; color:#666; font-size:10px; }

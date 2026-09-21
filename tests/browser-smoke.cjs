@@ -35,6 +35,7 @@ const fixture = () => {
     await page.waitForFunction(() => document.querySelectorAll('#canvasPage .design-item').length === 6);
     assert.equal(await page.locator('#photosPerPage').count(), 0);
     assert.equal(await page.locator('#layoutDirection').count(), 0);
+    assert.equal(await page.locator('#addPageBtn').count(), 0);
     assert.equal(await page.locator('#pageTotal').textContent(), '1');
     const screenshot = path.join(os.tmpdir(), 'storyapp-adaptive-six.png');
     await page.screenshot({ path: screenshot, fullPage: true });
@@ -96,10 +97,18 @@ const fixture = () => {
     assert.deepEqual(await page.locator('#canvasPage .description-style-light').first().evaluate(node => [getComputedStyle(node).backgroundColor, getComputedStyle(node).color]), ['rgb(255, 255, 255)', 'rgb(0, 0, 0)']);
     await page.locator('#infoPlacement').selectOption('overlay');
     assert.equal(await page.locator('#canvasPage .description-overlay').count(), 16);
-    assert.equal(await page.locator('#infoStyle').isDisabled(), true);
-    assert.equal(await page.locator('#canvasPage .description-overlay.is-empty').first().evaluate(node => getComputedStyle(node).color), 'rgb(255, 255, 255)');
+    assert.equal(await page.locator('#infoStyle').isDisabled(), false);
+    assert.equal(await page.locator('#canvasPage .description-overlay.description-style-light').count(), 16);
+    assert.deepEqual(await page.locator('#canvasPage .description-overlay.description-style-light').first().evaluate(node => [getComputedStyle(node).backgroundColor, getComputedStyle(node).color]), ['rgba(255, 255, 255, 0.92)', 'rgb(0, 0, 0)']);
     await page.locator('#infoPlacement').selectOption('below');
     assert.equal(await page.locator('#canvasPage .description-overlay').count(), 0);
+    await page.locator('#projectProducer').fill('GB Films');
+    await page.locator('#showProducerBranding').check({ force: true });
+    await page.locator('#producerLogoInput').setInputFiles({ name: 'gb-films.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="black"/></svg>') });
+    await page.waitForSelector('#canvasPage .producer-brand-overlay');
+    await page.waitForSelector('#canvasPage .producer-brand-overlay img');
+    assert.equal(await page.locator('#canvasPage .producer-brand-overlay img').count(), 1);
+    assert.match(await page.locator('#canvasPage .producer-brand-overlay').textContent(), /GB Films/);
     // No image/caption may extend beyond its assigned card or beyond the safe area.
     const check = await page.evaluate(() => {
       const board = document.querySelector('#canvasPage').getBoundingClientRect();
@@ -135,7 +144,7 @@ const fixture = () => {
     await page.locator('[data-open-project]').first().click();
     assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
     assert.match(await page.locator('#canvasPage .design-item').last().textContent(), /Título que debe conservarse/);
-    await page.locator('#addPageBtn').click();
+    await page.locator('[data-add-page]').click();
     assert.equal(await page.locator('#pageTotal').textContent(), '2');
     assert.equal(await page.locator('#canvasPage .design-item').count(), 0);
     const pageSource = page.locator('[data-page-index="0"]');

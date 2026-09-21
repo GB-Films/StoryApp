@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="GB Films Storyboard Studio: organizá tus fotos sobre un artboard y exportá tu composición." />
     <title>GB Films · Storyboard Studio</title>
-    <link rel="stylesheet" href="styles.css?v=6" />
+    <link rel="stylesheet" href="styles.css?v=7" />
   </head>
   <body>
     <div class="app-shell">
@@ -38,7 +38,7 @@
         <section class="editor-area">
           <div class="project-header">
             <div class="project-fields"><label for="projectTitle">TÍTULO DEL PROYECTO <span class="editable-label">EDITABLE</span></label><input id="projectTitle" value="Storyboard X" placeholder="Título del proyecto" autocomplete="off" /><label class="producer-label" for="projectProducer">PRODUCTORA <span class="editable-label">OPCIONAL · EDITABLE</span></label><input id="projectProducer" value="" placeholder="Nombre de la productora" autocomplete="organization" /></div>
-            <div class="page-nav"><button id="prevPageBtn" class="round-button" type="button" aria-label="Página anterior">‹</button><span>PÁGINA <strong id="pageNumber">1</strong> / <strong id="pageTotal">1</strong></span><button id="nextPageBtn" class="round-button" type="button" aria-label="Página siguiente">›</button><button id="addPageBtn" class="button button-small button-secondary" type="button">＋ Página</button></div>
+            <div class="page-nav"><button id="prevPageBtn" class="round-button" type="button" aria-label="Página anterior">‹</button><span>PÁGINA <strong id="pageNumber">1</strong> / <strong id="pageTotal">1</strong></span><button id="nextPageBtn" class="round-button" type="button" aria-label="Página siguiente">›</button></div>
           </div>
 
           <div class="editor-toolbar">
@@ -66,6 +66,7 @@
             <div class="inspector-section"><label for="pageGap">ESPACIO ENTRE FOTOS <output id="pageGapValue">16 px</output></label><input id="pageGap" type="range" min="0" max="48" value="16" /></div>
             <div class="inspector-section"><label for="pagePadding">MARGEN DEL ARTBOARD <output id="pagePaddingValue">6%</output></label><input id="pagePadding" type="range" min="6" max="12" value="6" /></div>
             <div class="inspector-section"><label for="showProjectTitle">TÍTULO DEL PROYECTO</label><label class="switch-row"><input id="showProjectTitle" type="checkbox" /><span class="switch"></span><span>Mostrar título arriba a la derecha</span></label></div>
+            <div class="inspector-section producer-brand-section"><label>IDENTIDAD DE PRODUCTORA</label><label class="switch-row"><input id="showProducerBranding" type="checkbox" /><span class="switch"></span><span>Mostrar nombre y logo en el artboard</span></label><div class="producer-logo-actions"><button class="button button-secondary" id="producerLogoBtn" type="button">＋ Cargar logo</button><button class="button button-ghost" id="removeProducerLogoBtn" type="button">Quitar</button><input id="producerLogoInput" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg" hidden /></div><div id="producerLogoPreview" class="producer-logo-preview" hidden></div><p class="field-help">Usa el nombre de PRODUCTORA de arriba y suma un logo opcional.</p></div>
             <div class="inspector-section"><label>ENCUADRE AUTOMÁTICO</label><div class="segmented-control"><button class="fit-default-btn" data-fit="cover" type="button">Recortar</button><button class="fit-default-btn is-active" data-fit="contain" type="button">Completa</button></div><p class="field-help">Completa respeta la proporción real y adapta el marco de la foto. El recorte usa todo el casillero.</p></div>
             <div class="inspector-section"><label for="showDescriptions">DATOS DE LAS TOMAS</label><label class="switch-row"><input id="showDescriptions" type="checkbox" /><span class="switch"></span><span>Mostrar información del plano</span></label><select id="infoPlacement" class="text-field info-placement-select"><option value="below">Debajo de la foto</option><option value="overlay">Sobre la foto · borde inferior</option></select><select id="infoStyle" class="text-field info-style-select"><option value="dark">Recuadro negro · letra blanca</option><option value="light">Recuadro blanco · letra negra</option></select></div>
             <button class="button button-outline full-button" id="clearPageBtn" type="button">Limpiar página</button><button class="button button-danger full-button page-delete-button" id="deletePageBtn" type="button">⌫ Eliminar página actual</button>
@@ -93,6 +94,6 @@
     <div class="modal-backdrop" id="exportModal" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="exportTitle"><button class="modal-close" data-close-modal type="button" aria-label="Cerrar">×</button><div class="eyebrow"><span class="eyebrow-line"></span> SALIDA</div><h2 id="exportTitle">Exportar storyboard</h2><p class="modal-copy">Elegí si querés exportar la hoja actual, imprimir todas las páginas o guardar el proyecto.</p><div class="export-options"><button class="export-option" data-export="png" type="button"><span class="option-icon orange">▧</span><span><strong>Esta hoja como PNG</strong><small>Exporta el artboard tal como lo ves</small></span><span class="option-arrow">→</span></button><button class="export-option" data-export="jpg" type="button"><span class="option-icon blue">▧</span><span><strong>Esta hoja como JPG</strong><small>Archivo liviano para compartir</small></span><span class="option-arrow">→</span></button><button class="export-option" data-export="print" type="button"><span class="option-icon purple">▤</span><span><strong>PDF / Imprimir todas</strong><small>Plancha de rodaje con todas las páginas</small></span><span class="option-arrow">→</span></button><button class="export-option" data-export="json" type="button"><span class="option-icon green">{ }</span><span><strong>Proyecto editable</strong><small>Biblioteca, páginas y encuadres</small></span><span class="option-arrow">→</span></button></div></div></div>
     <div class="toast" id="toast" role="status"></div>
     <script src="layout.js?v=1"></script>
-    <script src="app.js?v=12"></script>
+    <script src="app.js?v=13"></script>
   </body>
 </html>
