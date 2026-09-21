@@ -1,5 +1,7 @@
 const STORAGE_KEY = 'storyboard-studio-workspace-v2';
 const LEGACY_KEY = 'storyboard-studio-project-v1';
+const PROJECTS_KEY = 'storyboard-studio-projects-v1';
+const CURRENT_PROJECT_KEY = 'storyboard-studio-current-project-v1';
 
 let currentPageIndex = 0;
 let selectedItemId = null;
@@ -16,7 +18,9 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const createId = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
-let project = loadProject();
+let project = null;
+let projects = loadProjects();
+let currentProjectId = null;
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
 function defaultProject() { return { version: 2, title: 'Storyboard X', author: 'Tu nombre', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, background: '#ffffff', padding: 4, gap: 16, defaultFit: 'contain', showDescriptions: true, photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
@@ -24,6 +28,9 @@ function defaultProject() { return { version: 2, title: 'Storyboard X', author: 
 function normalizeProject(data) {
   const base = defaultProject();
   const normalized = { ...base, ...data };
+  normalized.id = data.id || createId('project');
+  normalized.createdAt = data.createdAt || new Date().toISOString();
+  normalized.updatedAt = data.updatedAt || normalized.createdAt;
   if (normalized.title === 'Mi nuevo video') normalized.title = 'Storyboard X';
   const migrateOldCropDefault = data.version !== 2;
   normalized.version = 2;
@@ -57,17 +64,42 @@ function loadProject() {
   return migrateLegacy() || defaultProject();
 }
 
+function loadProjects() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PROJECTS_KEY));
+    if (Array.isArray(saved)) return saved.map(normalizeProject);
+  } catch { /* Recover from the single-project format below. */ }
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (saved && Array.isArray(saved.assets)) return [normalizeProject(saved)];
+  } catch { /* Start with an empty dashboard below. */ }
+  const legacy = migrateLegacy();
+  return legacy ? [normalizeProject(legacy)] : [];
+}
+
+function projectHasContent(candidate = project) { return !!candidate && (candidate.assets.length > 0 || candidate.pages.some(page => page.items.length > 0)); }
+function projectFormatLabel(ratio) { return ratio === 'portrait' ? 'Vertical · 9:16' : ratio === 'square' ? 'Cuadrado · 1:1' : 'Horizontal · 16:9'; }
+function projectDateLabel(value) { const date = new Date(value || Date.now()); return Number.isNaN(date.getTime()) ? 'Sin fecha' : date.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' }); }
+
 function currentPage() { return project.pages[currentPageIndex] || project.pages[0]; }
 function findItem(id) { return currentPage()?.items.find(item => item.id === id); }
 function findAsset(id) { return project.assets.find(asset => asset.id === id); }
 function placedAssetIds() { return new Set(project.pages.flatMap(page => page.items.map(item => item.assetId))); }
 
 function saveProject() {
+  if (!project) return;
+  const candidate = project;
+  candidate.updatedAt = new Date().toISOString();
+  const index = projects.findIndex(entry => entry.id === candidate.id);
+  if (index === -1) projects.unshift(candidate);
+  else projects[index] = candidate;
   clearTimeout(saveTimer);
   $('#saveState').innerHTML = '<span class="status-dot is-saving"></span>Guardando…';
   saveTimer = setTimeout(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+      localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(candidate));
+      localStorage.setItem(CURRENT_PROJECT_KEY, candidate.id);
       $('#saveState').innerHTML = '<span class="status-dot"></span>Guardado local';
     } catch {
       $('#saveState').innerHTML = '<span class="status-dot"></span>En memoria';
@@ -96,6 +128,56 @@ function assetAspect(asset) {
   const width = Number(asset?.width);
   const height = Number(asset?.height);
   return width > 0 && height > 0 ? width / height : 16 / 9;
+}
+
+function renderDashboard() {
+  const grid = $('#projectGrid');
+  if (!grid) return;
+  $('#projectCount').textContent = `${projects.length} proyecto${projects.length === 1 ? '' : 's'}`;
+  $('#dashboardEmpty').hidden = projects.length > 0;
+  grid.innerHTML = projects.map((entry, index) => {
+    const asset = entry.assets[0];
+    const preview = asset ? `<img src="${asset.image}" alt="" />` : '<span class="project-card-empty-mark">▱</span>';
+    const pageCount = entry.pages.length;
+    const photoCount = entry.assets.length;
+    return `<article class="project-card" style="--card-index:${index}"><button class="project-card-open" data-open-project="${entry.id}" type="button"><span class="project-card-preview ${asset ? '' : 'is-empty'}">${preview}<span class="project-card-format">${projectFormatLabel(entry.ratio)}</span></span><span class="project-card-body"><strong>${escapeHtml(entry.title || 'Sin título')}</strong><small>${escapeHtml(entry.author || 'Sin autor')}</small><span class="project-card-meta"><span>${pageCount} página${pageCount === 1 ? '' : 's'}</span><span>${photoCount} foto${photoCount === 1 ? '' : 's'}</span><span>${projectDateLabel(entry.updatedAt)}</span></span></span><span class="project-card-arrow">↗</span></button></article>`;
+  }).join('');
+  $$('[data-open-project]', grid).forEach(button => button.addEventListener('click', () => openProject(button.dataset.openProject)));
+}
+
+function showDashboard() {
+  if (project) saveProject();
+  project = null;
+  currentProjectId = null;
+  $('#dashboardView').hidden = false;
+  $('#editorView').hidden = true;
+  $('#backToDashboardBtn').hidden = true;
+  $('#exportBtn').hidden = true;
+  $('#saveState').innerHTML = '<span class="status-dot"></span>Guardado local';
+  $('#breadcrumbTitle').textContent = 'Todos los proyectos';
+  renderDashboard();
+}
+
+function showEditor() {
+  $('#dashboardView').hidden = true;
+  $('#editorView').hidden = false;
+  $('#backToDashboardBtn').hidden = false;
+  $('#exportBtn').hidden = false;
+  $('#breadcrumbTitle').textContent = project?.title || 'Sin título';
+}
+
+function openProject(id) {
+  const stored = projects.find(entry => entry.id === id);
+  if (!stored) return;
+  project = normalizeProject(stored);
+  currentProjectId = project.id;
+  currentPageIndex = 0;
+  selectedItemId = null;
+  activeInspector = 'page';
+  localStorage.setItem(CURRENT_PROJECT_KEY, project.id);
+  showEditor();
+  render();
+  if (!project.formatLocked) openFormatModal();
 }
 function itemLayout(item) {
   const slot = slotRect(item.slot ?? 0);
@@ -381,7 +463,22 @@ function selectProjectFormat(format) {
   const labels = { landscape: 'Horizontal', portrait: 'Vertical', square: 'Cuadrado' };
   showToast(`Canvas ${labels[format] || ''} seleccionado`);
 }
-function resetProject() { if ((project.assets.length || project.pages.some(page => page.items.length)) && !window.confirm('¿Crear un proyecto nuevo? El proyecto actual se conserva solo si lo exportaste.')) return; project = defaultProject(); currentPageIndex = 0; selectedItemId = null; activeInspector = 'page'; render(); saveProject(); openFormatModal(); }
+function createProjectDraft() {
+  project = normalizeProject(defaultProject());
+  project.title = 'Storyboard X';
+  currentProjectId = project.id;
+  currentPageIndex = 0;
+  selectedItemId = null;
+  activeInspector = 'page';
+  showEditor();
+  render();
+  openFormatModal();
+}
+function resetProject() {
+  if (projectHasContent()) { $('#newProjectConfirmModal').hidden = false; return; }
+  createProjectDraft();
+}
+function closeNewProjectConfirm() { $('#newProjectConfirmModal').hidden = true; }
 
 function prepareMigratedProject() {
   if (localStorage.getItem(STORAGE_KEY) || !project.assets.length || project.pages.some(page => page.items.length)) return;
@@ -399,7 +496,7 @@ $('#uploadZone').addEventListener('drop', event => { event.preventDefault(); $('
 $('#importBtn').addEventListener('click', () => $('#projectInput').click());
 $('#projectInput').addEventListener('change', event => {
   const file = event.target.files[0]; if (!file) return;
-  const reader = new FileReader(); reader.onload = () => { try { const imported = JSON.parse(reader.result); if (!Array.isArray(imported.assets) || !Array.isArray(imported.pages)) throw new Error(); project = normalizeProject(imported); currentPageIndex = 0; selectedItemId = null; activeInspector = 'page'; render(); saveProject(); showToast('Proyecto importado correctamente'); } catch { showToast('Ese archivo no parece un proyecto válido'); } }; reader.readAsText(file); event.target.value = '';
+  const reader = new FileReader(); reader.onload = () => { try { const imported = JSON.parse(reader.result); if (!Array.isArray(imported.assets) || !Array.isArray(imported.pages)) throw new Error(); project = normalizeProject(imported); project.id = createId('project'); project.createdAt = new Date().toISOString(); project.updatedAt = project.createdAt; currentProjectId = project.id; currentPageIndex = 0; selectedItemId = null; activeInspector = 'page'; showEditor(); render(); saveProject(); showToast('Proyecto importado correctamente'); } catch { showToast('Ese archivo no parece un proyecto válido'); } }; reader.readAsText(file); event.target.value = '';
 });
 
 $('#canvasPage').addEventListener('click', event => { if (event.target === $('#canvasPage')) { selectedItemId = null; activeInspector = 'page'; render(); } });
@@ -426,11 +523,9 @@ $$('.fit-btn').forEach(button => button.addEventListener('click', () => { const 
 $('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); });
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
 
-$('#newProjectBtn').addEventListener('click', resetProject); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat)));
+$('#newProjectBtn').addEventListener('click', resetProject); $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); });
 $$('[data-export]').forEach(button => button.addEventListener('click', async () => { const type = button.dataset.export; closeExport(); if (type === 'json') downloadProject(); else if (type === 'print') printAllPages(); else await exportImage(type); }));
 
-document.addEventListener('keydown', event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if (event.key === 'Delete' && selectedItemId && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) deleteSelected(); if (event.key === 'Escape') closeExport(); });
+document.addEventListener('keydown', event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if (event.key === 'Delete' && selectedItemId && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) deleteSelected(); if (event.key === 'Escape') { closeExport(); closeNewProjectConfirm(); } });
 
-prepareMigratedProject();
-render();
-if (!project.formatLocked) openFormatModal();
+showDashboard();
