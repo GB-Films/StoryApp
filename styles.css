@@ -180,3 +180,36 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .canvas-page.is-slot-mode .slot-guide span { color:#000; background:rgba(255,255,255,.9); }
 .canvas-page.is-slot-mode .slot-guide.is-target { border-color:#000; background:rgba(0,0,0,.14); box-shadow:0 0 0 3px rgba(0,0,0,.12); }
 .canvas-page.is-slot-mode .slot-guide.is-target span { color:#fff; background:#000; }
+.topbar { height:54px; padding:0 18px; gap:20px; }
+.workspace-app { min-height:calc(100vh - 54px); }
+.project-header { min-height:62px; padding:10px 18px 8px; }
+.project-header > div:first-child input:first-of-type { width:min(300px,35vw); font-size:18px; }
+.editor-toolbar { min-height:42px; padding:6px 16px; gap:10px; }
+.canvas-workspace { padding:20px 28px 10px; }
+.canvas-page { width:min(900px,76vw); }
+.canvas-page.format-portrait { width:min(520px,48vw); }
+.canvas-page.format-square { width:min(680px,58vw); }
+.format-btn:disabled { opacity:.65; cursor:not-allowed; }
+.project-title-overlay { position:absolute; z-index:7; top:2%; right:2.5%; max-width:42%; color:#fff; mix-blend-mode:difference; font:500 clamp(8px,1.15vw,14px)/1.2 'DM Mono',monospace; letter-spacing:.7px; text-align:right; text-transform:uppercase; outline:0; cursor:text; }
+.project-title-overlay:empty::before { content:'Título del proyecto'; opacity:.45; }
+.format-modal-backdrop { background:rgba(0,0,0,.72); }
+.format-modal { width:min(620px,100%); }
+.format-options { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:24px; }
+.format-option { display:flex; flex-direction:column; align-items:flex-start; gap:8px; min-height:150px; padding:16px; text-align:left; border:1px solid #c9c9c9; background:#fff; color:#000; cursor:pointer; }
+.format-option:hover { border-color:#000; background:#f4f4f4; transform:translateY(-2px); }
+.format-option strong { font:600 14px 'Space Grotesk',sans-serif; }
+.format-option small { color:#666; font-size:10px; line-height:1.3; }
+.format-preview { align-self:center; display:block; width:68px; border:2px solid #000; background:#eee; }
+.format-preview-landscape { height:40px; }
+.format-preview-portrait { width:42px; height:68px; }
+.format-preview-square { width:56px; height:56px; }
+@media (max-width:600px) {
+  .topbar { height:auto; min-height:54px; }
+  .workspace-app { min-height:calc(100vh - 54px); }
+  .project-header > div:first-child input:first-of-type { width:min(270px,70vw); }
+  .canvas-page { width:min(680px,86vw); }
+  .canvas-page.format-portrait { width:min(360px,60vw); }
+  .canvas-page.format-square { width:min(520px,78vw); }
+  .format-options { grid-template-columns:1fr; }
+  .format-option { min-height:0; }
+}
