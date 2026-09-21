@@ -327,12 +327,23 @@ function pageThumbnailMarkup(page) {
   }).join('');
 }
 
+function addNewPage() {
+  project.pages.push(blankPage(`Página ${project.pages.length + 1}`, pageSettings(currentPage())));
+  currentPageIndex = project.pages.length - 1;
+  selectedItemId = null;
+  activeInspector = 'page';
+  render();
+  saveProject();
+  showToast('Página nueva agregada');
+}
+
 function renderPageCarousel() {
   const track = $('#pageCarouselTrack');
   if (!track) return;
   $('#carouselCount').textContent = `${project.pages.length} página${project.pages.length === 1 ? '' : 's'}`;
-  track.innerHTML = project.pages.map((page, index) => `<button class="page-thumb ${index === currentPageIndex ? 'is-active' : ''}" data-page-index="${index}" type="button"><span class="page-thumb-canvas ${pageFormatClass()}" style="background:${project.background}">${pageThumbnailMarkup(page)}</span><span class="page-thumb-label">${String(index + 1).padStart(2, '0')} · ${escapeHtml(page.title || `Página ${index + 1}`)}</span></button>`).join('');
-  $$('.page-thumb', track).forEach(button => button.addEventListener('click', () => { currentPageIndex = Number(button.dataset.pageIndex); selectedItemId = null; activeInspector = 'page'; render(); }));
+  track.innerHTML = `${project.pages.map((page, index) => `<button class="page-thumb ${index === currentPageIndex ? 'is-active' : ''}" data-page-index="${index}" type="button"><span class="page-thumb-canvas ${pageFormatClass()}" style="background:${project.background}">${pageThumbnailMarkup(page)}</span><span class="page-thumb-label">${String(index + 1).padStart(2, '0')} · ${escapeHtml(page.title || `Página ${index + 1}`)}</span></button>`).join('')}<button class="page-thumb page-thumb-add" data-add-page type="button" aria-label="Agregar nueva página"><span class="page-thumb-canvas page-thumb-add-canvas ${pageFormatClass()}"><span class="page-thumb-add-symbol">＋</span></span><span class="page-thumb-label">＋ Nueva página</span></button>`;
+  $$('[data-page-index]', track).forEach(button => button.addEventListener('click', () => { currentPageIndex = Number(button.dataset.pageIndex); selectedItemId = null; activeInspector = 'page'; render(); }));
+  $('[data-add-page]', track)?.addEventListener('click', addNewPage);
 }
 
 function renderControls() {
@@ -602,7 +613,7 @@ $('#layoutDirection').addEventListener('change', event => { currentPage().layout
 $$('.format-btn').forEach(button => button.addEventListener('click', () => { if (project.formatLocked) { showToast('El formato está fijado para este proyecto'); return; } project.ratio = button.dataset.format; render(); saveProject(); }));
 $('#zoomOutBtn').addEventListener('click', () => { zoom = clamp(zoom - .1, .6, 1.4); renderControls(); }); $('#zoomInBtn').addEventListener('click', () => { zoom = clamp(zoom + .1, .6, 1.4); renderControls(); });
 $('#prevPageBtn').addEventListener('click', () => { if (currentPageIndex > 0) { currentPageIndex--; selectedItemId = null; render(); } }); $('#nextPageBtn').addEventListener('click', () => { if (currentPageIndex < project.pages.length - 1) { currentPageIndex++; selectedItemId = null; render(); } });
-$('#addPageBtn').addEventListener('click', () => { project.pages.push(blankPage(`Página ${project.pages.length + 1}`, pageSettings(currentPage()))); currentPageIndex = project.pages.length - 1; selectedItemId = null; render(); saveProject(); showToast('Página nueva agregada'); });
+$('#addPageBtn').addEventListener('click', addNewPage);
 
 ['projectTitle', 'projectProducer'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer' }[id]; project[key] = event.target.value; if (id === 'projectProducer') project.author = project.producer; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; if (id === 'projectTitle' && $('#canvasProjectTitle')) $('#canvasProjectTitle').textContent = project.title; saveProject(); }));
 $('#backgroundColor').addEventListener('input', event => { project.background = event.target.value; render(); saveProject(); });

@@ -154,6 +154,10 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .page-thumb-canvas.format-portrait { aspect-ratio:9/16; }
 .page-thumb-canvas.format-square { aspect-ratio:1; }
 .page-thumb.is-active .page-thumb-canvas { border:2px solid #000; box-shadow:0 4px 12px rgba(0,0,0,.18); }
+.page-thumb-add { color:#777; }
+.page-thumb-add-canvas { display:grid; place-items:center; border-style:dashed; background:rgba(255,255,255,.5); box-shadow:none; transition:.2s; }
+.page-thumb-add:hover .page-thumb-add-canvas { border-color:#000; color:#000; background:#eee; box-shadow:0 3px 8px rgba(0,0,0,.08); }
+.page-thumb-add-symbol { color:currentColor; font:300 34px/1 'DM Mono',monospace; }
 .page-thumb-label { display:block; overflow:hidden; padding-top:5px; font:500 9px 'DM Mono',monospace; text-overflow:ellipsis; white-space:nowrap; }
 .page-thumb-item { position:absolute; display:flex; flex-direction:column; overflow:visible; }
 .page-thumb-photo { position:relative; width:100%; flex:0 0 auto; overflow:hidden; border:1px solid rgba(255,255,255,.95); background:#eee; }
