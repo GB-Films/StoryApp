@@ -128,10 +128,11 @@ function itemMarkup(item) {
   const number = String((item.slot ?? 0) + 1).padStart(2, '0');
   const layout = itemLayout(item);
   const imageHeight = layout.image.height / layout.card.height * 100;
+  const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
   const description = item.description?.trim() || '';
   return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${item.id === selectedItemId ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%" draggable="false">
     <div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span></div>
-    ${project.showDescriptions ? `<div class="description-box ${description ? '' : 'is-empty'}"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : ''}
+    ${project.showDescriptions ? `<div class="description-box ${description ? '' : 'is-empty'}" style="height:${captionHeight}%"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : ''}
   </div>`;
 }
 
@@ -180,7 +181,8 @@ function pageThumbnailMarkup(page) {
     const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`;
     const number = String((item.slot ?? 0) + 1).padStart(2, '0');
     const imageHeight = layout.image.height / layout.card.height * 100;
-    return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%"><div class="page-thumb-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" /><span>${number}</span></div>${project.showDescriptions ? `<div class="page-thumb-caption">${escapeHtml(label)}</div>` : ''}</div>`;
+    const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
+    return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%"><div class="page-thumb-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" /><span>${number}</span></div>${project.showDescriptions ? `<div class="page-thumb-caption" style="height:${captionHeight}%">${escapeHtml(label)}</div>` : ''}</div>`;
   }).join('');
 }
 
@@ -340,7 +342,7 @@ async function exportImage(type) { const canvas = await renderPageCanvas(current
 
 function printAllPages() {
   const layer = document.createElement('div'); layer.className = 'print-layer';
-  project.pages.forEach(page => { const sheet = document.createElement('div'); sheet.className = `canvas-page print-page ${pageFormatClass()}`; sheet.style.background = project.background; page.items.forEach(item => { const asset = findAsset(item.assetId); if (!asset) return; const layout = itemLayout(item); const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`; const number = String((item.slot ?? 0) + 1).padStart(2, '0'); const imageHeight = layout.image.height / layout.card.height * 100; const node = document.createElement('div'); node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`; node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`; node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span></div>${project.showDescriptions ? `<div class="description-box ${item.description ? '' : 'is-empty'}"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : ''}`; sheet.appendChild(node); }); layer.appendChild(sheet); });
+  project.pages.forEach(page => { const sheet = document.createElement('div'); sheet.className = `canvas-page print-page ${pageFormatClass()}`; sheet.style.background = project.background; page.items.forEach(item => { const asset = findAsset(item.assetId); if (!asset) return; const layout = itemLayout(item); const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`; const number = String((item.slot ?? 0) + 1).padStart(2, '0'); const imageHeight = layout.image.height / layout.card.height * 100; const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0; const node = document.createElement('div'); node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`; node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`; node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span></div>${project.showDescriptions ? `<div class="description-box ${item.description ? '' : 'is-empty'}" style="height:${captionHeight}%"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : ''}`; sheet.appendChild(node); }); layer.appendChild(sheet); });
   document.body.appendChild(layer); const cleanup = () => layer.remove(); window.addEventListener('afterprint', cleanup, { once: true }); window.print(); setTimeout(cleanup, 2500);
 }
 
