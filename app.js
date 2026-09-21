@@ -88,7 +88,27 @@ function slotRect(slotIndex, count = Number(project.photosPerPage) || 4) {
   const { cols, rows } = layoutDimensions(count); const pad = project.padding; const gap = project.gap / 10; const usableW = 100 - pad * 2; const usableH = 100 - pad * 2; const cellW = (usableW - gap * (cols - 1)) / cols; const cellH = (usableH - gap * (rows - 1)) / rows; const col = slotIndex % cols; const row = Math.floor(slotIndex / cols);
   return { x: pad + col * (cellW + gap), y: pad + row * (cellH + gap), width: cellW, height: cellH };
 }
-function itemRect(item) { return slotRect(item.slot ?? 0); }
+function assetAspect(asset) {
+  const width = Number(asset?.width);
+  const height = Number(asset?.height);
+  return width > 0 && height > 0 ? width / height : 16 / 9;
+}
+function itemRect(item) {
+  const slot = slotRect(item.slot ?? 0);
+  if (item.fit === 'cover') return slot;
+  const aspect = assetAspect(findAsset(item.assetId));
+  const slotAspect = slot.width / slot.height;
+  if (aspect >= slotAspect) {
+    const height = slot.width / aspect;
+    return { x: slot.x, y: slot.y + (slot.height - height) / 2, width: slot.width, height };
+  }
+  const width = slot.height * aspect;
+  return { x: slot.x + (slot.width - width) / 2, y: slot.y, width, height: slot.height };
+}
+function slotGuideRect(slotIndex) {
+  const sourceAssetId = draggedAssetId || findItem(slotDrag?.id)?.assetId || findItem(selectedItemId)?.assetId;
+  return sourceAssetId ? itemRect({ slot: slotIndex, assetId: sourceAssetId, fit: 'contain' }) : slotRect(slotIndex);
+}
 function slotAtPoint(clientX, clientY) { const rect = $('#canvasPage').getBoundingClientRect(); const x = (clientX - rect.left) / rect.width * 100; const y = (clientY - rect.top) / rect.height * 100; const count = Number(project.photosPerPage) || 4; for (let index = 0; index < count; index += 1) { const slot = slotRect(index, count); if (x >= slot.x && x <= slot.x + slot.width && y >= slot.y && y <= slot.y + slot.height) return index; } return null; }
 
 function itemMarkup(item) {
@@ -119,7 +139,7 @@ function renderPage() {
   const page = currentPage();
   $('#canvasPage').className = `canvas-page ${pageFormatClass()} ${slotMode ? 'is-slot-mode' : ''}`;
   $('#canvasPage').style.background = page ? project.background : '#ffffff';
-  const guides = slotMode ? Array.from({ length: Number(project.photosPerPage) || 4 }, (_, index) => { const rect = slotRect(index); return `<div class="slot-guide ${hoverSlotIndex === index ? 'is-target' : ''}" data-slot-index="${index}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%"><span>${String(index + 1).padStart(2, '0')}</span></div>`; }).join('') : '';
+  const guides = slotMode ? Array.from({ length: Number(project.photosPerPage) || 4 }, (_, index) => { const rect = slotGuideRect(index); return `<div class="slot-guide ${hoverSlotIndex === index ? 'is-target' : ''}" data-slot-index="${index}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%"><span>${String(index + 1).padStart(2, '0')}</span></div>`; }).join('') : '';
   const content = page?.items.length ? page.items.map(itemMarkup).join('') : '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>';
   $('#canvasPage').innerHTML = guides + content;
   $$('.design-item').forEach(item => bindDesignItem(item));
