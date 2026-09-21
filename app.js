@@ -19,7 +19,7 @@ const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, char => ({ 
 let project = loadProject();
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, title: 'Storyboard X', author: 'Tu nombre', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', background: '#ffffff', gap: 16, padding: 4, defaultFit: 'contain', showLabels: false, photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, title: 'Storyboard X', author: 'Tu nombre', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', background: '#ffffff', gap: 16, padding: 4, defaultFit: 'contain', showDescriptions: true, photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
 
 function normalizeProject(data) {
   const base = defaultProject();
@@ -27,6 +27,7 @@ function normalizeProject(data) {
   if (normalized.title === 'Mi nuevo video') normalized.title = 'Storyboard X';
   const migrateOldCropDefault = data.version !== 2;
   normalized.version = 2;
+  normalized.showDescriptions = typeof data.showDescriptions === 'boolean' ? data.showDescriptions : true;
   if (migrateOldCropDefault) normalized.defaultFit = 'contain';
   normalized.assets = Array.isArray(data.assets) ? data.assets : [];
   normalized.pages = Array.isArray(data.pages) && data.pages.length ? data.pages.map((page, index) => ({ ...blankPage(`Página ${index + 1}`), ...page, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => ({ ...item, title: item.title || '', description: item.description || '', slot: Number.isFinite(item.slot) ? item.slot : itemIndex, fit: migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit) })) : [] })) : [blankPage()];
@@ -94,18 +95,27 @@ function assetAspect(asset) {
   const height = Number(asset?.height);
   return width > 0 && height > 0 ? width / height : 16 / 9;
 }
-function itemRect(item) {
+function itemLayout(item) {
   const slot = slotRect(item.slot ?? 0);
-  if (item.fit === 'cover') return slot;
-  const aspect = assetAspect(findAsset(item.assetId));
-  const slotAspect = getPageAspect() * slot.width / slot.height;
-  if (aspect >= slotAspect) {
-    const height = getPageAspect() * slot.width / aspect;
-    return { x: slot.x, y: slot.y + (slot.height - height) / 2, width: slot.width, height };
+  const descriptionHeight = project.showDescriptions ? Math.min(slot.height * .24, 11) : 0;
+  const imageSlot = { x: slot.x, y: slot.y, width: slot.width, height: Math.max(1, slot.height - descriptionHeight) };
+  if (item.fit === 'cover') {
+    const card = { x: slot.x, y: slot.y, width: slot.width, height: imageSlot.height + descriptionHeight };
+    return { card, image: imageSlot, caption: descriptionHeight ? { x: slot.x, y: slot.y + imageSlot.height, width: slot.width, height: descriptionHeight } : null };
   }
-  const width = slot.height * aspect / getPageAspect();
-  return { x: slot.x + (slot.width - width) / 2, y: slot.y, width, height: slot.height };
+  const aspect = assetAspect(findAsset(item.assetId));
+  const slotAspect = getPageAspect() * imageSlot.width / imageSlot.height;
+  const image = aspect >= slotAspect
+    ? { x: 0, y: 0, width: imageSlot.width, height: getPageAspect() * imageSlot.width / aspect }
+    : { x: 0, y: 0, width: imageSlot.height * aspect / getPageAspect(), height: imageSlot.height };
+  const card = { width: image.width, height: image.height + descriptionHeight };
+  card.x = slot.x + (slot.width - card.width) / 2;
+  card.y = slot.y + (slot.height - card.height) / 2;
+  image.x = card.x;
+  image.y = card.y;
+  return { card, image, caption: descriptionHeight ? { x: card.x, y: card.y + image.height, width: card.width, height: descriptionHeight } : null };
 }
+function itemRect(item) { return itemLayout(item).image; }
 function slotGuideRect(slotIndex) {
   const sourceAssetId = draggedAssetId || findItem(slotDrag?.id)?.assetId || findItem(selectedItemId)?.assetId;
   return sourceAssetId ? itemRect({ slot: slotIndex, assetId: sourceAssetId, fit: 'contain' }) : slotRect(slotIndex);
@@ -116,11 +126,12 @@ function itemMarkup(item) {
   const asset = findAsset(item.assetId); if (!asset) return '';
   const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`;
   const number = String((item.slot ?? 0) + 1).padStart(2, '0');
-  const rect = itemRect(item);
-  return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${item.id === selectedItemId ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%" draggable="false">
-    <img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" />
-    <span class="item-number">${number}</span>
-    ${project.showLabels ? `<span class="item-label"><strong>${escapeHtml(label)}</strong>${item.description ? `<small>${escapeHtml(item.description)}</small>` : ''}</span>` : ''}
+  const layout = itemLayout(item);
+  const imageHeight = layout.image.height / layout.card.height * 100;
+  const description = item.description?.trim() || '';
+  return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${item.id === selectedItemId ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%" draggable="false">
+    <div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span></div>
+    ${project.showDescriptions ? `<div class="description-box ${description ? '' : 'is-empty'}"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : ''}
   </div>`;
 }
 
@@ -146,12 +157,39 @@ function renderPage() {
   const content = page?.items.length ? page.items.map(itemMarkup).join('') : '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>';
   $('#canvasPage').innerHTML = guides + content;
   $$('.design-item').forEach(item => bindDesignItem(item));
+  $$('.description-editor').forEach(editor => {
+    editor.addEventListener('pointerdown', event => event.stopPropagation());
+    editor.addEventListener('click', event => event.stopPropagation());
+    editor.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); editor.blur(); } });
+    editor.addEventListener('input', event => { const item = findItem(editor.closest('.design-item')?.dataset.itemId); if (!item) return; item.description = event.currentTarget.textContent.trim(); $('#photoDescription').value = item.description; saveProject(); });
+  });
   $('#pageNumber').textContent = currentPageIndex + 1;
   $('#pageTotal').textContent = project.pages.length;
   $('#prevPageBtn').disabled = currentPageIndex === 0;
   $('#nextPageBtn').disabled = currentPageIndex >= project.pages.length - 1;
   $('#selectionStatus').textContent = selectedItemId ? 'Foto seleccionada · arrastrá a otro casillero para reordenar' : 'Seleccioná una foto para editarla';
   $('#selectionStatus').classList.toggle('photo-selected', !!selectedItemId);
+  renderPageCarousel();
+}
+
+function pageThumbnailMarkup(page) {
+  if (!page.items.length) return '<div class="page-thumb-empty">Página vacía</div>';
+  return page.items.map(item => {
+    const asset = findAsset(item.assetId); if (!asset) return '';
+    const layout = itemLayout(item);
+    const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`;
+    const number = String((item.slot ?? 0) + 1).padStart(2, '0');
+    const imageHeight = layout.image.height / layout.card.height * 100;
+    return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%"><div class="page-thumb-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" /><span>${number}</span></div>${project.showDescriptions ? `<div class="page-thumb-caption">${escapeHtml(label)}</div>` : ''}</div>`;
+  }).join('');
+}
+
+function renderPageCarousel() {
+  const track = $('#pageCarouselTrack');
+  if (!track) return;
+  $('#carouselCount').textContent = `${project.pages.length} página${project.pages.length === 1 ? '' : 's'}`;
+  track.innerHTML = project.pages.map((page, index) => `<button class="page-thumb ${index === currentPageIndex ? 'is-active' : ''}" data-page-index="${index}" type="button"><span class="page-thumb-canvas ${pageFormatClass()}" style="background:${project.background}">${pageThumbnailMarkup(page)}</span><span class="page-thumb-label">${String(index + 1).padStart(2, '0')} · ${escapeHtml(page.title || `Página ${index + 1}`)}</span></button>`).join('');
+  $$('.page-thumb', track).forEach(button => button.addEventListener('click', () => { currentPageIndex = Number(button.dataset.pageIndex); selectedItemId = null; activeInspector = 'page'; render(); }));
 }
 
 function renderControls() {
@@ -167,7 +205,7 @@ function renderControls() {
   $('#pageGapValue').textContent = `${project.gap} px`;
   $('#pagePadding').value = project.padding;
   $('#pagePaddingValue').textContent = `${project.padding}%`;
-  $('#showLabels').checked = project.showLabels;
+  $('#showDescriptions').checked = project.showDescriptions;
   $$('.format-btn').forEach(button => button.classList.toggle('is-active', button.dataset.format === project.ratio));
   $$('.fit-default-btn').forEach(button => button.classList.toggle('is-active', button.dataset.fit === project.defaultFit));
   document.documentElement.style.setProperty('--zoom', zoom);
@@ -264,11 +302,10 @@ function drawImageInBox(ctx, image, x, y, width, height, fit, focusX = 50, focus
   const scale = Math.max(width / image.width, height / image.height); const drawW = image.width * scale; const drawH = image.height * scale; const freeX = width - drawW; const freeY = height - drawH; ctx.save(); ctx.beginPath(); ctx.rect(x, y, width, height); ctx.clip(); ctx.drawImage(image, x + freeX * (focusX / 100), y + freeY * (focusY / 100), drawW, drawH); ctx.restore();
 }
 
-function drawItemMetadata(ctx, item, asset, rect, width, height) {
-  const x = rect.x / 100 * width;
-  const y = rect.y / 100 * height;
-  const boxWidth = rect.width / 100 * width;
-  const boxHeight = rect.height / 100 * height;
+function drawItemMetadata(ctx, item, asset, layout, width, height) {
+  const image = layout.image;
+  const x = image.x / 100 * width;
+  const y = image.y / 100 * height;
   const number = String((item.slot ?? 0) + 1).padStart(2, '0');
   ctx.fillStyle = 'rgba(0,0,0,.86)';
   ctx.fillRect(x + 10, y + 10, 34, 24);
@@ -277,23 +314,25 @@ function drawItemMetadata(ctx, item, asset, rect, width, height) {
   ctx.textAlign = 'center';
   ctx.fillText(number, x + 27, y + 26);
   ctx.textAlign = 'left';
-  if (!project.showLabels) return;
+  if (!project.showDescriptions || !layout.caption) return;
   const title = item.title || asset.name || `Plano ${Number(item.slot ?? 0) + 1}`;
   const description = item.description || '';
-  const captionWidth = Math.max(64, Math.min(boxWidth - 20, 520));
-  const captionHeight = description ? 47 : 27;
-  const captionY = y + boxHeight - captionHeight - 10;
+  const caption = layout.caption;
+  const captionX = caption.x / 100 * width;
+  const captionY = caption.y / 100 * height;
+  const captionWidth = caption.width / 100 * width;
+  const captionHeight = caption.height / 100 * height;
   ctx.fillStyle = 'rgba(0,0,0,.86)';
-  ctx.fillRect(x + 10, captionY, captionWidth, captionHeight);
+  ctx.fillRect(captionX, captionY, captionWidth, captionHeight);
   ctx.fillStyle = '#fff';
   ctx.font = '600 13px Arial';
-  ctx.fillText(title.slice(0, 48), x + 18, captionY + 17);
-  if (description) { ctx.font = '11px Arial'; ctx.fillText(description.slice(0, 68), x + 18, captionY + 34); }
+  ctx.fillText(title.slice(0, 48), captionX + 8, captionY + Math.min(17, captionHeight - 7));
+  if (description && captionHeight > 30) { ctx.font = '11px Arial'; ctx.fillText(description.slice(0, 68), captionX + 8, captionY + Math.min(34, captionHeight - 7)); }
 }
 
 async function renderPageCanvas(page) {
   const width = project.ratio === 'portrait' ? 900 : 1600; const height = Math.round(width / getPageAspect()); const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.fillStyle = project.background; ctx.fillRect(0, 0, width, height);
-  await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const rect = itemRect(item); image.onload = () => { drawImageInBox(ctx, image, rect.x / 100 * width, rect.y / 100 * height, rect.width / 100 * width, rect.height / 100 * height, item.fit, item.focusX, item.focusY); drawItemMetadata(ctx, item, asset, rect, width, height); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
+  await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const layout = itemLayout(item); image.onload = () => { drawImageInBox(ctx, image, layout.image.x / 100 * width, layout.image.y / 100 * height, layout.image.width / 100 * width, layout.image.height / 100 * height, item.fit, item.focusX, item.focusY); drawItemMetadata(ctx, item, asset, layout, width, height); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
   return canvas;
 }
 
@@ -301,7 +340,7 @@ async function exportImage(type) { const canvas = await renderPageCanvas(current
 
 function printAllPages() {
   const layer = document.createElement('div'); layer.className = 'print-layer';
-  project.pages.forEach(page => { const sheet = document.createElement('div'); sheet.className = `canvas-page print-page ${pageFormatClass()}`; sheet.style.background = project.background; page.items.forEach(item => { const asset = findAsset(item.assetId); if (!asset) return; const rect = itemRect(item); const node = document.createElement('div'); const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`; const number = String((item.slot ?? 0) + 1).padStart(2, '0'); node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`; node.style.cssText = `left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%`; node.innerHTML = `<img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${project.showLabels ? `<span class="item-label"><strong>${escapeHtml(label)}</strong>${item.description ? `<small>${escapeHtml(item.description)}</small>` : ''}</span>` : ''}`; sheet.appendChild(node); }); layer.appendChild(sheet); });
+  project.pages.forEach(page => { const sheet = document.createElement('div'); sheet.className = `canvas-page print-page ${pageFormatClass()}`; sheet.style.background = project.background; page.items.forEach(item => { const asset = findAsset(item.assetId); if (!asset) return; const layout = itemLayout(item); const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`; const number = String((item.slot ?? 0) + 1).padStart(2, '0'); const imageHeight = layout.image.height / layout.card.height * 100; const node = document.createElement('div'); node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`; node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`; node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span></div>${project.showDescriptions ? `<div class="description-box ${item.description ? '' : 'is-empty'}"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : ''}`; sheet.appendChild(node); }); layer.appendChild(sheet); });
   document.body.appendChild(layer); const cleanup = () => layer.remove(); window.addEventListener('afterprint', cleanup, { once: true }); window.print(); setTimeout(cleanup, 2500);
 }
 
@@ -343,7 +382,7 @@ $('#addPageBtn').addEventListener('click', () => { project.pages.push(blankPage(
 
 ['projectTitle', 'projectAuthor', 'projectDate'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectAuthor: 'author', projectDate: 'date' }[id]; project[key] = event.target.value; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; saveProject(); }));
 $('#backgroundColor').addEventListener('input', event => { project.background = event.target.value; render(); saveProject(); });
-$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); renderControls(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); renderControls(); saveProject(); }); $('#showLabels').addEventListener('change', event => { project.showLabels = event.target.checked; render(); saveProject(); });
+$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); });
 $$('.fit-default-btn').forEach(button => button.addEventListener('click', () => { project.defaultFit = button.dataset.fit; renderControls(); saveProject(); }));
 $('#clearPageBtn').addEventListener('click', () => { if (!currentPage().items.length || window.confirm('¿Limpiar todas las fotos de esta página?')) { currentPage().items = []; selectedItemId = null; render(); saveProject(); } });
 

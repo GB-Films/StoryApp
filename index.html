@@ -44,6 +44,7 @@
 
           <div class="canvas-workspace" id="canvasWorkspace">
             <div class="canvas-stage" id="canvasStage"><div class="canvas-page" id="canvasPage" aria-label="Artboard del storyboard"></div><div class="drop-hint" id="canvasDropHint">Soltá una foto para sumarla al artboard</div></div>
+            <div class="page-carousel" id="pageCarousel" aria-label="Páginas del storyboard"><div class="page-carousel-heading"><span>PÁGINAS</span><small id="carouselCount">1 página</small></div><div class="page-carousel-track" id="pageCarouselTrack"></div></div>
           </div>
 
           <div class="editor-footer"><div class="selection-status" id="selectionStatus">Seleccioná una foto para editarla</div><div class="keyboard-hints"><span><kbd>⌘</kbd><kbd>S</kbd> Guardar</span><span><kbd>Del</kbd> Eliminar foto</span><span><kbd>Arrastrar</kbd> Mover</span></div></div>
@@ -57,7 +58,7 @@
             <div class="inspector-section"><label for="pageGap">ESPACIO ENTRE FOTOS <output id="pageGapValue">16 px</output></label><input id="pageGap" type="range" min="0" max="48" value="16" /></div>
             <div class="inspector-section"><label for="pagePadding">MARGEN DEL ARTBOARD <output id="pagePaddingValue">4%</output></label><input id="pagePadding" type="range" min="0" max="12" value="4" /></div>
             <div class="inspector-section"><label>ENCUADRE AUTOMÁTICO</label><div class="segmented-control"><button class="fit-default-btn" data-fit="cover" type="button">Recortar</button><button class="fit-default-btn is-active" data-fit="contain" type="button">Completa</button></div><p class="field-help">Completa respeta la proporción real y adapta el marco de la foto. El recorte usa todo el casillero.</p></div>
-            <div class="inspector-section"><label for="showLabels">DATOS DE LAS TOMAS</label><label class="switch-row"><input id="showLabels" type="checkbox" /><span class="switch"></span><span>Mostrar títulos y descripciones</span></label></div>
+            <div class="inspector-section"><label for="showDescriptions">DATOS DE LAS TOMAS</label><label class="switch-row"><input id="showDescriptions" type="checkbox" /><span class="switch"></span><span>Mostrar recuadro de descripción</span></label></div>
             <button class="button button-outline full-button" id="clearPageBtn" type="button">Limpiar página</button>
           </div>
           <div id="photoInspector" class="inspector-content" hidden>
