@@ -125,6 +125,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .text-field:focus,.dimension-fields input:focus { border-color:#000; }
 .slot-readout { background:#ededed; border-left:3px solid #000; border-radius:0; }
 .slot-readout strong { color:#000; }
+.text-area { width:100%; min-height:76px; padding:8px; border:1px solid #c9c9c9; border-radius:2px; outline:0; resize:vertical; color:var(--ink); background:#fff; font-size:11px; line-height:1.4; }
+.text-area:focus { border-color:#000; }
+.item-number { position:absolute; z-index:2; left:7px; top:7px; min-width:24px; padding:4px 5px; color:#fff; background:rgba(0,0,0,.86); font:500 10px 'DM Mono',monospace; text-align:center; }
+.item-label { left:7px; right:7px; bottom:7px; display:flex; flex-direction:column; gap:2px; padding:7px 8px; border-radius:0; }
+.item-label strong { overflow:hidden; font:600 10px/1.2 'Space Grotesk',sans-serif; text-overflow:ellipsis; white-space:nowrap; }
+.item-label small { display:block; overflow:hidden; font-size:9px; line-height:1.25; text-overflow:ellipsis; white-space:nowrap; }
 .modal-backdrop { background:rgba(0,0,0,.7); }
 .modal { border-radius:2px; box-shadow:0 25px 80px rgba(0,0,0,.38); }
 .modal-close { color:#000; }

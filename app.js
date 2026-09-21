@@ -19,16 +19,17 @@ const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, char => ({ 
 let project = loadProject();
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, title: 'Mi nuevo video', author: 'Tu nombre', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', background: '#ffffff', gap: 16, padding: 4, defaultFit: 'contain', showLabels: false, photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, title: 'Storyboard X', author: 'Tu nombre', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', background: '#ffffff', gap: 16, padding: 4, defaultFit: 'contain', showLabels: false, photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
 
 function normalizeProject(data) {
   const base = defaultProject();
   const normalized = { ...base, ...data };
+  if (normalized.title === 'Mi nuevo video') normalized.title = 'Storyboard X';
   const migrateOldCropDefault = data.version !== 2;
   normalized.version = 2;
   if (migrateOldCropDefault) normalized.defaultFit = 'contain';
   normalized.assets = Array.isArray(data.assets) ? data.assets : [];
-  normalized.pages = Array.isArray(data.pages) && data.pages.length ? data.pages.map((page, index) => ({ ...blankPage(`Página ${index + 1}`), ...page, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => ({ ...item, slot: Number.isFinite(item.slot) ? item.slot : itemIndex, fit: migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit) })) : [] })) : [blankPage()];
+  normalized.pages = Array.isArray(data.pages) && data.pages.length ? data.pages.map((page, index) => ({ ...blankPage(`Página ${index + 1}`), ...page, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => ({ ...item, title: item.title || '', description: item.description || '', slot: Number.isFinite(item.slot) ? item.slot : itemIndex, fit: migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit) })) : [] })) : [blankPage()];
   return normalized;
 }
 
@@ -97,12 +98,12 @@ function itemRect(item) {
   const slot = slotRect(item.slot ?? 0);
   if (item.fit === 'cover') return slot;
   const aspect = assetAspect(findAsset(item.assetId));
-  const slotAspect = slot.width / slot.height;
+  const slotAspect = getPageAspect() * slot.width / slot.height;
   if (aspect >= slotAspect) {
-    const height = slot.width / aspect;
+    const height = getPageAspect() * slot.width / aspect;
     return { x: slot.x, y: slot.y + (slot.height - height) / 2, width: slot.width, height };
   }
-  const width = slot.height * aspect;
+  const width = slot.height * aspect / getPageAspect();
   return { x: slot.x + (slot.width - width) / 2, y: slot.y, width, height: slot.height };
 }
 function slotGuideRect(slotIndex) {
@@ -113,11 +114,13 @@ function slotAtPoint(clientX, clientY) { const rect = $('#canvasPage').getBoundi
 
 function itemMarkup(item) {
   const asset = findAsset(item.assetId); if (!asset) return '';
-  const label = item.title || asset.name || 'Foto';
+  const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`;
+  const number = String((item.slot ?? 0) + 1).padStart(2, '0');
   const rect = itemRect(item);
   return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${item.id === selectedItemId ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%" draggable="false">
     <img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" />
-    ${project.showLabels ? `<span class="item-label">${escapeHtml(label)}</span>` : ''}
+    <span class="item-number">${number}</span>
+    ${project.showLabels ? `<span class="item-label"><strong>${escapeHtml(label)}</strong>${item.description ? `<small>${escapeHtml(item.description)}</small>` : ''}</span>` : ''}
   </div>`;
 }
 
@@ -186,6 +189,7 @@ function renderInspector() {
   $('#photoFocusX').value = item.focusX ?? 50; $('#photoFocusY').value = item.focusY ?? 50;
   $('#focusValue').textContent = `${Math.round(item.focusX ?? 50)}% / ${Math.round(item.focusY ?? 50)}%`;
   $('#photoTitle').value = item.title || '';
+  $('#photoDescription').value = item.description || '';
   $$('.fit-btn').forEach(button => button.classList.toggle('is-active', button.dataset.fit === item.fit));
 }
 
@@ -217,12 +221,12 @@ function addAssetToPage(assetId, targetSlot = null) {
   let slot = targetSlot === null ? firstEmptySlot(page) : targetSlot;
   if (slot === undefined || slot === null) { project.pages.push(blankPage(`Página ${project.pages.length + 1}`)); currentPageIndex = project.pages.length - 1; page = currentPage(); slot = 0; }
   const occupant = page.items.find(item => item.slot === slot); if (occupant) slot = firstEmptySlot(page); if (slot === undefined) { project.pages.push(blankPage(`Página ${project.pages.length + 1}`)); currentPageIndex = project.pages.length - 1; page = currentPage(); slot = 0; }
-  const item = { id: createId('item'), assetId, slot, fit: project.defaultFit, focusX: 50, focusY: 50, title: '' };
+  const item = { id: createId('item'), assetId, slot, fit: project.defaultFit, focusX: 50, focusY: 50, title: '', description: '' };
   page.items.push(item); selectedItemId = item.id; activeInspector = 'photo'; render(); saveProject(); showToast('Foto colocada en el siguiente casillero');
 }
 
 function createAutoItems(assets) {
-  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, fit: project.defaultFit, focusX: 50, focusY: 50, title: '' }));
+  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, fit: project.defaultFit, focusX: 50, focusY: 50, title: '', description: '' }));
 }
 
 function autoArrange() {
@@ -260,9 +264,36 @@ function drawImageInBox(ctx, image, x, y, width, height, fit, focusX = 50, focus
   const scale = Math.max(width / image.width, height / image.height); const drawW = image.width * scale; const drawH = image.height * scale; const freeX = width - drawW; const freeY = height - drawH; ctx.save(); ctx.beginPath(); ctx.rect(x, y, width, height); ctx.clip(); ctx.drawImage(image, x + freeX * (focusX / 100), y + freeY * (focusY / 100), drawW, drawH); ctx.restore();
 }
 
+function drawItemMetadata(ctx, item, asset, rect, width, height) {
+  const x = rect.x / 100 * width;
+  const y = rect.y / 100 * height;
+  const boxWidth = rect.width / 100 * width;
+  const boxHeight = rect.height / 100 * height;
+  const number = String((item.slot ?? 0) + 1).padStart(2, '0');
+  ctx.fillStyle = 'rgba(0,0,0,.86)';
+  ctx.fillRect(x + 10, y + 10, 34, 24);
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(number, x + 27, y + 26);
+  ctx.textAlign = 'left';
+  if (!project.showLabels) return;
+  const title = item.title || asset.name || `Plano ${Number(item.slot ?? 0) + 1}`;
+  const description = item.description || '';
+  const captionWidth = Math.max(64, Math.min(boxWidth - 20, 520));
+  const captionHeight = description ? 47 : 27;
+  const captionY = y + boxHeight - captionHeight - 10;
+  ctx.fillStyle = 'rgba(0,0,0,.86)';
+  ctx.fillRect(x + 10, captionY, captionWidth, captionHeight);
+  ctx.fillStyle = '#fff';
+  ctx.font = '600 13px Arial';
+  ctx.fillText(title.slice(0, 48), x + 18, captionY + 17);
+  if (description) { ctx.font = '11px Arial'; ctx.fillText(description.slice(0, 68), x + 18, captionY + 34); }
+}
+
 async function renderPageCanvas(page) {
   const width = project.ratio === 'portrait' ? 900 : 1600; const height = Math.round(width / getPageAspect()); const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.fillStyle = project.background; ctx.fillRect(0, 0, width, height);
-  await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const rect = itemRect(item); image.onload = () => { drawImageInBox(ctx, image, rect.x / 100 * width, rect.y / 100 * height, rect.width / 100 * width, rect.height / 100 * height, item.fit, item.focusX, item.focusY); if (project.showLabels && item.title) { const x = rect.x / 100 * width, y = (rect.y + rect.height) / 100 * height - 35; ctx.fillStyle = 'rgba(23,35,39,.78)'; ctx.fillRect(x + 10, y, Math.min(rect.width / 100 * width - 20, 450), 25); ctx.fillStyle = '#fff'; ctx.font = '14px Arial'; ctx.fillText(item.title.slice(0, 42), x + 18, y + 17); } resolve(); }; image.onerror = resolve; image.src = asset.image; })));
+  await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const rect = itemRect(item); image.onload = () => { drawImageInBox(ctx, image, rect.x / 100 * width, rect.y / 100 * height, rect.width / 100 * width, rect.height / 100 * height, item.fit, item.focusX, item.focusY); drawItemMetadata(ctx, item, asset, rect, width, height); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
   return canvas;
 }
 
@@ -270,7 +301,7 @@ async function exportImage(type) { const canvas = await renderPageCanvas(current
 
 function printAllPages() {
   const layer = document.createElement('div'); layer.className = 'print-layer';
-  project.pages.forEach(page => { const sheet = document.createElement('div'); sheet.className = `canvas-page print-page ${pageFormatClass()}`; sheet.style.background = project.background; page.items.forEach(item => { const asset = findAsset(item.assetId); if (!asset) return; const rect = itemRect(item); const node = document.createElement('div'); node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`; node.style.cssText = `left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%`; node.innerHTML = `<img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" />${project.showLabels && item.title ? `<span class="item-label">${escapeHtml(item.title)}</span>` : ''}`; sheet.appendChild(node); }); layer.appendChild(sheet); });
+  project.pages.forEach(page => { const sheet = document.createElement('div'); sheet.className = `canvas-page print-page ${pageFormatClass()}`; sheet.style.background = project.background; page.items.forEach(item => { const asset = findAsset(item.assetId); if (!asset) return; const rect = itemRect(item); const node = document.createElement('div'); const label = item.title || asset.name || `Plano ${(item.slot ?? 0) + 1}`; const number = String((item.slot ?? 0) + 1).padStart(2, '0'); node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`; node.style.cssText = `left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%`; node.innerHTML = `<img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${project.showLabels ? `<span class="item-label"><strong>${escapeHtml(label)}</strong>${item.description ? `<small>${escapeHtml(item.description)}</small>` : ''}</span>` : ''}`; sheet.appendChild(node); }); layer.appendChild(sheet); });
   document.body.appendChild(layer); const cleanup = () => layer.remove(); window.addEventListener('afterprint', cleanup, { once: true }); window.print(); setTimeout(cleanup, 2500);
 }
 
@@ -318,7 +349,7 @@ $('#clearPageBtn').addEventListener('click', () => { if (!currentPage().items.le
 
 $$('.inspector-tab').forEach(tab => tab.addEventListener('click', () => { activeInspector = tab.dataset.inspector; renderInspector(); }));
 $$('.fit-btn').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; item.fit = button.dataset.fit; renderPage(); renderInspector(); saveProject(); }));
-$('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); });
+$('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); });
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
 
 $('#newProjectBtn').addEventListener('click', resetProject); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); });

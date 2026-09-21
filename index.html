@@ -29,7 +29,7 @@
 
         <section class="editor-area">
           <div class="project-header">
-            <div><label for="projectTitle">PROYECTO</label><input id="projectTitle" value="Mi nuevo video" autocomplete="off" /><div class="project-subtitle"><input id="projectAuthor" value="Tu nombre" autocomplete="off" /><span>·</span><input id="projectDate" type="date" /></div></div>
+            <div><label for="projectTitle">TÍTULO DEL PROYECTO</label><input id="projectTitle" value="Storyboard X" placeholder="Storyboard X" autocomplete="off" /><div class="project-subtitle"><input id="projectAuthor" value="Tu nombre" autocomplete="off" /><span>·</span><input id="projectDate" type="date" /></div></div>
             <div class="page-nav"><button id="prevPageBtn" class="round-button" type="button" aria-label="Página anterior">‹</button><span>PÁGINA <strong id="pageNumber">1</strong> / <strong id="pageTotal">1</strong></span><button id="nextPageBtn" class="round-button" type="button" aria-label="Página siguiente">›</button><button id="addPageBtn" class="button button-small button-secondary" type="button">＋ Página</button></div>
           </div>
 
@@ -57,7 +57,7 @@
             <div class="inspector-section"><label for="pageGap">ESPACIO ENTRE FOTOS <output id="pageGapValue">16 px</output></label><input id="pageGap" type="range" min="0" max="48" value="16" /></div>
             <div class="inspector-section"><label for="pagePadding">MARGEN DEL ARTBOARD <output id="pagePaddingValue">4%</output></label><input id="pagePadding" type="range" min="0" max="12" value="4" /></div>
             <div class="inspector-section"><label>ENCUADRE AUTOMÁTICO</label><div class="segmented-control"><button class="fit-default-btn" data-fit="cover" type="button">Recortar</button><button class="fit-default-btn is-active" data-fit="contain" type="button">Completa</button></div><p class="field-help">Completa respeta la proporción real y adapta el marco de la foto. El recorte usa todo el casillero.</p></div>
-            <div class="inspector-section"><label for="showLabels">DATOS DE LAS TOMAS</label><label class="switch-row"><input id="showLabels" type="checkbox" /><span class="switch"></span><span>Mostrar títulos sobre las fotos</span></label></div>
+            <div class="inspector-section"><label for="showLabels">DATOS DE LAS TOMAS</label><label class="switch-row"><input id="showLabels" type="checkbox" /><span class="switch"></span><span>Mostrar títulos y descripciones</span></label></div>
             <button class="button button-outline full-button" id="clearPageBtn" type="button">Limpiar página</button>
           </div>
           <div id="photoInspector" class="inspector-content" hidden>
@@ -67,7 +67,8 @@
               <div class="inspector-section"><label>ENCUADRE DE ESTA FOTO</label><div class="segmented-control"><button class="fit-btn" data-fit="cover" type="button">Recortar</button><button class="fit-btn is-active" data-fit="contain" type="button">Completa</button></div><p class="field-help">Completa mantiene toda la foto y ajusta el marco a su orientación original.</p></div>
               <div class="inspector-section"><label>CASILLERO AUTOMÁTICO</label><div class="slot-readout"><strong id="slotNumber">01</strong><p>La grilla ordena la hoja, pero el marco visible respeta la proporción real de esta foto.</p></div></div>
               <div class="inspector-section"><label for="photoFocusX">FOCO DE RECORTE <output id="focusValue">50% / 50%</output></label><input id="photoFocusX" type="range" min="0" max="100" value="50" /><input id="photoFocusY" type="range" min="0" max="100" value="50" /></div>
-              <div class="inspector-section"><label for="photoTitle">TÍTULO DE LA TOMA</label><input id="photoTitle" class="text-field" placeholder="Ej. Plano general de la escena" /></div>
+              <div class="inspector-section"><label for="photoTitle">TÍTULO DEL PLANO</label><input id="photoTitle" class="text-field" placeholder="Ej. Plano general de la escena" /></div>
+              <div class="inspector-section"><label for="photoDescription">DESCRIPCIÓN DEL PLANO</label><textarea id="photoDescription" class="text-area" rows="4" placeholder="Ej. El protagonista entra al estudio y mira hacia cámara."></textarea></div>
               <div class="photo-actions"><button class="button button-secondary full-button" id="duplicatePhotoBtn" type="button">⧉ Duplicar</button><button class="button button-danger full-button" id="deletePhotoBtn" type="button">⌫ Quitar del artboard</button></div>
             </div>
           </div>
