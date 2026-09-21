@@ -1,0 +1,148 @@
+// Run with Playwright available in NODE_PATH. Uses an isolated browser profile.
+const assert = require('node:assert/strict');
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { chromium } = require('playwright');
+const root = path.join(__dirname, '..');
+const fixture = () => {
+  const assets = Array.from({ length: 15 }, (_, index) => {
+    const [width, height] = index < 6 ? [900, 900] : [[900, 1600], [1600, 900], [900, 900]][index % 3];
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="${['#578e89', '#ce8b51', '#56698c'][index % 3]}"/><circle cx="${width / 2}" cy="${height / 2}" r="${width / 3}" fill="#ffffff" opacity=".15"/><text x="50%" y="50%" text-anchor="middle" fill="white" font-size="90" font-family="sans-serif">${index + 1}</text></svg>`;
+    return { id: `asset-${index}`, name: `Toma ${index + 1}`, width, height, image: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}` };
+  });
+  return { version: 2, title: 'Prueba · secuencia automática', ratio: 'landscape', padding: 0, gap: 0, showDescriptions: true, assets,
+    pages: [{ id: 'page-1', photosPerPage: 4, layoutDirection: 'columns', items: assets.slice(0, 6).map((asset, slot) => ({ id: `item-${slot}`, assetId: asset.id, slot, fit: 'contain', title: `Escena ${slot + 1}`, description: `Descripción conservada ${slot + 1}`, shotType: 'PP', focusX: 50, focusY: 50 })) }] };
+};
+
+(async () => {
+  const server = http.createServer((req, res) => {
+    const file = path.join(root, new URL(req.url, 'http://localhost').pathname === '/' ? 'index.html' : new URL(req.url, 'http://localhost').pathname);
+    res.setHeader('Content-Type', ({ '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png' })[path.extname(file)] || 'text/plain');
+    fs.readFile(file, (error, bytes) => { if (error) { res.statusCode = 404; res.end(); } else res.end(bytes); });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true, channel: 'msedge' });
+    const page = await browser.newPage({ viewport: { width: 1920, height: 1200 } });
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`http://127.0.0.1:${server.address().port}`);
+    const original = fixture();
+    await page.locator('#projectInput').setInputFiles({ name: 'storyboard.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(original)) });
+    await page.waitForFunction(() => document.querySelectorAll('#canvasPage .design-item').length === 6);
+    assert.equal(await page.locator('#photosPerPage').count(), 0);
+    assert.equal(await page.locator('#layoutDirection').count(), 0);
+    assert.equal(await page.locator('#pageTotal').textContent(), '1');
+    const screenshot = path.join(os.tmpdir(), 'storyapp-adaptive-six.png');
+    await page.screenshot({ path: screenshot, fullPage: true });
+    console.log('Screenshot:', screenshot);
+    // A saved project with holes must keep visual order and user-chosen crop/focus.
+    const migration = await page.evaluate(() => {
+      const old = { ...project, layoutEngine: undefined, photosPerPage: 4, layoutDirection: 'grid', pages: [
+        { id: 'old-1', items: [{ id: 'b', slot: 7, fit: 'cover', focusX: 20, focusY: 80, title: 'Encuadre propio', shotType: 'PD' }, { id: 'a', slot: 2, fit: 'contain' }] },
+        { id: 'old-2', items: [{ id: 'c', slot: 0, fit: 'contain' }] }
+      ] };
+      const migrated = normalizeProject(old);
+      return { pages: migrated.pages.length, items: migrated.pages[0].items, roundtrip: JSON.stringify(normalizeProject(migrated)) === JSON.stringify(migrated) };
+    });
+    assert.equal(migration.pages, 2);
+    assert.deepEqual(migration.items.map(item => item.id), ['a', 'b']);
+    assert.deepEqual(migration.items.map(item => item.slot), [0, 1]);
+    assert.ok(migration.items[1].cropAspect > 0);
+    assert.equal(migration.items[1].focusX, 20);
+    assert.ok(migration.roundtrip);
+
+    await page.locator('#canvasPage .design-item').first().click();
+    await page.locator('#photoTitle').fill('Título que debe conservarse');
+    await page.locator('#photoShotType').selectOption('PD');
+    await page.locator('#autoArrangeBtn').click();
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 15);
+    assert.equal(await page.locator('#pageTotal').textContent(), '1');
+    await page.locator('#autoArrangeBtn').click();
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 15);
+    await page.locator('#duplicatePhotoBtn').click();
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
+    await page.locator('#deletePhotoBtn').click();
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 15);
+    await page.locator('[data-asset-id="asset-14"]').dragTo(page.locator('#canvasPage'), { targetPosition: { x: 500, y: 300 } });
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
+    const first = await page.locator('#canvasPage .design-item').first().boundingBox();
+    const last = await page.locator('#canvasPage .design-item').last().boundingBox();
+    await page.mouse.move(first.x + first.width / 2, first.y + first.height / 3);
+    await page.mouse.down();
+    await page.mouse.move(last.x + last.width / 2, last.y + last.height / 3, { steps: 10 });
+    await page.mouse.up();
+    assert.equal(await page.locator('#canvasPage .design-item').last().getAttribute('data-item-id'), 'item-0');
+    assert.match(await page.locator('#canvasPage .design-item').last().textContent(), /PD · Título que debe conservarse/);
+
+    await page.locator('[data-inspector="page"]').click();
+    await page.locator('#infoPlacement').selectOption('overlay');
+    assert.equal(await page.locator('#canvasPage .description-overlay').count(), 16);
+    assert.equal(await page.locator('#canvasPage .description-overlay.is-empty').first().evaluate(node => getComputedStyle(node).color), 'rgb(255, 255, 255)');
+    await page.locator('#infoPlacement').selectOption('below');
+    assert.equal(await page.locator('#canvasPage .description-overlay').count(), 0);
+    // No image/caption may extend beyond its assigned card or beyond the safe area.
+    const check = await page.evaluate(() => {
+      const board = document.querySelector('#canvasPage').getBoundingClientRect();
+      return [...document.querySelectorAll('#canvasPage .design-item')].every(node => {
+        const card = node.getBoundingClientRect();
+        const photo = node.querySelector('.design-photo').getBoundingClientRect();
+        const caption = node.querySelector('.description-box').getBoundingClientRect();
+        return card.left >= board.left + board.width * .06 - 1 && card.right <= board.right - board.width * .06 + 1 && card.top >= board.top + board.height * .06 - 1 && card.bottom <= board.bottom - board.height * .06 + 1 && photo.bottom <= card.bottom + 1 && caption.bottom <= card.bottom + 1;
+      });
+    });
+    assert.ok(check, 'DOM photos and captions respect safe layout');
+    for (const type of ['png', 'jpg', 'json']) {
+      await page.locator('#exportBtn').click();
+      const downloadPromise = page.waitForEvent('download');
+      await page.locator(`[data-export="${type}"]`).click();
+      const download = await downloadPromise;
+      assert.ok((await fs.promises.stat(await download.path())).size > 100);
+      if (type === 'png') await download.saveAs(path.join(os.tmpdir(), 'storyapp-adaptive-export.png'));
+      if (type === 'json') {
+        const saved = JSON.parse(await fs.promises.readFile(await download.path(), 'utf8'));
+        assert.equal(saved.pages.length, 1);
+        assert.equal(saved.pages[0].items.length, 16);
+        assert.equal(saved.pages[0].items.at(-1).title, 'Título que debe conservarse');
+      }
+    }
+    await page.evaluate(() => { window.print = () => {}; });
+    await page.locator('#exportBtn').click();
+    await page.locator('[data-export="print"]').click();
+    assert.equal(await page.locator('.print-page .design-item').count(), 16);
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+    await page.waitForFunction(() => document.querySelector('#saveState').textContent.includes('Guardado local'));
+    await page.reload();
+    await page.locator('[data-open-project]').first().click();
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
+    assert.match(await page.locator('#canvasPage .design-item').last().textContent(), /Título que debe conservarse/);
+    await page.locator('#addPageBtn').click();
+    assert.equal(await page.locator('#pageTotal').textContent(), '2');
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 0);
+    // Check real-browser layout for mixed orientations on vertical and square pages too.
+    for (const ratio of ['portrait', 'square']) {
+      await page.evaluate(ratio => {
+        project.ratio = ratio;
+        currentPage().items = createAutoItems(project.assets.slice(6));
+        render();
+      }, ratio);
+      const inside = await page.locator('#canvasPage').evaluate(board => {
+        const rect = board.getBoundingClientRect();
+        return [...board.querySelectorAll('.design-item')].every(item => {
+          const card = item.getBoundingClientRect();
+          return card.left > rect.left && card.right < rect.right && card.top > rect.top && card.bottom < rect.bottom;
+        });
+      });
+      assert.ok(inside, ratio);
+      await page.locator('#canvasPage').screenshot({ path: path.join(os.tmpdir(), `storyapp-adaptive-${ratio}.png`) });
+    }
+    assert.deepEqual(errors, []);
+    console.log('Browser checks passed: migration, unlimited add, duplicate, delete, drag/reorder, overlay, export, persistence and manual pages.');
+  } finally {
+    if (browser) await browser.close();
+    await new Promise(resolve => server.close(resolve));
+  }
+})().catch(error => { console.error(error); process.exitCode = 1; });

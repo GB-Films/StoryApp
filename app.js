@@ -3,7 +3,6 @@ const LEGACY_KEY = 'storyboard-studio-project-v1';
 const PROJECTS_KEY = 'storyboard-studio-projects-v1';
 const CURRENT_PROJECT_KEY = 'storyboard-studio-current-project-v1';
 const MIN_CANVAS_PADDING = 6;
-const PHOTO_SAFE_MARGIN = 1.6;
 const PHOTO_INFO_OVERLAY_HEIGHT = 18;
 
 const SHOT_TYPES = [
@@ -46,8 +45,23 @@ let project = null;
 let projects = loadProjects();
 let currentProjectId = null;
 
-function blankPage(title = 'Página 1', settings = {}) { return { id: createId('page'), title, photosPerPage: Number(settings.photosPerPage) || 4, layoutDirection: settings.layoutDirection || 'grid', items: [] }; }
-function defaultProject() { return { version: 2, title: 'Storyboard X', producer: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', showDescriptions: true, infoPlacement: 'below', photosPerPage: 4, layoutDirection: 'grid', assets: [], pages: [blankPage()] }; }
+function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
+function defaultProject() { return { version: 2, layoutEngine: 'adaptive', title: 'Storyboard X', producer: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', showDescriptions: true, infoPlacement: 'below', assets: [], pages: [blankPage()] }; }
+
+function legacyCropAspect(page, data) {
+  const count = Number(page.photosPerPage || data.photosPerPage) || 4;
+  const effectiveCount = Math.max(count, page.items?.length || 0);
+  const direction = page.layoutDirection || data.layoutDirection || 'grid';
+  const cols = direction === 'columns' ? count : direction === 'rows' ? Math.ceil(effectiveCount / count) : effectiveCount <= 1 ? 1 : effectiveCount <= 4 ? 2 : 3;
+  const rows = direction === 'rows' ? count : Math.ceil(effectiveCount / cols);
+  const pad = Math.max(MIN_CANVAS_PADDING, Number(data.padding) || MIN_CANVAS_PADDING);
+  const gap = (Number(data.gap) || 0) / 10;
+  const w = (100 - pad * 2 - gap * (cols - 1)) / cols;
+  const h = (100 - pad * 2 - gap * (rows - 1)) / rows;
+  const safe = Math.min(1.6, w * .12, h * .12);
+  const imageHeight = h - safe * 2 - (data.showDescriptions !== false && data.infoPlacement !== 'overlay' ? Math.min((h - safe * 2) * .24, 11) : 0);
+  return (data.ratio === 'portrait' ? 9 / 16 : data.ratio === 'square' ? 1 : 16 / 9) * (w - safe * 2) / imageHeight;
+}
 
 function normalizeProject(data) {
   const base = defaultProject();
@@ -67,11 +81,20 @@ function normalizeProject(data) {
   normalized.padding = Math.max(MIN_CANVAS_PADDING, Number(normalized.padding) || MIN_CANVAS_PADDING);
   if (migrateOldCropDefault) normalized.defaultFit = 'contain';
   normalized.assets = Array.isArray(data.assets) ? data.assets : [];
-  const legacyPageSettings = { photosPerPage: Number(data.photosPerPage) || 4, layoutDirection: data.layoutDirection || 'grid' };
   normalized.pages = Array.isArray(data.pages) && data.pages.length ? data.pages.map((page, index) => {
-    const settings = { photosPerPage: Number(page.photosPerPage) || legacyPageSettings.photosPerPage, layoutDirection: page.layoutDirection || legacyPageSettings.layoutDirection };
-    return { ...blankPage(`Página ${index + 1}`, settings), ...page, ...settings, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => ({ ...item, shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', slot: Number.isFinite(item.slot) ? item.slot : itemIndex, fit: migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit) })) : [] };
-  }) : [blankPage('Página 1', legacyPageSettings)];
+    const migratedPage = { ...blankPage(`Página ${index + 1}`), ...page, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => ({ ...item, shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', slot: Number.isFinite(item.slot) ? item.slot : itemIndex, fit: migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit) })) : [] };
+    if (data.layoutEngine !== 'adaptive') migratedPage.items.forEach(item => {
+      if (item.fit === 'cover' && !item.cropAspect) item.cropAspect = legacyCropAspect(page, data);
+    });
+    migratedPage.items.sort((a, b) => a.slot - b.slot);
+    renumberItems(migratedPage);
+    delete migratedPage.photosPerPage;
+    delete migratedPage.layoutDirection;
+    return migratedPage;
+  }) : [blankPage()];
+  delete normalized.photosPerPage;
+  delete normalized.layoutDirection;
+  normalized.layoutEngine = 'adaptive';
   return normalized;
 }
 
@@ -151,19 +174,17 @@ function showToast(message) {
 
 function pageFormatClass() { return project.ratio === 'portrait' ? 'format-portrait' : project.ratio === 'square' ? 'format-square' : ''; }
 function getPageAspect() { return project.ratio === 'portrait' ? 9 / 16 : project.ratio === 'square' ? 1 : 16 / 9; }
-function pageSettings(page = currentPage()) {
-  return { photosPerPage: Number(page?.photosPerPage ?? project?.photosPerPage) || 4, layoutDirection: page?.layoutDirection || project?.layoutDirection || 'grid' };
-}
-function layoutDimensions(count = 4, direction = 'grid', itemCount = count) {
-  const effectiveCount = Math.max(count, itemCount || 0);
-  if (direction === 'columns') return { cols: count, rows: Math.ceil(effectiveCount / count) };
-  if (direction === 'rows') return { cols: Math.ceil(effectiveCount / count), rows: count };
-  const cols = effectiveCount <= 1 ? 1 : effectiveCount <= 4 ? 2 : 3;
-  return { cols, rows: Math.ceil(effectiveCount / cols) };
-}
-function slotRect(slotIndex, page = currentPage()) {
-  const settings = pageSettings(page); const { cols, rows } = layoutDimensions(settings.photosPerPage, settings.layoutDirection, page?.items?.length); const pad = project.padding; const gap = project.gap / 10; const usableW = 100 - pad * 2; const usableH = 100 - pad * 2; const cellW = (usableW - gap * (cols - 1)) / cols; const cellH = (usableH - gap * (rows - 1)) / rows; const col = slotIndex % cols; const row = Math.floor(slotIndex / cols);
-  return { x: pad + col * (cellW + gap), y: pad + row * (cellH + gap), width: cellW, height: cellH };
+function renumberItems(page) { page.items.forEach((item, index) => { item.slot = index; }); }
+const layoutCache = new WeakMap();
+function pageLayout(page = currentPage()) {
+  const aspects = page.items.map(item => item.fit === 'cover' ? (item.cropAspect || getPageAspect()) : assetAspect(findAsset(item.assetId)));
+  const options = { aspect: getPageAspect(), padding: project.padding, gap: project.gap, captions: project.showDescriptions && project.infoPlacement !== 'overlay' };
+  const key = JSON.stringify([aspects, options]);
+  const cached = layoutCache.get(page);
+  if (cached?.key === key) return cached.rects;
+  const rects = StoryboardLayout.arrange(aspects, options);
+  layoutCache.set(page, { key, rects });
+  return rects;
 }
 function assetAspect(asset) {
   const width = Number(asset?.width);
@@ -253,33 +274,27 @@ function openProject(id) {
   if (!project.formatLocked) openFormatModal();
 }
 function itemLayout(item, page = currentPage()) {
-  const slot = slotRect(item.slot ?? 0, page);
-  const safeMargin = Math.min(PHOTO_SAFE_MARGIN, slot.width * .12, slot.height * .12);
-  const safeSlot = { x: slot.x + safeMargin, y: slot.y + safeMargin, width: Math.max(1, slot.width - safeMargin * 2), height: Math.max(1, slot.height - safeMargin * 2) };
-  const descriptionHeight = project.showDescriptions && project.infoPlacement !== 'overlay' ? Math.min(safeSlot.height * .24, 11) : 0;
-  const imageSlot = { x: safeSlot.x, y: safeSlot.y, width: safeSlot.width, height: Math.max(1, safeSlot.height - descriptionHeight) };
-  if (item.fit === 'cover') {
-    const card = { x: safeSlot.x, y: safeSlot.y, width: safeSlot.width, height: imageSlot.height + descriptionHeight };
-    return { card, image: imageSlot, caption: descriptionHeight ? { x: safeSlot.x, y: safeSlot.y + imageSlot.height, width: safeSlot.width, height: descriptionHeight } : null };
-  }
-  const aspect = assetAspect(findAsset(item.assetId));
-  const slotAspect = getPageAspect() * imageSlot.width / imageSlot.height;
-  const image = aspect >= slotAspect
-    ? { x: 0, y: 0, width: imageSlot.width, height: getPageAspect() * imageSlot.width / aspect }
-    : { x: 0, y: 0, width: imageSlot.height * aspect / getPageAspect(), height: imageSlot.height };
-  const card = { width: image.width, height: image.height + descriptionHeight };
-  card.x = safeSlot.x + (safeSlot.width - card.width) / 2;
-  card.y = safeSlot.y + (safeSlot.height - card.height) / 2;
-  image.x = card.x;
-  image.y = card.y;
-  return { card, image, caption: descriptionHeight ? { x: card.x, y: card.y + image.height, width: card.width, height: descriptionHeight } : null };
+  return pageLayout(page)[page.items.indexOf(item)];
 }
-function itemRect(item, page = currentPage()) { return itemLayout(item, page).image; }
-function slotGuideRect(slotIndex) {
-  const sourceAssetId = draggedAssetId || findItem(slotDrag?.id)?.assetId || findItem(selectedItemId)?.assetId;
-  return sourceAssetId ? itemRect({ slot: slotIndex, assetId: sourceAssetId, fit: 'contain' }, currentPage()) : slotRect(slotIndex, currentPage());
+function slotAtPoint(clientX, clientY) {
+  const rect = $('#canvasPage').getBoundingClientRect();
+  if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) return null;
+  const x = (clientX - rect.left) / rect.width * 100;
+  const y = (clientY - rect.top) / rect.height * 100;
+  const layouts = pageLayout();
+  if (!layouts.length) return 0;
+  let closest = 0;
+  let distance = Infinity;
+  layouts.forEach(({ card }, index) => {
+    const dx = Math.max(card.x - x, 0, x - card.x - card.width) * getPageAspect();
+    const dy = Math.max(card.y - y, 0, y - card.y - card.height);
+    const candidate = dx * dx + dy * dy;
+    if (candidate < distance) { closest = index; distance = candidate; }
+  });
+  if (slotDrag && !slotDrag.duplicate) return closest;
+  const target = layouts[closest].card;
+  return closest + (x > target.x + target.width / 2 || y > target.y + target.height ? 1 : 0);
 }
-function slotAtPoint(clientX, clientY) { const rect = $('#canvasPage').getBoundingClientRect(); const x = (clientX - rect.left) / rect.width * 100; const y = (clientY - rect.top) / rect.height * 100; const settings = pageSettings(currentPage()); for (let index = 0; index < settings.photosPerPage; index += 1) { const slot = slotRect(index, currentPage()); if (x >= slot.x && x <= slot.x + slot.width && y >= slot.y && y <= slot.y + slot.height) return index; } return null; }
 
 function itemMarkup(item, page = currentPage()) {
   const asset = findAsset(item.assetId); if (!asset) return '';
@@ -315,8 +330,7 @@ function renderPage() {
   const page = currentPage();
   $('#canvasPage').className = `canvas-page ${pageFormatClass()} ${slotMode ? 'is-slot-mode' : ''}`;
   $('#canvasPage').style.background = page ? project.background : '#ffffff';
-  const settings = pageSettings(page);
-  const guides = slotMode ? Array.from({ length: settings.photosPerPage }, (_, index) => { const rect = slotGuideRect(index); return `<div class="slot-guide ${hoverSlotIndex === index ? 'is-target' : ''}" data-slot-index="${index}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%"><span>${String(index + 1).padStart(2, '0')}</span></div>`; }).join('') : '';
+  const guides = slotMode ? pageLayout(page).map(({ card: rect }, index) => `<div class="slot-guide" data-slot-index="${index}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%"><span>${String(index + 1).padStart(2, '0')}</span></div>`).join('') : '';
   const content = page?.items.length ? page.items.map(item => itemMarkup(item, page)).join('') : '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>';
   const titleOverlay = project.showProjectTitle && project.title.trim() ? `<div class="project-title-overlay" id="canvasProjectTitle" contenteditable="true" spellcheck="false">${escapeHtml(project.title)}</div>` : '';
   $('#canvasPage').innerHTML = guides + content + titleOverlay;
@@ -338,9 +352,11 @@ function renderPage() {
   $('#pageTotal').textContent = project.pages.length;
   $('#prevPageBtn').disabled = currentPageIndex === 0;
   $('#nextPageBtn').disabled = currentPageIndex >= project.pages.length - 1;
-  $('#selectionStatus').textContent = selectedItemId ? 'Foto seleccionada · arrastrá a otro casillero para reordenar' : 'Seleccioná una foto para editarla';
+  $('#pagePhotoCount').textContent = `${page.items.length} foto${page.items.length === 1 ? '' : 's'} en esta página`;
+  $('#selectionStatus').textContent = selectedItemId ? 'Foto seleccionada · arrastrá para cambiar su lugar en la secuencia' : 'Las fotos se acomodan automáticamente al agregarlas o quitarlas';
   $('#selectionStatus').classList.toggle('photo-selected', !!selectedItemId);
   renderPageCarousel();
+  updateSlotGuides();
 }
 
 function pageThumbnailMarkup(page) {
@@ -359,7 +375,7 @@ function pageThumbnailMarkup(page) {
 }
 
 function addNewPage() {
-  project.pages.push(blankPage(`Página ${project.pages.length + 1}`, pageSettings(currentPage())));
+  project.pages.push(blankPage(`Página ${project.pages.length + 1}`));
   currentPageIndex = project.pages.length - 1;
   selectedItemId = null;
   activeInspector = 'page';
@@ -378,12 +394,9 @@ function renderPageCarousel() {
 }
 
 function renderControls() {
-  const settings = pageSettings(currentPage());
   $('#projectTitle').value = project.title;
   $('#projectProducer').value = project.producer || '';
   $('#breadcrumbTitle').textContent = project.title || 'Sin título';
-  $('#photosPerPage').value = settings.photosPerPage;
-  $('#layoutDirection').value = settings.layoutDirection;
   $('#backgroundColor').value = project.background;
   $('#backgroundValue').textContent = project.background.toUpperCase();
   $('#pageGap').value = project.gap;
@@ -433,55 +446,56 @@ function bindDesignItem(element) {
 }
 
 function startSlotDrag(event, id) {
-  const item = findItem(id); if (!item) return;
-  const page = currentPage();
-  let dragId = id;
-  let duplicateDrag = false;
-  if (event.altKey) {
-    const copy = { ...item, id: createId('item') };
-    page.items.push(copy);
-    dragId = copy.id;
-    duplicateDrag = true;
-    selectedItemId = dragId;
-    activeInspector = 'photo';
-  } else selectItem(id);
-  event.preventDefault(); slotMode = true; hoverSlotIndex = item.slot ?? 0; renderPage();
-  slotDrag = { id: dragId, target: event.currentTarget, duplicate: duplicateDrag, originalId: id };
+  const item = findItem(id); if (!item || event.button !== 0) return;
+  event.preventDefault();
+  selectedItemId = id; activeInspector = 'photo';
+  slotDrag = { id, duplicate: event.altKey };
+  slotMode = true; hoverSlotIndex = item.slot; renderPage(); renderInspector();
   const onMove = moveEvent => { hoverSlotIndex = slotAtPoint(moveEvent.clientX, moveEvent.clientY); updateSlotGuides(); };
-  const onUp = upEvent => {
+  const finish = () => {
     document.removeEventListener('pointermove', onMove);
-    slotDrag = null;
-    const targetSlot = slotAtPoint(upEvent.clientX, upEvent.clientY);
-    const dragged = page.items.find(entry => entry.id === dragId);
-    let duplicated = false;
-    if (duplicateDrag) {
-      const occupant = targetSlot === null ? null : page.items.find(entry => entry.slot === targetSlot && entry.id !== dragId);
-      if (!dragged || targetSlot === null || occupant) {
-        page.items = page.items.filter(entry => entry.id !== dragId);
-        selectedItemId = id;
-      } else {
-        dragged.slot = targetSlot;
-        selectedItemId = dragId;
-        duplicated = true;
-      }
-    } else if (targetSlot !== null) moveItemToSlot(dragId, targetSlot);
-    slotMode = false; hoverSlotIndex = null; render(); saveProject();
-    if (duplicated) showToast('Foto duplicada en el casillero elegido');
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', cancel);
+    slotDrag = null; slotMode = false; hoverSlotIndex = null;
+    render();
   };
-  document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp, { once: true });
+  const onUp = upEvent => {
+    const targetSlot = slotAtPoint(upEvent.clientX, upEvent.clientY);
+    if (targetSlot !== null) {
+      if (slotDrag.duplicate) {
+        const copy = { ...item, id: createId('item') };
+        currentPage().items.splice(targetSlot, 0, copy);
+        renumberItems(currentPage());
+        selectedItemId = copy.id;
+      } else {
+        moveItemToSlot(id, targetSlot);
+      }
+    }
+    finish(); saveProject();
+  };
+  const cancel = () => finish();
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp, { once: true });
+  document.addEventListener('pointercancel', cancel, { once: true });
 }
 
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
-function updateSlotGuides() { $$('.slot-guide').forEach(guide => guide.classList.toggle('is-target', Number(guide.dataset.slotIndex) === hoverSlotIndex)); }
-function moveItemToSlot(itemId, targetSlot) { const page = currentPage(); const item = page.items.find(entry => entry.id === itemId); if (!item) return; const occupant = page.items.find(entry => entry.slot === targetSlot && entry.id !== itemId); if (occupant) occupant.slot = item.slot; item.slot = targetSlot; selectedItemId = itemId; }
-function firstEmptySlot(page) { const used = new Set(page.items.map(item => item.slot ?? 0)); const count = pageSettings(page).photosPerPage; return Array.from({ length: count }, (_, index) => index).find(index => !used.has(index)); }
+function updateSlotGuides() { const target = hoverSlotIndex === null ? null : Math.min(hoverSlotIndex, currentPage().items.length - 1); $$('.slot-guide').forEach(guide => guide.classList.toggle('is-target', Number(guide.dataset.slotIndex) === target)); }
+function moveItemToSlot(itemId, targetSlot) {
+  const page = currentPage();
+  const source = page.items.findIndex(item => item.id === itemId);
+  if (source < 0) return;
+  const [item] = page.items.splice(source, 1);
+  page.items.splice(clamp(targetSlot, 0, page.items.length), 0, item);
+  renumberItems(page);
+  selectedItemId = itemId;
+}
 function addAssetToPage(assetId, targetSlot = null) {
-  const asset = findAsset(assetId); let page = currentPage(); if (!asset || !page) return;
-  let slot = targetSlot === null ? firstEmptySlot(page) : targetSlot;
-  if (slot === undefined || slot === null) { project.pages.push(blankPage(`Página ${project.pages.length + 1}`, pageSettings(page))); currentPageIndex = project.pages.length - 1; page = currentPage(); slot = 0; }
-  const occupant = page.items.find(item => item.slot === slot); if (occupant) slot = firstEmptySlot(page); if (slot === undefined) { project.pages.push(blankPage(`Página ${project.pages.length + 1}`, pageSettings(page))); currentPageIndex = project.pages.length - 1; page = currentPage(); slot = 0; }
-  const item = { id: createId('item'), assetId, slot, fit: project.defaultFit, focusX: 50, focusY: 50, shotType: 'PG', title: '', description: '' };
-  page.items.push(item); selectedItemId = item.id; activeInspector = 'photo'; render(); saveProject(); showToast('Foto colocada en el siguiente casillero');
+  const asset = findAsset(assetId); const page = currentPage(); if (!asset || !page) return;
+  const [item] = createAutoItems([asset]);
+  page.items.splice(targetSlot === null ? page.items.length : clamp(targetSlot, 0, page.items.length), 0, item);
+  renumberItems(page);
+  selectedItemId = item.id; activeInspector = 'photo'; render(); saveProject(); showToast('Foto agregada · distribución ajustada');
 }
 
 function createAutoItems(assets) {
@@ -489,10 +503,12 @@ function createAutoItems(assets) {
 }
 
 function autoArrange() {
-  const settings = pageSettings(currentPage()); const perPage = settings.photosPerPage; const chunks = [];
-  for (let index = 0; index < project.assets.length; index += perPage) chunks.push(project.assets.slice(index, index + perPage));
-  project.pages = chunks.length ? chunks.map((assets, index) => ({ ...blankPage(`Página ${index + 1}`, settings), items: createAutoItems(assets) })) : [blankPage('Página 1', settings)];
-  currentPageIndex = 0; selectedItemId = null; activeInspector = 'page'; render(); saveProject(); showToast(project.pages.length > 1 ? `${project.pages.length} páginas creadas automáticamente` : 'Fotos ordenadas en el artboard');
+  const placed = placedAssetIds();
+  const remaining = project.assets.filter(asset => !placed.has(asset.id));
+  if (!remaining.length) { showToast('Todas las fotos de la biblioteca ya están en el storyboard'); return; }
+  currentPage().items.push(...createAutoItems(remaining));
+  renumberItems(currentPage());
+  render(); saveProject(); showToast(`${remaining.length} fotos agregadas a esta página`);
 }
 
 async function compressImage(file) {
@@ -508,12 +524,19 @@ async function handleFiles(fileList, firstSlot = null) {
   try {
     const incoming = await Promise.all(files.map(async file => { const compressed = await compressImage(file); return { id: createId('asset'), name: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' '), ...compressed }; }));
     project.assets.push(...incoming);
-    if (firstSlot !== null) incoming.forEach((asset, index) => addAssetToPage(asset.id, firstSlot + index)); else { render(); saveProject(); showToast(`${incoming.length} foto${incoming.length === 1 ? '' : 's'} cargada${incoming.length === 1 ? '' : 's'} en la biblioteca`); }
+    if (firstSlot !== null) {
+      const page = currentPage();
+      const items = createAutoItems(incoming);
+      page.items.splice(clamp(firstSlot, 0, page.items.length), 0, ...items);
+      renumberItems(page);
+      selectedItemId = items[items.length - 1].id; activeInspector = 'photo';
+    }
+    render(); saveProject(); showToast(`${incoming.length} foto${incoming.length === 1 ? '' : 's'} agregada${incoming.length === 1 ? '' : 's'} ${firstSlot !== null ? 'al artboard' : 'a la biblioteca'}`);
   } catch { showToast('No se pudo leer alguna de las fotos'); }
 }
 
-function deleteSelected() { if (!selectedItemId) return; const page = currentPage(); page.items = page.items.filter(item => item.id !== selectedItemId); selectedItemId = null; activeInspector = 'page'; render(); saveProject(); showToast('Foto quitada del artboard'); }
-function duplicateSelected() { const item = findItem(selectedItemId); if (!item) return; const slot = firstEmptySlot(currentPage()); if (slot === undefined) { showToast('No hay casilleros libres en esta hoja'); return; } const copy = { ...item, id: createId('item'), slot }; currentPage().items.push(copy); selectedItemId = copy.id; render(); saveProject(); showToast('Foto duplicada en el siguiente casillero'); }
+function deleteSelected() { if (!selectedItemId) return; const page = currentPage(); page.items = page.items.filter(item => item.id !== selectedItemId); renumberItems(page); selectedItemId = null; activeInspector = 'page'; render(); saveProject(); showToast('Foto quitada · distribución ajustada'); }
+function duplicateSelected() { const item = findItem(selectedItemId); if (!item) return; const copy = { ...item, id: createId('item') }; currentPage().items.splice(item.slot + 1, 0, copy); renumberItems(currentPage()); selectedItemId = copy.id; render(); saveProject(); showToast('Foto duplicada · distribución ajustada'); }
 function deleteCurrentPage() {
   if (project.pages.length <= 1) { showToast('El proyecto necesita al menos una página'); return; }
   if (!window.confirm(`¿Eliminar ${currentPage().title || `Página ${currentPageIndex + 1}`}? Esta acción no se puede deshacer.`)) return;
@@ -539,12 +562,17 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   const x = image.x / 100 * width;
   const y = image.y / 100 * height;
   const number = String((item.slot ?? 0) + 1).padStart(2, '0');
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, image.width / 100 * width, image.height / 100 * height);
+  ctx.clip();
   ctx.fillStyle = 'rgba(0,0,0,.86)';
   ctx.fillRect(x + 10, y + 10, 34, 24);
   ctx.fillStyle = '#fff';
   ctx.font = '12px monospace';
   ctx.textAlign = 'center';
   ctx.fillText(number, x + 27, y + 26);
+  ctx.restore();
   ctx.textAlign = 'left';
   const title = itemDisplayTitle(item, asset);
   const description = item.description || '';
@@ -554,12 +582,17 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   const captionY = caption.y / 100 * height;
   const captionWidth = caption.width / 100 * width;
   const captionHeight = caption.height / 100 * height;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(captionX, captionY, captionWidth, captionHeight);
+  ctx.clip();
   ctx.fillStyle = 'rgba(0,0,0,.86)';
   ctx.fillRect(captionX, captionY, captionWidth, captionHeight);
   ctx.fillStyle = '#fff';
   ctx.font = '600 13px Arial';
   ctx.fillText(title.slice(0, 48), captionX + 8, captionY + Math.min(17, captionHeight - 7));
   if (description && captionHeight > 30) { ctx.font = '11px Arial'; ctx.fillText(description.slice(0, 68), captionX + 8, captionY + Math.min(34, captionHeight - 7)); }
+  ctx.restore();
 }
 function drawProjectTitle(ctx, width, height) {
   if (!project.showProjectTitle || !project.title.trim()) return;
@@ -617,13 +650,6 @@ function resetProject() {
 }
 function closeNewProjectConfirm() { $('#newProjectConfirmModal').hidden = true; }
 
-function prepareMigratedProject() {
-  if (localStorage.getItem(STORAGE_KEY) || !project.assets.length || project.pages.some(page => page.items.length)) return;
-  const settings = pageSettings(currentPage()); const perPage = settings.photosPerPage; const chunks = [];
-  for (let index = 0; index < project.assets.length; index += perPage) chunks.push(project.assets.slice(index, index + perPage));
-  project.pages = chunks.map((assets, index) => ({ ...blankPage(`Página ${index + 1}`, settings), items: createAutoItems(assets) }));
-}
-
 $('#uploadZone').addEventListener('click', () => $('#fileInput').click());
 $('#fileInput').addEventListener('change', event => { handleFiles(event.target.files); event.target.value = ''; });
 $('#uploadZone').addEventListener('dragover', event => { event.preventDefault(); $('#uploadZone').classList.add('is-over'); });
@@ -639,12 +665,9 @@ $('#projectInput').addEventListener('change', event => {
 $('#canvasPage').addEventListener('click', event => { if (event.target === $('#canvasPage')) { selectedItemId = null; activeInspector = 'page'; render(); } });
 $('#canvasPage').addEventListener('dragover', event => { event.preventDefault(); $('#canvasPage').classList.add('is-drop-target'); hoverSlotIndex = slotAtPoint(event.clientX, event.clientY); updateSlotGuides(); });
 $('#canvasPage').addEventListener('dragleave', event => { if (!$('#canvasPage').contains(event.relatedTarget)) $('#canvasPage').classList.remove('is-drop-target'); });
-$('#canvasPage').addEventListener('drop', event => { event.preventDefault(); $('#canvasPage').classList.remove('is-drop-target'); const targetSlot = slotAtPoint(event.clientX, event.clientY); if (draggedAssetId) { addAssetToPage(draggedAssetId, targetSlot); draggedAssetId = null; slotMode = false; hoverSlotIndex = null; } else if (event.dataTransfer.files.length) handleFiles(event.dataTransfer.files, targetSlot); });
+$('#canvasPage').addEventListener('drop', event => { event.preventDefault(); $('#canvasPage').classList.remove('is-drop-target'); const targetSlot = slotAtPoint(event.clientX, event.clientY) ?? currentPage().items.length; const assetId = draggedAssetId; draggedAssetId = null; slotMode = false; hoverSlotIndex = null; if (assetId) addAssetToPage(assetId, targetSlot); else if (event.dataTransfer.files.length) handleFiles(event.dataTransfer.files, targetSlot); });
 
 $('#autoArrangeBtn').addEventListener('click', autoArrange);
-function reflowCurrentPage() { const page = currentPage(); page.items.forEach((item, index) => { item.slot = index; }); selectedItemId = null; activeInspector = 'page'; render(); saveProject(); }
-$('#photosPerPage').addEventListener('change', event => { currentPage().photosPerPage = Number(event.target.value); reflowCurrentPage(); });
-$('#layoutDirection').addEventListener('change', event => { currentPage().layoutDirection = event.target.value; reflowCurrentPage(); });
 $$('.format-btn').forEach(button => button.addEventListener('click', () => { if (project.formatLocked) { showToast('El formato está fijado para este proyecto'); return; } project.ratio = button.dataset.format; render(); saveProject(); }));
 $('#zoomOutBtn').addEventListener('click', () => { zoom = clamp(zoom - .1, .6, 1.4); renderControls(); }); $('#zoomInBtn').addEventListener('click', () => { zoom = clamp(zoom + .1, .6, 1.4); renderControls(); });
 $('#prevPageBtn').addEventListener('click', () => { if (currentPageIndex > 0) { currentPageIndex--; selectedItemId = null; render(); } }); $('#nextPageBtn').addEventListener('click', () => { if (currentPageIndex < project.pages.length - 1) { currentPageIndex++; selectedItemId = null; render(); } });
