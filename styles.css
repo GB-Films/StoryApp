@@ -292,6 +292,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .storyboard-meta-top > .storyboard-meta-producer,.storyboard-meta-bottom > .storyboard-meta-details { justify-self:auto; }
 .storyboard-meta-top > .storyboard-meta-title,.storyboard-meta-bottom > .storyboard-meta-page { justify-self:auto; }
 .storyboard-meta-top > .storyboard-meta-title,.storyboard-meta-bottom > .storyboard-meta-page { margin-left:auto; }
+.storyboard-meta-top > .storyboard-meta-producer { flex:0 1 auto; }
+.storyboard-meta-top > .storyboard-meta-title { flex:0 1 auto; margin-left:0; }
+.storyboard-meta-top > .storyboard-meta-rule:nth-child(3):not(:last-child) { flex:1 1 0; }
 .storyboard-meta-producer { display:flex; flex:0 1 46%; align-items:center; gap:6px; min-width:0; max-width:46%; overflow:hidden; }
 .storyboard-meta-producer img { width:18px; height:18px; flex:0 0 auto; object-fit:contain; }
 .storyboard-meta-producer strong,.storyboard-meta-title,.storyboard-meta-page { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
