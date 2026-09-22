@@ -131,6 +131,29 @@ const fixture = () => {
     assert.notDeepEqual(moveAfter.slice(0, 2), moveBefore.slice(0, 2), 'camera arrows can be dragged over the photo');
     assert.equal(moveAfter[2], 1.2);
     assert.equal(moveAfter[3], '#00aaee');
+    const arrowLayering = await page.evaluate(() => {
+      const photo = document.querySelector('#canvasPage .design-item.is-selected .design-photo');
+      const item = photo?.closest('.design-item');
+      const overlay = photo?.querySelector('.camera-move-overlay');
+      const nextItem = item?.nextElementSibling;
+      return {
+        photoOverflow: getComputedStyle(photo).overflow,
+        photoContain: getComputedStyle(photo).contain,
+        photoIsolation: getComputedStyle(photo).isolation,
+        itemIsolation: getComputedStyle(item).isolation,
+        selectedZIndex: getComputedStyle(item).zIndex,
+        overlayZIndex: getComputedStyle(overlay).zIndex,
+        nextZIndex: nextItem ? getComputedStyle(nextItem).zIndex : 'auto',
+        overlayInsidePhoto: overlay?.parentElement === photo
+      };
+    });
+    assert.equal(arrowLayering.photoOverflow, 'clip', 'the photo clips camera arrows at its own bounds');
+    assert.match(arrowLayering.photoContain, /paint/, 'the photo establishes a paint clipping boundary');
+    assert.equal(arrowLayering.photoIsolation, 'isolate');
+    assert.equal(arrowLayering.itemIsolation, 'isolate');
+    assert.equal(arrowLayering.selectedZIndex, '20', 'the selected photo owns the arrow layer while editing');
+    assert.equal(arrowLayering.overlayZIndex, '12');
+    assert.equal(arrowLayering.overlayInsidePhoto, true);
     await page.locator('#photoDrawingWidth').fill('4');
     await page.locator('#drawOnPhotoBtn').click();
     const drawingLayerBox = await page.locator('#canvasPage .photo-drawing-layer.is-editing').boundingBox();
