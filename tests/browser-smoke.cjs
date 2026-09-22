@@ -43,6 +43,19 @@ const fixture = () => {
     assert.ok(Math.abs(squarePhoto.width / squarePhoto.height - 1) < .03, 'original square photos stay inside square frames');
     const titleAlignment = await page.evaluate(() => { const frame = document.querySelector('#canvasPage .storyboard-meta-frame').getBoundingClientRect(); const title = document.querySelector('#canvasPage .storyboard-meta-title').getBoundingClientRect(); return { frameRight: frame.right, titleRight: title.right }; });
     assert.ok(titleAlignment.titleRight > titleAlignment.frameRight - 80, 'project title defaults to the top-right of the artboard');
+    await page.evaluate(() => { project.showProducerBranding = true; project.producer = 'GRAN BERTA FILMS'; project.title = 'STORY SAMSUNG S26FE'; project.showProjectFrame = true; render(); });
+    const frameHeader = await page.evaluate(() => {
+      const frame = document.querySelector('#canvasPage .storyboard-meta-frame');
+      const producer = frame.querySelector('.storyboard-meta-producer strong');
+      const title = frame.querySelector('.storyboard-meta-title');
+      const rules = [...frame.querySelectorAll('.storyboard-meta-top .storyboard-meta-rule')].map(node => node.getBoundingClientRect());
+      const textRects = [producer, title].map(node => node.getBoundingClientRect());
+      return { display: getComputedStyle(frame.querySelector('.storyboard-meta-top')).display, producerFits: producer.scrollWidth <= producer.clientWidth + 1, titleFits: title.scrollWidth <= title.clientWidth + 1, noRuleOverText: rules.every(rule => textRects.every(text => rule.right <= text.left || rule.left >= text.right)) };
+    });
+    assert.equal(frameHeader.display, 'flex', 'frame header uses separated line segments');
+    assert.equal(frameHeader.producerFits, true, 'producer text is not clipped in the frame header');
+    assert.equal(frameHeader.titleFits, true, 'project title is not clipped in the frame header');
+    assert.equal(frameHeader.noRuleOverText, true, 'top frame lines leave a real gap around text');
     assert.equal(await page.locator('#canvasPage .storyboard-meta-page').textContent(), '01');
     await page.locator('#selectAllPhotosBtn').click();
     assert.equal(await page.locator('#canvasPage .design-item.is-selected').count(), 6);
