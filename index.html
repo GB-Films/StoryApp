@@ -3,21 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="GB Films Storyboard Studio: organizá tus fotos sobre un artboard y exportá tu composición." />
-    <title>GB Films · Storyboard Studio</title>
+    <meta name="description" content="GB Studio: herramientas visuales para organizar storyboards y preparar tus proyectos de preproducción." />
+    <title>GB Studio · Preproducción</title>
     <link rel="stylesheet" href="styles.css?v=15" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="#" aria-label="GB Films Storyboard Studio"><img class="brand-logo" src="assets/gb-films-logo-white.png" alt="GB Films" /><span class="brand-divider"></span><span class="brand-product">STORYBOARD<br /><em>STUDIO</em></span></a>
+        <a class="brand" href="#" aria-label="GB Studio"><img class="brand-logo" src="assets/gb-films-logo-white.png" alt="GB Films" /><span class="brand-divider"></span><span class="brand-product">GB<br /><em>STUDIO</em></span></a>
         <div class="breadcrumbs"><span>PROYECTOS</span><b>/</b><strong id="breadcrumbTitle">Todos los proyectos</strong></div>
         <div class="top-actions"><span class="save-state" id="saveState"><span class="status-dot"></span>Guardado local</span><button class="button button-ghost" id="backToDashboardBtn" type="button" hidden>← Proyectos</button><button class="button button-ghost" id="createVersionBtn" type="button" hidden>＋ Crear versión</button><button class="button button-primary" id="exportBtn" type="button" hidden><span>↗</span> Exportar</button><button class="account-button" id="accountButton" type="button" aria-label="Iniciar sesión con Google"><span class="account-avatar" id="accountAvatar">G</span><span class="account-label" id="accountLabel">Iniciar sesión</span></button></div>
       </header>
 
       <main class="dashboard-view" id="dashboardView">
         <section class="dashboard-hero">
-          <div class="dashboard-hero-copy"><div class="eyebrow"><span class="eyebrow-line"></span> GB FILMS · STORYBOARD STUDIO</div><h1>Todos tus proyectos,<br /><em>en un solo lugar.</em></h1><p>Elegí un storyboard para seguir trabajando o empezá uno nuevo con el formato que necesitás.</p></div>
+          <div class="dashboard-hero-copy"><div class="eyebrow"><span class="eyebrow-line"></span> GB FILMS · PREPRODUCCIÓN</div><h1>Todo lo que necesitás<br /><em>para preparar tu rodaje.</em></h1><p>Empezá con un storyboard y sumá nuevas herramientas de preproducción a medida que las necesites.</p></div>
           <button class="dashboard-create-card" id="dashboardCreateBtn" type="button"><span class="dashboard-create-mark">＋</span><span><strong>Nuevo proyecto</strong><small>Comenzá un storyboard desde cero</small></span><span class="dashboard-create-arrow">→</span></button>
         </section>
         <section class="projects-section"><div class="projects-section-heading"><div><div class="eyebrow">ARCHIVO DE PROYECTOS</div><h2>Proyectos recientes</h2></div><span class="project-count" id="projectCount">0 proyectos</span></div><div class="project-grid" id="projectGrid"></div><div class="dashboard-empty" id="dashboardEmpty" hidden><div class="dashboard-empty-icon">▱</div><strong>Todavía no hay proyectos</strong><p>Creá tu primer storyboard para empezar a ordenar las tomas.</p><button class="button button-primary" type="button" id="dashboardEmptyCreateBtn">＋ Crear proyecto</button></div></section>

@@ -1,6 +1,6 @@
-# Storyboard Studio
+# GB Studio
 
-Un espacio de trabajo visual para organizar fotos y armar storyboards como si fuera un artboard.
+Un espacio de trabajo visual de GB Films para organizar storyboards y, progresivamente, sumar herramientas de preproducción como shot lists y planes de rodaje.
 
 ## Funciones
 

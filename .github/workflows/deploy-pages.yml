@@ -1,4 +1,4 @@
-name: Deploy Storyboard Studio to GitHub Pages
+name: Deploy GB Studio to GitHub Pages
 
 on:
   push:
