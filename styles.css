@@ -459,6 +459,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .background-actions .button { min-width:0; flex:1; padding:0 8px; font-size:10px; }
 .background-preview { height:64px; margin-top:9px; border:1px solid #c9c9c9; background-color:#eee; background-position:center; background-repeat:no-repeat; background-size:cover; }
 .background-preview[hidden] { display:none; }
+.background-section > label[for="backgroundPattern"] { display:flex; align-items:center; justify-content:space-between; margin:17px 0 11px; color:#7f8c88; font:500 9px 'DM Mono',monospace; letter-spacing:.7px; }
 .background-section .text-field { margin-top:4px; }
 .selection-actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
 .selection-actions .button { min-width:0; padding:0 7px; font-size:10px; }
