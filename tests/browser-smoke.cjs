@@ -30,6 +30,7 @@ const fixture = () => {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
+    assert.equal(await page.locator('link[rel="icon"]').getAttribute('href'), 'assets/gb-films-logo-white.png?v=2');
     // The production app requires Google authentication before exposing the
     // workspace. The smoke test supplies its own fixture, so unlock that
     // workspace after Firebase's signed-out state has settled.
