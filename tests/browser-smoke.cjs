@@ -39,6 +39,8 @@ const fixture = () => {
     const original = fixture();
     await page.evaluate(data => { project = normalizeProject(data); currentProjectId = project.id; currentPageIndex = 0; selectedItemId = null; activeInspector = 'page'; showEditor(); render(); saveProject(); }, original);
     await page.waitForFunction(() => document.querySelectorAll('#canvasPage .design-item').length === 6);
+    assert.equal(await page.locator('.library-tip').count(), 0);
+    assert.equal(await page.locator('[data-delete-asset]').count(), 15);
     const squarePhoto = await page.locator('#canvasPage .design-item').first().locator('.design-photo').boundingBox();
     assert.ok(Math.abs(squarePhoto.width / squarePhoto.height - 1) < .03, 'original square photos stay inside square frames');
     const titleAlignment = await page.evaluate(() => { const frame = document.querySelector('#canvasPage .storyboard-meta-frame').getBoundingClientRect(); const title = document.querySelector('#canvasPage .storyboard-meta-title').getBoundingClientRect(); return { frameRight: frame.right, titleRight: title.right }; });
@@ -457,6 +459,26 @@ const fixture = () => {
       assert.ok(inside, ratio);
       await page.locator('#canvasPage').screenshot({ path: path.join(os.tmpdir(), `storyapp-adaptive-${ratio}.png`) });
     }
+    assert.equal(await page.locator('#clearLibraryConfirmModal').isVisible(), false);
+    const usedAssetId = await page.evaluate(() => currentPage().items[0]?.assetId);
+    await page.locator(`[data-delete-asset="${usedAssetId}"]`).click();
+    assert.equal(await page.locator('#deleteAssetConfirmModal').isVisible(), true);
+    await page.locator('#cancelDeleteAssetBtn').click();
+    assert.equal(await page.locator('#deleteAssetConfirmModal').isVisible(), false);
+    const beforeAssetCount = await page.locator('[data-delete-asset]').count();
+    await page.locator(`[data-delete-asset="${usedAssetId}"]`).click();
+    await page.locator('#confirmDeleteAssetBtn').click();
+    assert.equal(await page.locator('[data-delete-asset]').count(), beforeAssetCount - 1);
+    assert.equal(await page.evaluate(id => project.assets.some(asset => asset.id === id), usedAssetId), false);
+    assert.equal(await page.evaluate(id => currentPage().items.some(item => item.assetId === id), usedAssetId), false);
+    await page.locator('#clearLibraryBtn').click();
+    assert.equal(await page.locator('#clearLibraryConfirmModal').isVisible(), true);
+    await page.locator('#cancelClearLibraryBtnSecondary').click();
+    assert.equal(await page.locator('#clearLibraryConfirmModal').isVisible(), false);
+    await page.locator('#clearLibraryBtn').click();
+    await page.locator('#confirmClearLibraryBtn').click();
+    assert.equal(await page.locator('[data-delete-asset]').count(), 0);
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 0);
     assert.deepEqual(errors, []);
     console.log('Browser checks passed: migration, unlimited add, duplicate, delete, drag/reorder, overlay, export, persistence and manual pages.');
   } finally {

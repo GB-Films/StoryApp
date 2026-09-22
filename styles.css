@@ -533,3 +533,22 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
   .workspace-app.is-portrait-layout .page-carousel-track { flex-direction:row; overflow-x:auto; overflow-y:hidden; }
   .workspace-app.is-portrait-layout .page-thumb-wrap,.workspace-app.is-portrait-layout .page-thumb { width:118px; flex-basis:118px; }
 }
+
+/* Library actions: keep the sidebar compact and reveal controls only when a thumbnail is targeted. */
+.asset-grid { gap:8px; max-height:calc(100vh - 350px); padding:2px 2px 8px 0; }
+.asset-thumb { border-radius:4px; transition:.18s; }
+.asset-thumb:hover { box-shadow:0 4px 12px rgba(0,0,0,.13); transform:translateY(-1px); }
+.asset-thumb.is-placed:hover { box-shadow:0 0 0 2px #000,0 4px 12px rgba(0,0,0,.13); }
+.asset-thumb-index { left:5px; top:5px; padding:3px 5px; border-radius:2px; background:rgba(0,0,0,.78); }
+.asset-thumb-actions { position:absolute; right:5px; bottom:5px; display:flex; gap:4px; opacity:0; transform:translateY(4px); transition:.16s; }
+.asset-thumb:hover .asset-thumb-actions,.asset-thumb:focus-within .asset-thumb-actions { opacity:1; transform:none; }
+.asset-thumb-action,.asset-thumb-delete { position:static; width:24px; height:24px; padding:0; border:1px solid rgba(255,255,255,.7); border-radius:2px; color:#fff; background:rgba(0,0,0,.78); font:16px/1 'DM Sans',sans-serif; cursor:pointer; }
+.asset-thumb-action:hover,.asset-thumb-delete:hover { color:#000; background:#fff; }
+.asset-thumb-delete { font-size:19px; }
+
+/* Custom library dialogs replace the browser's native confirmation alert. */
+.clear-library-confirm-backdrop,.delete-asset-confirm-backdrop { background:rgba(0,0,0,.72); }
+.clear-library-confirm-modal,.delete-asset-confirm-modal { width:min(500px,100%); border:1px solid #111; box-shadow:12px 12px 0 rgba(0,0,0,.22),0 25px 80px rgba(0,0,0,.38); }
+.clear-library-confirm-modal h2,.delete-asset-confirm-modal h2 { max-width:420px; margin-top:10px; }
+.clear-library-confirm-modal .modal-copy,.delete-asset-confirm-modal .modal-copy { max-width:430px; }
+.delete-asset-confirm-modal .modal-copy strong { color:#000; }
