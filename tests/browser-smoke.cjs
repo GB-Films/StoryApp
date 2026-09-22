@@ -147,9 +147,17 @@ const fixture = () => {
     assert.equal(await page.locator('.project-card-arrow').count(), 0);
     assert.equal(await page.locator('[data-edit-project]').count(), 1);
     assert.equal(await page.locator('[data-delete-project]').count(), 1);
+    assert.equal(await page.locator('.project-card-edit-row').count(), 0);
     const dashboardCard = await page.locator('.project-card').first().boundingBox();
     const dashboardEdit = await page.locator('[data-edit-project]').first().boundingBox();
     assert.ok(dashboardEdit.y > dashboardCard.y + dashboardCard.height - 60, 'dashboard actions stay in the bottom area');
+    await page.locator('[data-edit-project]').click();
+    assert.equal(await page.locator('[data-project-title]').isVisible(), true);
+    assert.equal(await page.locator('.project-card-edit-row').count(), 0);
+    const editingAction = await page.locator('[data-edit-project]').first().boundingBox();
+    const editingCard = await page.locator('.project-card').first().boundingBox();
+    assert.ok(editingAction.y > editingCard.y + editingCard.height - 60, 'dashboard actions stay at the bottom while editing');
+    await page.locator('[data-project-title]').press('Enter');
     await page.locator('[data-open-project]').first().click();
     assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
     assert.match(await page.locator('#canvasPage .design-item').last().textContent(), new RegExp(expectedLastTitle));
