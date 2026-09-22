@@ -314,6 +314,7 @@ function showDashboard() {
   $('#dashboardView').hidden = false;
   $('#editorView').hidden = true;
   $('#backToDashboardBtn').hidden = true;
+  $('#createVersionBtn').hidden = true;
   $('#exportBtn').hidden = true;
   $('#saveState').innerHTML = '<span class="status-dot"></span>Guardado local';
   $('#breadcrumbTitle').textContent = 'Todos los proyectos';
@@ -324,6 +325,7 @@ function showEditor() {
   $('#dashboardView').hidden = true;
   $('#editorView').hidden = false;
   $('#backToDashboardBtn').hidden = false;
+  $('#createVersionBtn').hidden = false;
   $('#exportBtn').hidden = false;
   $('#breadcrumbTitle').textContent = project?.title || 'Sin título';
 }
@@ -1036,6 +1038,37 @@ function openExport() { $('#exportModal').hidden = false; }
 function closeExport() { $('#exportModal').hidden = true; }
 function openFormatModal() { $('#formatModal').hidden = false; }
 function closeFormatModal() { $('#formatModal').hidden = true; }
+function openVersionModal() {
+  if (!project) return;
+  $$('#versionModal [data-version-format]').forEach(button => { button.disabled = button.dataset.versionFormat === project.ratio; button.title = button.disabled ? 'Este es el formato actual' : 'Crear una copia en este formato'; });
+  $('#versionModal').hidden = false;
+}
+function closeVersionModal() { $('#versionModal').hidden = true; }
+function createProjectVersion(format) {
+  if (!project || format === project.ratio) return;
+  const labels = { landscape: 'Horizontal', portrait: 'Vertical', square: '1:1' };
+  const variant = normalizeProject(JSON.parse(JSON.stringify(project)));
+  variant.id = createId('project');
+  variant.title = `${project.title || 'Storyboard'} · ${labels[format] || format}`;
+  variant.ratio = format;
+  variant.formatLocked = true;
+  variant.createdAt = new Date().toISOString();
+  variant.updatedAt = variant.createdAt;
+  variant.pages = variant.pages.map((page, pageIndex) => ({ ...page, id: createId('page'), title: page.title || `Página ${pageIndex + 1}`, items: page.items.map(item => ({ ...item, id: createId('item') })) }));
+  projects.unshift(variant);
+  persistProjects();
+  project = variant;
+  currentProjectId = variant.id;
+  currentPageIndex = 0;
+  selectedItemId = null;
+  activeInspector = 'page';
+  lastUndoState = null;
+  closeVersionModal();
+  showEditor();
+  render();
+  saveProject();
+  showToast(`Versión ${labels[format] || format} creada`);
+}
 function selectProjectFormat(format) {
   project.ratio = format;
   project.formatLocked = true;
@@ -1107,10 +1140,10 @@ $$('.fit-btn').forEach(button => button.addEventListener('click', () => { const 
 $('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoShotType').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.shotType = event.target.value; renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); }); $('#photoCameraMove').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMove = event.target.value; if (item.cameraMove === 'none') item.cameraMoveMode = 'overlay'; render(); saveProject(); }); $('#photoCameraMoveMode').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveMode = event.target.value === 'between' ? 'between' : 'overlay'; render(); saveProject(); });
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
 
-$('#newProjectBtn').addEventListener('click', resetProject); $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
+$('#newProjectBtn').addEventListener('click', resetProject); $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#createVersionBtn').addEventListener('click', openVersionModal); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $$('[data-version-format]').forEach(button => button.addEventListener('click', () => createProjectVersion(button.dataset.versionFormat))); $('#cancelVersionBtn').addEventListener('click', closeVersionModal); $('#versionModal').addEventListener('click', event => { if (event.target === $('#versionModal')) closeVersionModal(); }); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
 $$('[data-export]').forEach(button => button.addEventListener('click', async () => { const type = button.dataset.export; closeExport(); if (type === 'json') downloadProject(); else if (type === 'print') printAllPages(); else await exportImage(type); }));
 
 document.addEventListener('click', event => { if (!event.target.closest('.page-thumb-wrap')) closePageMenus(); });
-document.addEventListener('keydown', event => { const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editing) { event.preventDefault(); restoreLastUndo(); } if (event.key === 'Delete' && !editing) { if (selectedItemId) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); } if (event.key === 'Escape') { closeExport(); closeNewProjectConfirm(); closeDeletePageConfirm(); closeDeleteProjectModal(); closePageMenus(); } });
+document.addEventListener('keydown', event => { const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editing) { event.preventDefault(); restoreLastUndo(); } if (event.key === 'Delete' && !editing) { if (selectedItemId) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); } if (event.key === 'Escape') { closeExport(); closeVersionModal(); closeNewProjectConfirm(); closeDeletePageConfirm(); closeDeleteProjectModal(); closePageMenus(); } });
 
 showDashboard();
