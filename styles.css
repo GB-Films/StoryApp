@@ -326,11 +326,11 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
   .project-fields { min-width:0; width:100%; }
   .project-fields #projectTitle,.project-fields #projectProducer { width:100%; }
 }
-.dashboard-view { min-height:calc(100vh - 54px); padding:clamp(34px,6vw,76px) clamp(24px,7vw,110px) 70px; background:#ececec; background-image:linear-gradient(135deg,rgba(255,255,255,.62) 0 25%,transparent 25% 75%,rgba(255,255,255,.62) 75%),linear-gradient(45deg,transparent 0 25%,rgba(0,0,0,.035) 25% 75%,transparent 75%); background-size:420px 420px; }
+.dashboard-view { min-height:calc(100vh - 54px); padding:clamp(28px,4vw,52px) clamp(24px,7vw,110px) 60px; background:#ececec; background-image:linear-gradient(135deg,rgba(255,255,255,.62) 0 25%,transparent 25% 75%,rgba(255,255,255,.62) 75%),linear-gradient(45deg,transparent 0 25%,rgba(0,0,0,.035) 25% 75%,transparent 75%); background-size:420px 420px; }
 .dashboard-view[hidden],.workspace-app[hidden],.modal-backdrop[hidden] { display:none !important; }
-.dashboard-hero { display:flex; align-items:flex-end; justify-content:space-between; gap:32px; max-width:1240px; margin:0 auto clamp(42px,7vw,82px); }
-.dashboard-hero-copy { max-width:610px; }
-.dashboard-hero-copy h1 { margin:15px 0 13px; color:#000; font:600 clamp(36px,5vw,70px)/.96 'Space Grotesk',sans-serif; letter-spacing:-3px; }
+.dashboard-hero { display:flex; align-items:center; justify-content:space-between; gap:48px; max-width:1500px; margin:0 auto clamp(28px,4vw,48px); }
+.dashboard-hero-copy { max-width:860px; }
+.dashboard-hero-copy h1 { margin:15px 0 13px; color:#000; font:600 clamp(36px,4.3vw,64px)/.96 'Space Grotesk',sans-serif; letter-spacing:-3px; }
 .dashboard-hero-copy h1 em { color:#777; font-style:normal; }
 .dashboard-hero-copy p { max-width:460px; margin:0; color:#666; font-size:14px; line-height:1.55; }
 .dashboard-create-card { min-width:270px; display:grid; grid-template-columns:46px 1fr 20px; align-items:center; gap:13px; padding:18px; border:1px solid #111; color:#fff; background:#050505; text-align:left; cursor:pointer; box-shadow:10px 10px 0 rgba(0,0,0,.1); transition:.2s; }

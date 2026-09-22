@@ -213,6 +213,9 @@ const fixture = () => {
     assert.equal(await page.locator('[data-edit-project]').count(), 1);
     assert.equal(await page.locator('[data-delete-project]').count(), 1);
     assert.equal(await page.locator('.project-card-edit-row').count(), 0);
+    const dashboardHero = await page.evaluate(() => { const hero = document.querySelector('.dashboard-hero').getBoundingClientRect(); const copy = document.querySelector('.dashboard-hero-copy').getBoundingClientRect(); const projects = document.querySelector('.projects-section').getBoundingClientRect(); return { heroHeight: hero.height, copyWidth: copy.width, projectsTop: projects.top }; });
+    assert.ok(dashboardHero.heroHeight < 360, 'dashboard welcome block stays compact');
+    assert.ok(dashboardHero.copyWidth > 600, 'dashboard welcome copy uses the horizontal space');
     const dashboardCard = await page.locator('.project-card').first().boundingBox();
     const dashboardEdit = await page.locator('[data-edit-project]').first().boundingBox();
     assert.ok(dashboardEdit.y > dashboardCard.y + dashboardCard.height - 60, 'dashboard actions stay in the bottom area');
