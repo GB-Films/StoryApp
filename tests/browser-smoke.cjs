@@ -159,10 +159,8 @@ const fixture = () => {
     await page.keyboard.up('Alt');
     assert.equal(await page.locator('#pageTotal').textContent(), '3');
     assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
-    await page.locator('#deletePageBtn').click();
-    assert.equal(await page.locator('#deletePageConfirmModal').isVisible(), true);
-    assert.match(await page.locator('#deletePageConfirmModal').textContent(), /Ctrl/);
-    await page.locator('#confirmDeletePageBtn').click();
+    await page.locator('[data-page-menu]').nth(2).click();
+    await page.locator('[data-delete-page-menu="2"]').click();
     assert.equal(await page.locator('#pageTotal').textContent(), '2');
     await page.keyboard.press('Control+Z');
     assert.equal(await page.locator('#pageTotal').textContent(), '3');

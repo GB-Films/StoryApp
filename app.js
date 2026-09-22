@@ -483,6 +483,37 @@ function duplicatePage(source) {
   };
 }
 
+function duplicatePageAt(sourceIndex) {
+  if (!project.pages[sourceIndex]) return;
+  captureUndoState();
+  const copy = duplicatePage(project.pages[sourceIndex]);
+  project.pages.splice(sourceIndex + 1, 0, copy);
+  currentPageIndex = sourceIndex + 1;
+  selectedItemId = null;
+  activeInspector = 'page';
+  closePageMenus();
+  render();
+  saveProject();
+  showToast('Página copiada');
+}
+
+function removePageAt(pageIndex) {
+  if (project.pages.length <= 1) { showToast('El proyecto necesita al menos una página'); return false; }
+  if (!project.pages[pageIndex]) return false;
+  captureUndoState();
+  project.pages.splice(pageIndex, 1);
+  currentPageIndex = Math.min(pageIndex, project.pages.length - 1);
+  selectedItemId = null;
+  activeInspector = 'page';
+  closePageMenus();
+  render();
+  saveProject();
+  showToast('Página eliminada · Ctrl + Z para recuperar');
+  return true;
+}
+
+function closePageMenus() { $$('.page-thumb-wrap.is-menu-open').forEach(wrapper => { wrapper.classList.remove('is-menu-open'); const menu = wrapper.querySelector('.page-thumb-menu'); if (menu) { menu.style.left = ''; menu.style.top = ''; } }); }
+
 function pageIndexAtPoint(clientX, clientY, track) {
   return [...track.querySelectorAll('[data-page-index]')].map(button => ({ button, rect: button.getBoundingClientRect() })).find(({ rect }) => clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom);
 }
@@ -525,11 +556,14 @@ function renderPageCarousel() {
   const track = $('#pageCarouselTrack');
   if (!track) return;
   $('#carouselCount').textContent = `${project.pages.length} página${project.pages.length === 1 ? '' : 's'}`;
-  track.innerHTML = `${project.pages.map((page, index) => `<button class="page-thumb ${index === currentPageIndex ? 'is-active' : ''}" data-page-index="${index}" type="button"><span class="page-thumb-canvas ${pageFormatClass()}" style="background:${project.background}">${pageThumbnailMarkup(page)}</span><span class="page-thumb-label">${String(index + 1).padStart(2, '0')} · ${escapeHtml(page.title || `Página ${index + 1}`)}</span></button>`).join('')}<button class="page-thumb page-thumb-add" data-add-page type="button" aria-label="Agregar nueva página"><span class="page-thumb-canvas page-thumb-add-canvas ${pageFormatClass()}"><span class="page-thumb-add-symbol">＋</span></span><span class="page-thumb-label">＋ Nueva página</span></button>`;
+  track.innerHTML = `${project.pages.map((page, index) => `<div class="page-thumb-wrap"><button class="page-thumb ${index === currentPageIndex ? 'is-active' : ''}" data-page-index="${index}" type="button"><span class="page-thumb-canvas ${pageFormatClass()}" style="background:${project.background}">${pageThumbnailMarkup(page)}</span><span class="page-thumb-label">${String(index + 1).padStart(2, '0')} · ${escapeHtml(page.title || `Página ${index + 1}`)}</span></button><button class="page-thumb-menu-button" data-page-menu type="button" aria-label="Opciones de ${escapeHtml(page.title || `Página ${index + 1}`)}" title="Opciones">⋯</button><div class="page-thumb-menu" role="menu"><button data-copy-page="${index}" type="button" role="menuitem">Copiar</button><button data-delete-page-menu="${index}" type="button" role="menuitem" ${project.pages.length <= 1 ? 'disabled' : ''}>Eliminar</button></div></div>`).join('')}<button class="page-thumb page-thumb-add" data-add-page type="button" aria-label="Agregar nueva página"><span class="page-thumb-canvas page-thumb-add-canvas ${pageFormatClass()}"><span class="page-thumb-add-symbol">＋</span></span><span class="page-thumb-label">＋ Nueva página</span></button>`;
   $$('[data-page-index]', track).forEach(button => {
     button.addEventListener('pointerdown', event => { if (event.altKey) startPageDuplicateDrag(Number(button.dataset.pageIndex), event, track); });
     button.addEventListener('click', () => { if (document.body.classList.contains('is-page-dragging')) return; currentPageIndex = Number(button.dataset.pageIndex); selectedItemId = null; activeInspector = 'page'; render(); });
   });
+  $$('[data-page-menu]', track).forEach(button => button.addEventListener('click', event => { event.stopPropagation(); const wrapper = button.closest('.page-thumb-wrap'); const menu = wrapper.querySelector('.page-thumb-menu'); const wasOpen = wrapper.classList.contains('is-menu-open'); closePageMenus(); if (!wasOpen) { const rect = button.getBoundingClientRect(); menu.style.left = `${Math.max(6, Math.min(window.innerWidth - 144, rect.right - 136))}px`; menu.style.top = `${Math.min(window.innerHeight - 82, rect.bottom + 4)}px`; wrapper.classList.add('is-menu-open'); } }));
+  $$('[data-copy-page]', track).forEach(button => button.addEventListener('click', event => { event.stopPropagation(); duplicatePageAt(Number(button.dataset.copyPage)); }));
+  $$('[data-delete-page-menu]', track).forEach(button => button.addEventListener('click', event => { event.stopPropagation(); removePageAt(Number(button.dataset.deletePageMenu)); }));
   $('[data-add-page]', track)?.addEventListener('click', addNewPage);
 }
 
@@ -706,10 +740,7 @@ async function handleFiles(fileList, firstSlot = null) {
 function deleteSelected() { if (!selectedItemId) return; const page = currentPage(); page.items = page.items.filter(item => item.id !== selectedItemId); renumberItems(page); selectedItemId = null; activeInspector = 'page'; render(); saveProject(); showToast('Foto quitada · distribución ajustada'); }
 function duplicateSelected() { const item = findItem(selectedItemId); if (!item) return; const copy = { ...item, id: createId('item') }; currentPage().items.splice(item.slot + 1, 0, copy); renumberItems(currentPage()); selectedItemId = copy.id; render(); saveProject(); showToast('Foto duplicada · distribución ajustada'); }
 function deleteCurrentPage() {
-  if (project.pages.length <= 1) { showToast('El proyecto necesita al menos una página'); return; }
-  pendingDeletePageIndex = currentPageIndex;
-  $('#deletePageName').textContent = currentPage().title || `Página ${currentPageIndex + 1}`;
-  $('#deletePageConfirmModal').hidden = false;
+  removePageAt(currentPageIndex);
 }
 
 function confirmDeletePage() {
@@ -967,6 +998,7 @@ $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePho
 $('#newProjectBtn').addEventListener('click', resetProject); $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
 $$('[data-export]').forEach(button => button.addEventListener('click', async () => { const type = button.dataset.export; closeExport(); if (type === 'json') downloadProject(); else if (type === 'print') printAllPages(); else await exportImage(type); }));
 
-document.addEventListener('keydown', event => { const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editing) { event.preventDefault(); restoreLastUndo(); } if (event.key === 'Delete' && !editing) { if (selectedItemId) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); } if (event.key === 'Escape') { closeExport(); closeNewProjectConfirm(); closeDeletePageConfirm(); closeDeleteProjectModal(); } });
+document.addEventListener('click', event => { if (!event.target.closest('.page-thumb-wrap')) closePageMenus(); });
+document.addEventListener('keydown', event => { const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editing) { event.preventDefault(); restoreLastUndo(); } if (event.key === 'Delete' && !editing) { if (selectedItemId) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); } if (event.key === 'Escape') { closeExport(); closeNewProjectConfirm(); closeDeletePageConfirm(); closeDeleteProjectModal(); closePageMenus(); } });
 
 showDashboard();
