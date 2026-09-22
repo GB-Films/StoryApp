@@ -59,20 +59,20 @@ test('layout adapts to the actual assets, and removing a photo reclaims space', 
   assert.ok(after.width * after.height > before.width * before.height);
 });
 
-test('equal grid keeps stable cells and leaves the next slot empty', () => {
+test('equal grid chooses balanced rows and centers incomplete rows', () => {
   const options = { engine: 'grid', aspect: 16 / 9, captions: true, padding: 6, gap: 16 };
   const three = arrange([16 / 9, 16 / 9, 16 / 9], options);
   const four = arrange([16 / 9, 16 / 9, 16 / 9, 16 / 9], options);
   assert.equal(three.length, 3);
   assert.equal(four.length, 4);
-  three.forEach((rect, index) => {
-    assert.equal(rect.card.width, four[index].card.width);
-    assert.equal(rect.card.height, four[index].card.height);
-    assert.equal(rect.card.x, four[index].card.x);
-    assert.equal(rect.card.y, four[index].card.y);
-  });
-  assert.ok(four[3].card.x > four[2].card.x);
-  assert.ok(Math.abs(four[3].card.y - four[2].card.y) < 1e-8);
+  assert.deepEqual([...Map.groupBy(three, rect => rect.card.y).values()].map(row => row.length), [2, 1]);
+  assert.deepEqual([...Map.groupBy(four, rect => rect.card.y).values()].map(row => row.length), [2, 2]);
+  assert.equal(three[0].card.width, four[0].card.width);
+  assert.equal(three[0].card.height, four[0].card.height);
+  assert.equal(three[1].card.x, four[1].card.x);
+  assert.ok(three[2].card.y > three[1].card.y);
+  assert.ok(three[2].card.x > three[0].card.x);
+  assert.ok(three[2].card.x < three[1].card.x);
 });
 
 test('empty pages, invalid dimensions and dense pages remain usable', () => {

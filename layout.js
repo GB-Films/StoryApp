@@ -20,8 +20,20 @@
     const horizontal = ratios.filter(ratio => ratio > 1.15).length;
     const vertical = ratios.filter(ratio => ratio < .85).length;
     const slotAspect = horizontal > vertical ? 16 / 9 : vertical > horizontal ? 9 / 16 : 1;
-    const preferredColumns = pageWidth / pageHeight > 1.25 ? 4 : pageWidth / pageHeight < .8 ? 2 : 3;
-    const columns = count === 1 ? 1 : count === 2 ? 2 : preferredColumns;
+    const pageAspect = pageWidth / pageHeight;
+    const targetGridAspect = pageAspect / slotAspect;
+    let columns = 1;
+    let bestGrid = null;
+    for (let candidate = 1; candidate <= count; candidate++) {
+      const candidateRows = Math.ceil(count / candidate);
+      const emptySlots = candidate * candidateRows - count;
+      const gridAspect = candidate / candidateRows;
+      const aspectError = Math.abs(Math.log(gridAspect / targetGridAspect));
+      const landscapeTieBreak = pageAspect >= 1 ? -candidate * .0001 : candidate * .0001;
+      const score = aspectError + emptySlots * .12 + landscapeTieBreak;
+      if (!bestGrid || score < bestGrid.score) bestGrid = { columns: candidate, score };
+    }
+    columns = bestGrid.columns;
     const rows = Math.ceil(count / columns);
     const cellWidth = Math.min((width - gap * (columns - 1)) / columns, (height - gap * (rows - 1)) * slotAspect / rows);
     const cellHeight = cellWidth / slotAspect;
@@ -32,9 +44,12 @@
     const captionRatio = options.captions ? .24 : 0;
     const percent = rect => ({ x: rect.x / pageWidth * 100, y: rect.y, width: rect.width / pageWidth * 100, height: rect.height });
     return ratios.map((ratio, index) => {
-      const column = index % columns;
       const row = Math.floor(index / columns);
-      const cardX = startX + column * (cellWidth + gap);
+      const column = index % columns;
+      const itemsInRow = Math.min(columns, count - row * columns);
+      const rowWidth = cellWidth * itemsInRow + gap * (itemsInRow - 1);
+      const rowStartX = insetX + (width - rowWidth) / 2;
+      const cardX = rowStartX + column * (cellWidth + gap);
       const cardY = startY + row * (cellHeight + gap);
       const captionHeight = cellHeight * captionRatio;
       const imageBoxHeight = cellHeight - captionHeight;

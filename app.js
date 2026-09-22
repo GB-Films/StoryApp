@@ -657,7 +657,7 @@ function renderControls() {
   $('#pagePaddingValue').textContent = `${project.padding}%`;
   $('#layoutEngine').value = project.layoutEngine || 'grid';
   $('#layoutModeLabel').textContent = project.layoutEngine === 'adaptive' ? '✦ Distribución adaptable' : '✦ Grilla equitativa';
-  $('#autoLayoutStatus').title = project.layoutEngine === 'adaptive' ? 'Las fotos se distribuyen según sus proporciones' : 'La grilla mantiene celdas iguales y deja espacios vacíos cuando faltan fotos';
+  $('#autoLayoutStatus').title = project.layoutEngine === 'adaptive' ? 'Las fotos se distribuyen según sus proporciones' : 'La grilla equitativa elige la mejor cantidad de filas y columnas para aprovechar el canvas';
   $('#showDescriptions').checked = project.showDescriptions;
   $('#infoPlacement').value = project.infoPlacement || 'below';
   $('#infoPlacement').disabled = !project.showDescriptions;
