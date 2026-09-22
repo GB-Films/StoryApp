@@ -125,6 +125,23 @@ const fixture = () => {
     const expectedLastTitle = await page.evaluate(() => currentPage().items.at(-1).title);
 
     await page.locator('[data-inspector="page"]').click();
+    assert.equal(await page.locator('[data-inspector="info"]').count(), 1);
+    const inspectorWidth = () => page.evaluate(() => {
+      const panel = document.querySelector('.inspector-panel').getBoundingClientRect();
+      const editor = document.querySelector('.editor-area').getBoundingClientRect();
+      return { panel: panel.width, editor: editor.width };
+    });
+    const pageInspectorLayout = await inspectorWidth();
+    await page.locator('[data-inspector="photo"]').click();
+    const photoInspectorLayout = await inspectorWidth();
+    await page.locator('[data-inspector="info"]').click();
+    const infoInspectorLayout = await inspectorWidth();
+    assert.ok(Math.abs(pageInspectorLayout.panel - photoInspectorLayout.panel) < 1 && Math.abs(pageInspectorLayout.panel - infoInspectorLayout.panel) < 1, 'inspector width stays stable across tabs');
+    assert.ok(Math.abs(pageInspectorLayout.editor - photoInspectorLayout.editor) < 1 && Math.abs(pageInspectorLayout.editor - infoInspectorLayout.editor) < 1, 'editor width stays stable across tabs');
+    assert.equal(await page.locator('#projectTitle').isVisible(), true);
+    assert.equal(await page.locator('#showClientMeta').isVisible(), false);
+    await page.locator('#projectProducer').fill('GB Films');
+    await page.locator('[data-inspector="page"]').click();
     await page.locator('#infoStyle').selectOption('light');
     assert.equal(await page.locator('#canvasPage .description-style-light').count(), 16);
     assert.deepEqual(await page.locator('#canvasPage .description-style-light').first().evaluate(node => [getComputedStyle(node).backgroundColor, getComputedStyle(node).color]), ['rgb(255, 255, 255)', 'rgb(0, 0, 0)']);
@@ -135,7 +152,6 @@ const fixture = () => {
     assert.deepEqual(await page.locator('#canvasPage .description-overlay.description-style-light').first().evaluate(node => [getComputedStyle(node).backgroundColor, getComputedStyle(node).color]), ['rgba(255, 255, 255, 0.92)', 'rgb(0, 0, 0)']);
     await page.locator('#infoPlacement').selectOption('below');
     assert.equal(await page.locator('#canvasPage .description-overlay').count(), 0);
-    await page.locator('#projectProducer').fill('GB Films');
     await page.locator('#showProducerBranding').check({ force: true });
     await page.locator('#producerLogoInput').setInputFiles({ name: 'gb-films.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="black"/></svg>') });
     await page.waitForSelector('#canvasPage .producer-brand-overlay');

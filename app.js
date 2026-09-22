@@ -557,7 +557,7 @@ function renderPage() {
   const guides = slotMode ? pageLayout(page).map(({ card: rect }, index) => `<div class="slot-guide" data-slot-index="${index}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%"><span>${String(index + 1).padStart(2, '0')}</span></div>`).join('') : '';
   const content = page?.items.length ? page.items.map(item => itemMarkup(item, page)).join('') : '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>';
   const producerBrand = !project.showProjectFrame && project.showProducerBranding && (project.producer?.trim() || project.producerLogo) ? `<div class="producer-brand-overlay" id="canvasProducerBrand">${project.producerLogo ? `<img src="${project.producerLogo}" alt="" />` : ''}${project.producer?.trim() ? `<span>${escapeHtml(project.producer.trim())}</span>` : ''}</div>` : '';
-  const titleOverlay = !project.showProjectFrame && project.showProjectTitle && project.title.trim() ? `<div class="project-title-overlay" id="canvasProjectTitle" contenteditable="true" spellcheck="false">${escapeHtml(project.title)}</div>` : '';
+  const titleOverlay = !project.showProjectFrame && project.showProjectTitle && project.title.trim() ? `<div class="project-title-overlay" id="canvasProjectTitle">${escapeHtml(project.title)}</div>` : '';
   const cameraConnectors = page ? cameraMoveConnectorMarkup(page) : '';
   $('#canvasPage').innerHTML = guides + content + cameraConnectors + producerBrand + titleOverlay + storyboardMetaMarkup();
   $$('.design-item').forEach(item => bindDesignItem(item));
@@ -567,13 +567,6 @@ function renderPage() {
     editor.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); editor.blur(); } });
     editor.addEventListener('input', event => { const item = findItem(editor.closest('.design-item')?.dataset.itemId); if (!item) return; item.description = event.currentTarget.textContent.trim(); $('#photoDescription').value = item.description; saveProject(); });
   });
-  const titleEditor = $('#canvasProjectTitle');
-  if (titleEditor) {
-    titleEditor.addEventListener('pointerdown', event => event.stopPropagation());
-    titleEditor.addEventListener('click', event => event.stopPropagation());
-    titleEditor.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); titleEditor.blur(); } });
-    titleEditor.addEventListener('input', event => { project.title = event.currentTarget.textContent.trim(); $('#projectTitle').value = project.title; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; saveProject(); });
-  }
   $('#pageNumber').textContent = currentPageIndex + 1;
   $('#pageTotal').textContent = project.pages.length;
   $('#prevPageBtn').disabled = currentPageIndex === 0;
@@ -707,6 +700,9 @@ function renderPageCarousel() {
 function renderControls() {
   $('#projectTitle').value = project.title;
   $('#projectProducer').value = project.producer || '';
+  $('#projectTitleDisplay').textContent = project.title || 'Sin título';
+  $('#projectProducerDisplay').textContent = project.producer || '';
+  $('#projectProducerLabel').hidden = !project.producer?.trim();
   $('#projectClient').value = project.client || '';
   $('#projectAgency').value = project.agency || '';
   $('#projectDirector').value = project.director || '';
@@ -742,12 +738,14 @@ function renderControls() {
 
 function renderInspector() {
   $('#pageInspector').hidden = activeInspector !== 'page';
+  $('#infoInspector').hidden = activeInspector !== 'info';
   $('#photoInspector').hidden = activeInspector !== 'photo';
   $$('.inspector-tab').forEach(tab => tab.classList.toggle('is-active', tab.dataset.inspector === activeInspector));
   const item = findItem(selectedItemId);
-  $('#noSelection').hidden = !!item;
-  $('#selectedPhotoForm').hidden = !item;
-  if (!item) return;
+  const photoInspectorActive = activeInspector === 'photo';
+  $('#noSelection').hidden = !photoInspectorActive || !!item;
+  $('#selectedPhotoForm').hidden = !photoInspectorActive || !item;
+  if (!photoInspectorActive || !item) return;
   const asset = findAsset(item.assetId);
   $('#selectedPreview').innerHTML = asset ? `<img src="${asset.image}" alt="" />` : '';
   $('#selectedPhotoName').textContent = itemDisplayTitle(item, asset) || 'Foto';
@@ -1185,7 +1183,7 @@ $$('.format-btn').forEach(button => button.addEventListener('click', () => { if 
 $('#zoomOutBtn').addEventListener('click', () => { zoom = clamp(zoom - .1, .6, 1.4); renderControls(); }); $('#zoomInBtn').addEventListener('click', () => { zoom = clamp(zoom + .1, .6, 1.4); renderControls(); });
 $('#prevPageBtn').addEventListener('click', () => { if (currentPageIndex > 0) { currentPageIndex--; selectedItemId = null; render(); } }); $('#nextPageBtn').addEventListener('click', () => { if (currentPageIndex < project.pages.length - 1) { currentPageIndex++; selectedItemId = null; render(); } });
 
-['projectTitle', 'projectProducer', 'projectClient', 'projectAgency', 'projectDirector'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer', projectClient: 'client', projectAgency: 'agency', projectDirector: 'director' }[id]; project[key] = event.target.value; if (id === 'projectProducer') project.author = project.producer; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; renderPage(); saveProject(); }));
+['projectTitle', 'projectProducer', 'projectClient', 'projectAgency', 'projectDirector'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer', projectClient: 'client', projectAgency: 'agency', projectDirector: 'director' }[id]; project[key] = event.target.value; if (id === 'projectProducer') { project.author = project.producer; $('#projectProducerDisplay').textContent = project.producer; $('#projectProducerLabel').hidden = !project.producer.trim(); } if (id === 'projectTitle') $('#projectTitleDisplay').textContent = project.title || 'Sin título'; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; renderPage(); saveProject(); }));
 $('#backgroundColor').addEventListener('input', event => { project.background = event.target.value; render(); saveProject(); });
 $('#layoutEngine').addEventListener('change', event => { project.layoutEngine = event.target.value === 'adaptive' ? 'adaptive' : 'grid'; project.layoutEngineVersion = 1; render(); saveProject(); });
 $('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = event.target.value === 'overlay' ? 'overlay' : 'below'; render(); saveProject(); }); $('#infoStyle').addEventListener('change', event => { project.infoStyle = event.target.value === 'light' ? 'light' : 'dark'; render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
