@@ -258,6 +258,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .project-title-overlay { position:absolute; z-index:7; top:2%; right:2.5%; max-width:42%; color:#fff; mix-blend-mode:difference; font:500 clamp(8px,1.15vw,14px)/1.2 'DM Mono',monospace; letter-spacing:.7px; text-align:right; text-transform:uppercase; outline:0; cursor:text; }
 .project-title-overlay:empty::before { content:'Título del proyecto'; opacity:.45; }
 .storyboard-meta-frame { position:absolute; z-index:7; inset:3.5%; border:1px solid rgba(0,0,0,.68); color:#111; pointer-events:none; font:500 clamp(7px,.72vw,11px)/1.1 'DM Mono',monospace; letter-spacing:.5px; text-transform:uppercase; }
+.storyboard-meta-frame.is-frame-hidden { border-color:transparent; }
 .storyboard-meta-top,.storyboard-meta-bottom { position:absolute; left:12px; right:12px; display:flex; align-items:center; justify-content:space-between; min-height:24px; padding:4px 8px; background:rgba(255,255,255,.94); }
 .storyboard-meta-top { top:-13px; }
 .storyboard-meta-bottom { bottom:-13px; }

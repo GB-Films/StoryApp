@@ -162,10 +162,11 @@ const fixture = () => {
     assert.equal(await page.locator('#canvasPage .description-overlay').count(), 0);
     await page.locator('#showProducerBranding').check({ force: true });
     await page.locator('#producerLogoInput').setInputFiles({ name: 'gb-films.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="black"/></svg>') });
-    await page.waitForSelector('#canvasPage .producer-brand-overlay');
-    await page.waitForSelector('#canvasPage .producer-brand-overlay img');
-    assert.equal(await page.locator('#canvasPage .producer-brand-overlay img').count(), 1);
-    assert.match(await page.locator('#canvasPage .producer-brand-overlay').textContent(), /GB Films/);
+    await page.waitForSelector('#canvasPage .storyboard-meta-frame');
+    await page.waitForSelector('#canvasPage .storyboard-meta-producer img');
+    assert.equal(await page.locator('#canvasPage .storyboard-meta-producer img').count(), 1);
+    assert.match(await page.locator('#canvasPage .storyboard-meta-producer').textContent(), /GB Films/);
+    assert.equal(await page.locator('#canvasPage .storyboard-meta-frame').evaluate(node => node.classList.contains('is-frame-hidden')), true);
     // No image/caption may extend beyond its assigned card or beyond the safe area.
     const check = await page.evaluate(() => {
       const board = document.querySelector('#canvasPage').getBoundingClientRect();

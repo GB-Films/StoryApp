@@ -555,7 +555,6 @@ function itemMarkup(item, page = currentPage()) {
 }
 
 function storyboardMetaMarkup(pageNumber = currentPageIndex + 1, totalPages = project.pages.length) {
-  if (!project.showProjectFrame) return '';
   const producer = project.showProducerBranding && (project.producer?.trim() || project.producerLogo);
   const details = [
     project.showClientMeta && project.client?.trim() ? ['CLIENTE', project.client] : null,
@@ -566,7 +565,7 @@ function storyboardMetaMarkup(pageNumber = currentPageIndex + 1, totalPages = pr
   const titleMarkup = project.showProjectTitle && project.title.trim() ? `<strong class="storyboard-meta-title">${escapeHtml(project.title)}</strong>` : '';
   const detailsMarkup = details.map(([label, value]) => `<span><small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('');
   const pageMarkup = project.showPageNumber ? `<strong class="storyboard-meta-page">${String(pageNumber).padStart(2, '0')}</strong>` : '';
-  return `<div class="storyboard-meta-frame" aria-hidden="true"><div class="storyboard-meta-top">${producerMarkup}${titleMarkup}</div><div class="storyboard-meta-bottom">${detailsMarkup ? `<div class="storyboard-meta-details">${detailsMarkup}</div>` : '<span></span>'}${pageMarkup}</div></div>`;
+  return `<div class="storyboard-meta-frame ${project.showProjectFrame ? '' : 'is-frame-hidden'}" aria-hidden="true"><div class="storyboard-meta-top">${producerMarkup}${titleMarkup}</div><div class="storyboard-meta-bottom">${detailsMarkup ? `<div class="storyboard-meta-details">${detailsMarkup}</div>` : '<span></span>'}${pageMarkup}</div></div>`;
 }
 
 function renderLibrary() {
@@ -589,10 +588,8 @@ function renderPage() {
   $('#canvasPage').style.background = page ? project.background : '#ffffff';
   const guides = slotMode ? pageLayout(page).map(({ card: rect }, index) => `<div class="slot-guide" data-slot-index="${index}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%"><span>${String(index + 1).padStart(2, '0')}</span></div>`).join('') : '';
   const content = page?.items.length ? page.items.map(item => itemMarkup(item, page)).join('') : '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>';
-  const producerBrand = !project.showProjectFrame && project.showProducerBranding && (project.producer?.trim() || project.producerLogo) ? `<div class="producer-brand-overlay" id="canvasProducerBrand">${project.producerLogo ? `<img src="${project.producerLogo}" alt="" />` : ''}${project.producer?.trim() ? `<span>${escapeHtml(project.producer.trim())}</span>` : ''}</div>` : '';
-  const titleOverlay = !project.showProjectFrame && project.showProjectTitle && project.title.trim() ? `<div class="project-title-overlay" id="canvasProjectTitle">${escapeHtml(project.title)}</div>` : '';
   const cameraConnectors = page ? cameraMoveConnectorMarkup(page) : '';
-  $('#canvasPage').innerHTML = guides + content + cameraConnectors + producerBrand + titleOverlay + storyboardMetaMarkup();
+  $('#canvasPage').innerHTML = guides + content + cameraConnectors + storyboardMetaMarkup();
   $$('.design-item').forEach(item => bindDesignItem(item));
   $$('.description-editor').forEach(editor => {
     editor.addEventListener('pointerdown', event => event.stopPropagation());
@@ -1049,7 +1046,6 @@ function drawCameraMoveConnectorsCanvas(ctx, page, width, height) {
 }
 
 async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) {
-  if (!project.showProjectFrame) return;
   const inset = Math.max(18, Math.round(Math.min(width, height) * .035));
   const barHeight = Math.max(24, Math.round(height * .045));
   const barY = inset - Math.round(barHeight / 2);
@@ -1061,9 +1057,11 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
     project.showDirectorMeta && project.director?.trim() ? ['DIRECTOR', project.director] : null
   ].filter(Boolean);
   ctx.save();
-  ctx.strokeStyle = '#111';
-  ctx.lineWidth = Math.max(1, Math.round(width / 1400));
-  ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2);
+  if (project.showProjectFrame) {
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = Math.max(1, Math.round(width / 1400));
+    ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2);
+  }
   ctx.fillStyle = 'rgba(255,255,255,.94)';
   ctx.fillRect(inset + 12, barY, width - inset * 2 - 24, barHeight);
   ctx.fillRect(inset + 12, footerY, width - inset * 2 - 24, barHeight);
@@ -1086,8 +1084,7 @@ async function renderPageCanvas(page) {
   await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const layout = itemLayout(item, page); image.onload = () => { drawImageInBox(ctx, image, layout.image.x / 100 * width, layout.image.y / 100 * height, layout.image.width / 100 * width, layout.image.height / 100 * height, item.fit, item.focusX, item.focusY); drawItemMetadata(ctx, item, asset, layout, width, height); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
   page.items.forEach(item => drawCameraMoveOverlayCanvas(ctx, item, itemLayout(item, page), width, height));
   drawCameraMoveConnectorsCanvas(ctx, page, width, height);
-  if (project.showProjectFrame) await drawProjectMetaFrame(ctx, width, height, currentPageIndex + 1, project.pages.length);
-  else { await drawProducerBranding(ctx, width, height); drawProjectTitle(ctx, width, height); }
+  await drawProjectMetaFrame(ctx, width, height, currentPageIndex + 1, project.pages.length);
   return canvas;
 }
 
@@ -1117,16 +1114,7 @@ function printAllPages() {
       sheet.appendChild(node);
     });
     sheet.insertAdjacentHTML('beforeend', cameraMoveConnectorMarkup(page));
-    if (project.showProjectFrame) sheet.insertAdjacentHTML('beforeend', storyboardMetaMarkup(pageIndex + 1, project.pages.length));
-    else {
-      if (project.showProducerBranding && (project.producer?.trim() || project.producerLogo)) {
-        const brand = document.createElement('div'); brand.className = 'producer-brand-overlay print-producer-brand';
-        if (project.producerLogo) { const image = document.createElement('img'); image.src = project.producerLogo; image.alt = ''; brand.appendChild(image); }
-        if (project.producer?.trim()) { const name = document.createElement('span'); name.textContent = project.producer.trim(); brand.appendChild(name); }
-        sheet.appendChild(brand);
-      }
-      if (project.showProjectTitle && project.title.trim()) { const title = document.createElement('div'); title.className = 'project-title-overlay'; title.textContent = project.title; sheet.appendChild(title); }
-    }
+    sheet.insertAdjacentHTML('beforeend', storyboardMetaMarkup(pageIndex + 1, project.pages.length));
     layer.appendChild(sheet);
   });
   document.body.appendChild(layer); const cleanup = () => layer.remove(); window.addEventListener('afterprint', cleanup, { once: true }); window.print(); setTimeout(cleanup, 2500);
