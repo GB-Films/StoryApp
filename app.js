@@ -268,7 +268,12 @@ function normalizeProject(data) {
     const migratedPage = { ...blankPage(`Página ${index + 1}`), ...page, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => {
       const legacyFit = migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit);
       const mode = validFrameMode(item.frame) ? item.frame : (legacyFit === 'cover' ? frameModeFromAspect(item.cropAspect || normalized.defaultCropAspect || formatAspect(normalized.ratio)) : 'original');
-      return { ...item, ...frameFields(mode), shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', cameraMove: CAMERA_MOVE_VALUES.has(item.cameraMove) ? item.cameraMove : 'none', cameraMoveMode: 'overlay', cameraMoveX: clamp(Number(item.cameraMoveX) || 50, 8, 92), cameraMoveY: clamp(Number(item.cameraMoveY) || 50, 8, 92), cameraMoveScale: clamp(Number(item.cameraMoveScale) || 1, .45, 1.45), cameraMoveColor: validHexColor(item.cameraMoveColor, '#ff3b30'), cameraMoveSpill: item.cameraMoveSpill === true, drawingColor: validHexColor(item.drawingColor, validHexColor(item.cameraMoveColor, '#ff3b30')), drawingWidth: clamp(Number(item.drawingWidth) || 2.4, .8, 8), drawingStrokes: normalizeDrawingStrokes(item.drawingStrokes), slot: Number.isFinite(item.slot) ? item.slot : itemIndex };
+      const cameraMoveSpill = item.cameraMoveSpill === true;
+      const cameraMoveMin = cameraMoveSpill ? -400 : 8;
+      const cameraMoveMax = cameraMoveSpill ? 400 : 92;
+      const cameraMoveX = Number(item.cameraMoveX);
+      const cameraMoveY = Number(item.cameraMoveY);
+      return { ...item, ...frameFields(mode), shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', cameraMove: CAMERA_MOVE_VALUES.has(item.cameraMove) ? item.cameraMove : 'none', cameraMoveMode: 'overlay', cameraMoveX: clamp(Number.isFinite(cameraMoveX) ? cameraMoveX : 50, cameraMoveMin, cameraMoveMax), cameraMoveY: clamp(Number.isFinite(cameraMoveY) ? cameraMoveY : 50, cameraMoveMin, cameraMoveMax), cameraMoveScale: clamp(Number(item.cameraMoveScale) || 1, .45, 1.45), cameraMoveColor: validHexColor(item.cameraMoveColor, '#ff3b30'), cameraMoveSpill, drawingColor: validHexColor(item.drawingColor, validHexColor(item.cameraMoveColor, '#ff3b30')), drawingWidth: clamp(Number(item.drawingWidth) || 2.4, .8, 8), drawingStrokes: normalizeDrawingStrokes(item.drawingStrokes), slot: Number.isFinite(item.slot) ? item.slot : itemIndex };
     }) : [] };
     if (data.layoutEngine !== 'adaptive') migratedPage.items.forEach(item => {
       if (item.fit === 'cover' && !item.cropAspect) item.cropAspect = legacyCropAspect(page, data);
@@ -1104,10 +1109,12 @@ function bindCameraOverlay(overlay) {
     if (!item || !photo) return;
     const rect = photo.getBoundingClientRect();
     const start = { x: event.clientX, y: event.clientY, itemX: item.cameraMoveX ?? 50, itemY: item.cameraMoveY ?? 50 };
+    const moveMin = item.cameraMoveSpill ? -400 : 8;
+    const moveMax = item.cameraMoveSpill ? 400 : 92;
     overlay.setPointerCapture?.(event.pointerId);
     const onMove = moveEvent => {
-      item.cameraMoveX = clamp(start.itemX + (moveEvent.clientX - start.x) / rect.width * 100, 8, 92);
-      item.cameraMoveY = clamp(start.itemY + (moveEvent.clientY - start.y) / rect.height * 100, 8, 92);
+      item.cameraMoveX = clamp(start.itemX + (moveEvent.clientX - start.x) / rect.width * 100, moveMin, moveMax);
+      item.cameraMoveY = clamp(start.itemY + (moveEvent.clientY - start.y) / rect.height * 100, moveMin, moveMax);
       overlay.style.setProperty('--camera-x', `${item.cameraMoveX}%`);
       overlay.style.setProperty('--camera-y', `${item.cameraMoveY}%`);
     };
@@ -1393,8 +1400,12 @@ function drawCameraMoveOverlayCanvas(ctx, item, layout, width, height) {
   const box = itemImageBox(item, layout);
   const x = box.x / 100 * width; const y = box.y / 100 * height; const w = box.width / 100 * width; const h = box.height / 100 * height;
   const scale = clamp(Number(item.cameraMoveScale) || 1, .45, 1.45) * .92;
-  const centerX = x + w * clamp(Number(item.cameraMoveX) || 50, 8, 92) / 100;
-  const centerY = y + h * clamp(Number(item.cameraMoveY) || 50, 8, 92) / 100;
+  const cameraMoveMin = item.cameraMoveSpill ? -400 : 8;
+  const cameraMoveMax = item.cameraMoveSpill ? 400 : 92;
+  const cameraMoveX = Number(item.cameraMoveX);
+  const cameraMoveY = Number(item.cameraMoveY);
+  const centerX = x + w * clamp(Number.isFinite(cameraMoveX) ? cameraMoveX : 50, cameraMoveMin, cameraMoveMax) / 100;
+  const centerY = y + h * clamp(Number.isFinite(cameraMoveY) ? cameraMoveY : 50, cameraMoveMin, cameraMoveMax) / 100;
   const point = (px, py) => ({ x: centerX + (px - 50) / 100 * w * scale, y: centerY + (py - 50) / 100 * h * scale });
   const line = (fromX, fromY, toX, toY) => { const from = point(fromX, fromY); const to = point(toX, toY); drawCanvasArrow(ctx, from.x, from.y, to.x, to.y); };
   const curve = (fromX, fromY, controlX, controlY, toX, toY) => { const from = point(fromX, fromY); const control = point(controlX, controlY); const to = point(toX, toY); ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.quadraticCurveTo(control.x, control.y, to.x, to.y); ctx.stroke(); drawCanvasArrowHead(ctx, to.x, to.y, Math.atan2(to.y - control.y, to.x - control.x), Math.max(9, Math.min(20, Math.min(w, h) * .07))); };
@@ -1676,7 +1687,7 @@ $('#photoFocusX').addEventListener('input', event => { const item = findItem(sel
 $$('.camera-preset').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; item.cameraMove = CAMERA_MOVE_VALUES.has(button.dataset.cameraPreset) ? button.dataset.cameraPreset : 'none'; item.cameraMoveMode = 'overlay'; if (item.cameraMove === 'none' && annotationToolMode === 'move') annotationToolMode = 'none'; renderPage(); renderInspector(); saveProject(); }));
 $('#photoAnnotationColor').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; const color = validHexColor(event.target.value, '#ff3b30'); item.cameraMoveColor = color; item.drawingColor = color; renderPage(); saveProject(); });
 $('#photoCameraScale').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveScale = clamp(Number(event.target.value) / 100, .45, 1.45); $('#cameraScaleValue').textContent = `${Math.round(item.cameraMoveScale * 100)}%`; renderPage(); saveProject(); });
-$('#cameraMoveSpill').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveSpill = event.target.checked; renderPage(); renderInspector(); saveProject(); });
+$('#cameraMoveSpill').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveSpill = event.target.checked; const moveMin = item.cameraMoveSpill ? -400 : 8; const moveMax = item.cameraMoveSpill ? 400 : 92; const cameraMoveX = Number(item.cameraMoveX); const cameraMoveY = Number(item.cameraMoveY); item.cameraMoveX = clamp(Number.isFinite(cameraMoveX) ? cameraMoveX : 50, moveMin, moveMax); item.cameraMoveY = clamp(Number.isFinite(cameraMoveY) ? cameraMoveY : 50, moveMin, moveMax); renderPage(); renderInspector(); saveProject(); });
 $('#photoDrawingWidth').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.drawingWidth = clamp(Number(event.target.value), .8, 8); $('#drawingWidthValue').textContent = item.drawingWidth.toFixed(1); saveProject(); });
 $('#moveCameraOverlayBtn').addEventListener('click', () => setAnnotationToolMode('move'));
 $('#drawOnPhotoBtn').addEventListener('click', () => setAnnotationToolMode('draw'));
