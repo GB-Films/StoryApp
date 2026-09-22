@@ -43,6 +43,19 @@ const fixture = () => {
     const titleAlignment = await page.evaluate(() => { const frame = document.querySelector('#canvasPage .storyboard-meta-frame').getBoundingClientRect(); const title = document.querySelector('#canvasPage .storyboard-meta-title').getBoundingClientRect(); return { frameRight: frame.right, titleRight: title.right }; });
     assert.ok(titleAlignment.titleRight > titleAlignment.frameRight - 80, 'project title defaults to the top-right of the artboard');
     assert.equal(await page.locator('#canvasPage .storyboard-meta-page').textContent(), '01');
+    await page.locator('#selectAllPhotosBtn').click();
+    assert.equal(await page.locator('#canvasPage .design-item.is-selected').count(), 6);
+    assert.equal(await page.locator('#selectionCount').textContent(), '6 seleccionadas');
+    assert.equal(await page.locator('#batchFrameSection').isVisible(), true);
+    await page.locator('.batch-fit-btn[data-frame="vertical"]').click();
+    assert.equal(await page.evaluate(() => currentPage().items.every(item => item.frame === 'vertical' && item.fit === 'cover')), true);
+    await page.locator('.batch-fit-btn[data-frame="original"]').click();
+    assert.equal(await page.evaluate(() => currentPage().items.every(item => item.frame === 'original' && item.fit === 'contain')), true);
+    await page.locator('#clearPhotoSelectionBtn').click();
+    await page.locator('#canvasPage .design-item').nth(0).click();
+    await page.locator('#canvasPage .design-item').nth(1).click({ modifiers: ['Control'] });
+    assert.equal(await page.locator('#canvasPage .design-item.is-selected').count(), 2);
+    await page.locator('#clearPhotoSelectionBtn').click();
     await page.locator('#showProjectFrame').uncheck({ force: true });
     const viewportLayout = await page.evaluate(() => {
       const workspace = document.querySelector('#canvasWorkspace').getBoundingClientRect();

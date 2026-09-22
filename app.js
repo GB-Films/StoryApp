@@ -111,6 +111,8 @@ async function drawArtboardBackground(ctx, width, height) {
 
 let currentPageIndex = 0;
 let selectedItemId = null;
+let selectedItemIds = new Set();
+let selectionAnchorId = null;
 let activeInspector = 'page';
 let draggedAssetId = null;
 let slotMode = false;
@@ -131,6 +133,10 @@ const createId = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toS
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
 function shotTypeInfo(value) { return SHOT_TYPES.find(type => type.value === value) || SHOT_TYPES[0]; }
 function cameraMoveInfo(value) { return CAMERA_MOVES.find(move => move.value === value) || CAMERA_MOVES[0]; }
+function selectedItems() { const page = currentPage(); const ids = selectedItemIds.size ? selectedItemIds : selectedItemId ? new Set([selectedItemId]) : new Set(); return page ? page.items.filter(item => ids.has(item.id)) : []; }
+function itemIsSelected(item) { return selectedItemIds.size ? selectedItemIds.has(item.id) : item.id === selectedItemId; }
+function clearItemSelection() { selectedItemIds.clear(); selectionAnchorId = null; selectedItemId = null; }
+function setItemSelection(items, primaryId = items[0]?.id || null) { selectedItemIds = new Set(items.map(item => item.id)); selectedItemId = primaryId; selectionAnchorId = primaryId; }
 function itemDisplayTitle(item, asset) {
   const type = shotTypeInfo(item.shotType);
   const base = item.title?.trim() || asset?.name || `Plano ${(item.slot ?? 0) + 1}`;
@@ -393,7 +399,7 @@ function showToast(message) {
 }
 
 function captureUndoState() {
-  lastUndoState = { project: JSON.parse(JSON.stringify(project)), currentPageIndex, selectedItemId, activeInspector };
+  lastUndoState = { project: JSON.parse(JSON.stringify(project)), currentPageIndex, selectedItemId, selectedItemIds: [...selectedItemIds], selectionAnchorId, activeInspector };
 }
 
 function closeDeletePageConfirm() {
@@ -419,6 +425,8 @@ function restoreLastUndo() {
   currentProjectId = project.id;
   currentPageIndex = Math.min(lastUndoState.currentPageIndex, project.pages.length - 1);
   selectedItemId = lastUndoState.selectedItemId;
+  selectedItemIds = new Set(lastUndoState.selectedItemIds || (selectedItemId ? [selectedItemId] : []));
+  selectionAnchorId = lastUndoState.selectionAnchorId || selectedItemId;
   activeInspector = lastUndoState.activeInspector;
   lastUndoState = null;
   closeDeletePageConfirm();
@@ -680,7 +688,7 @@ function itemMarkup(item, page = currentPage()) {
   const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
   const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
   const infoMarkup = project.showDescriptions ? `<div class="description-box ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${PHOTO_INFO_OVERLAY_HEIGHT}%` : `${captionStyle}width:100%;`}"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : '';
-  return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${item.id === selectedItemId ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
+  return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${itemIsSelected(item) ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
     <div class="design-photo" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${overlayInfo ? infoMarkup : ''}</div>
     ${overlayInfo ? '' : infoMarkup}
   </div>`;
@@ -734,8 +742,9 @@ function renderPage() {
   $('#prevPageBtn').disabled = currentPageIndex === 0;
   $('#nextPageBtn').disabled = currentPageIndex >= project.pages.length - 1;
   $('#pagePhotoCount').textContent = `${page.items.length} foto${page.items.length === 1 ? '' : 's'} en esta página`;
-  $('#selectionStatus').textContent = selectedItemId ? 'Foto seleccionada · arrastrá para cambiar su lugar en la secuencia' : 'Las fotos se acomodan automáticamente al agregarlas o quitarlas';
-  $('#selectionStatus').classList.toggle('photo-selected', !!selectedItemId);
+  const selectionCount = selectedItems().length;
+  $('#selectionStatus').textContent = selectionCount > 1 ? `${selectionCount} fotos seleccionadas · elegí un encuadre para aplicarlo a todas` : selectionCount === 1 ? 'Foto seleccionada · arrastrá para cambiar su lugar en la secuencia' : 'Las fotos se acomodan automáticamente al agregarlas o quitarlas';
+  $('#selectionStatus').classList.toggle('photo-selected', selectionCount > 0);
   renderPageCarousel();
   updateSlotGuides();
 }
@@ -916,6 +925,13 @@ function renderInspector() {
   $('#infoInspector').hidden = activeInspector !== 'info';
   $('#photoInspector').hidden = activeInspector !== 'photo';
   $$('.inspector-tab').forEach(tab => tab.classList.toggle('is-active', tab.dataset.inspector === activeInspector));
+  const selection = selectedItems();
+  $('#selectionCount').textContent = `${selection.length} seleccionada${selection.length === 1 ? '' : 's'}`;
+  $('#selectAllPhotosBtn').disabled = !currentPage()?.items.length;
+  $('#clearPhotoSelectionBtn').disabled = !selection.length;
+  $('#batchFrameSection').hidden = selection.length < 2;
+  const selectionModes = selection.map(item => itemFrameMode(item));
+  $$('.batch-fit-btn').forEach(button => button.classList.toggle('is-active', selection.length > 1 && selectionModes.every(mode => mode === button.dataset.frame)));
   const item = findItem(selectedItemId);
   const photoInspectorActive = activeInspector === 'photo';
   $('#noSelection').hidden = !photoInspectorActive || !!item;
@@ -943,18 +959,60 @@ function renderInspector() {
 
 function render() { renderControls(); renderLibrary(); renderPage(); renderInspector(); }
 
-function selectItem(id) { selectedItemId = id; activeInspector = 'photo'; renderPage(); renderInspector(); }
+function selectItem(id, event = {}) {
+  const page = currentPage();
+  const itemIndex = page?.items.findIndex(item => item.id === id) ?? -1;
+  if (itemIndex < 0) return;
+  const additive = event.ctrlKey || event.metaKey;
+  if (event.shiftKey && selectionAnchorId) {
+    const anchorIndex = page.items.findIndex(item => item.id === selectionAnchorId);
+    if (anchorIndex >= 0) {
+      const start = Math.min(anchorIndex, itemIndex);
+      const end = Math.max(anchorIndex, itemIndex);
+      const range = page.items.slice(start, end + 1);
+      if (additive) range.forEach(item => selectedItemIds.add(item.id));
+      else selectedItemIds = new Set(range.map(item => item.id));
+    }
+  } else if (additive) {
+    if (selectedItemIds.has(id)) selectedItemIds.delete(id);
+    else selectedItemIds.add(id);
+    selectionAnchorId = id;
+  } else {
+    selectedItemIds = new Set([id]);
+    selectionAnchorId = id;
+  }
+  selectedItemId = selectedItemIds.has(id) ? id : [...selectedItemIds].at(-1) || null;
+  activeInspector = selectedItemIds.size > 1 ? 'page' : selectedItemId ? 'photo' : 'page';
+  renderPage(); renderInspector();
+}
+
+function selectAllCurrentPage() {
+  const page = currentPage();
+  if (!page?.items.length) return;
+  setItemSelection(page.items, page.items[0].id);
+  activeInspector = 'page';
+  renderPage(); renderInspector();
+}
+
+function applyFrameToSelection(mode) {
+  const items = selectedItems();
+  if (items.length < 2 || !validFrameMode(mode)) return;
+  captureUndoState();
+  items.forEach(item => Object.assign(item, frameFields(mode)));
+  render(); saveProject();
+  showToast(`Encuadre ${FRAME_LABELS[mode].toLowerCase()} aplicado a ${items.length} fotos`);
+}
 
 function bindDesignItem(element) {
   const id = element.dataset.itemId;
-  element.addEventListener('pointerdown', event => startSlotDrag(event, id));
-  element.addEventListener('click', event => { event.stopPropagation(); selectItem(id); });
+  element.addEventListener('pointerdown', event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey) startSlotDrag(event, id); });
+  element.addEventListener('click', event => { event.stopPropagation(); selectItem(id, event); });
 }
 
 function startSlotDrag(event, id) {
   const item = findItem(id); if (!item || event.button !== 0) return;
   event.preventDefault();
-  selectedItemId = id; activeInspector = 'photo';
+  selectedItemIds = new Set([id]); selectionAnchorId = id; selectedItemId = id; activeInspector = 'photo';
   slotDrag = { id, duplicate: event.altKey };
   const startX = event.clientX;
   const startY = event.clientY;
@@ -1052,8 +1110,16 @@ async function handleFiles(fileList, firstSlot = null) {
   } catch { showToast('No se pudo leer alguna de las fotos'); }
 }
 
-function deleteSelected() { if (!selectedItemId) return; const page = currentPage(); page.items = page.items.filter(item => item.id !== selectedItemId); renumberItems(page); selectedItemId = null; activeInspector = 'page'; render(); saveProject(); showToast('Foto quitada · distribución ajustada'); }
-function duplicateSelected() { const item = findItem(selectedItemId); if (!item) return; const copy = { ...item, id: createId('item') }; currentPage().items.splice(item.slot + 1, 0, copy); renumberItems(currentPage()); selectedItemId = copy.id; render(); saveProject(); showToast('Foto duplicada · distribución ajustada'); }
+function deleteSelected() {
+  const page = currentPage(); const selected = selectedItems();
+  if (!page || !selected.length) return;
+  captureUndoState();
+  const ids = new Set(selected.map(item => item.id));
+  page.items = page.items.filter(item => !ids.has(item.id));
+  renumberItems(page); clearItemSelection(); activeInspector = 'page'; render(); saveProject();
+  showToast(`${selected.length} foto${selected.length === 1 ? '' : 's'} quitada${selected.length === 1 ? '' : 's'} · distribución ajustada`);
+}
+function duplicateSelected() { const item = findItem(selectedItemId); if (!item) return; const copy = { ...item, id: createId('item') }; currentPage().items.splice(item.slot + 1, 0, copy); renumberItems(currentPage()); setItemSelection([copy], copy.id); render(); saveProject(); showToast('Foto duplicada · distribución ajustada'); }
 function deleteCurrentPage() {
   removePageAt(currentPageIndex);
 }
@@ -1376,7 +1442,7 @@ $('#uploadZone').addEventListener('dragover', event => { event.preventDefault();
 $('#uploadZone').addEventListener('dragleave', () => $('#uploadZone').classList.remove('is-over'));
 $('#uploadZone').addEventListener('drop', event => { event.preventDefault(); $('#uploadZone').classList.remove('is-over'); handleFiles(event.dataTransfer.files); });
 
-$('#canvasPage').addEventListener('click', event => { if (event.target === $('#canvasPage')) { selectedItemId = null; activeInspector = 'page'; render(); } });
+$('#canvasPage').addEventListener('click', event => { if (event.target === $('#canvasPage')) { clearItemSelection(); activeInspector = 'page'; render(); } });
 $('#canvasPage').addEventListener('dragover', event => { event.preventDefault(); $('#canvasPage').classList.add('is-drop-target'); hoverSlotIndex = slotAtPoint(event.clientX, event.clientY); updateSlotGuides(); });
 $('#canvasPage').addEventListener('dragleave', event => { if (!$('#canvasPage').contains(event.relatedTarget)) $('#canvasPage').classList.remove('is-drop-target'); });
 $('#canvasPage').addEventListener('drop', event => { event.preventDefault(); $('#canvasPage').classList.remove('is-drop-target'); const targetSlot = slotAtPoint(event.clientX, event.clientY) ?? currentPage().items.length; const assetId = draggedAssetId; draggedAssetId = null; slotMode = false; hoverSlotIndex = null; if (assetId) addAssetToPage(assetId, targetSlot); else if (event.dataTransfer.files.length) handleFiles(event.dataTransfer.files, targetSlot); });
@@ -1407,6 +1473,9 @@ $$('.fit-default-btn').forEach(button => button.addEventListener('click', () => 
 $('#clearPageBtn').addEventListener('click', () => { if (currentPage().items.length) $('#clearPageConfirmModal').hidden = false; });
 
 $$('.inspector-tab').forEach(tab => tab.addEventListener('click', () => { activeInspector = tab.dataset.inspector; renderInspector(); }));
+$('#selectAllPhotosBtn').addEventListener('click', selectAllCurrentPage);
+$('#clearPhotoSelectionBtn').addEventListener('click', () => { clearItemSelection(); activeInspector = 'page'; render(); });
+$$('.batch-fit-btn').forEach(button => button.addEventListener('click', () => applyFrameToSelection(button.dataset.frame)));
 $$('.fit-btn').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; Object.assign(item, frameFields(validFrameMode(button.dataset.frame) ? button.dataset.frame : 'original')); renderPage(); renderInspector(); saveProject(); }));
 $('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoShotType').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.shotType = event.target.value; renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); }); $('#photoCameraMove').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMove = event.target.value; if (item.cameraMove === 'none') item.cameraMoveMode = 'overlay'; render(); saveProject(); }); $('#photoCameraMoveMode').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveMode = event.target.value === 'between' ? 'between' : 'overlay'; render(); saveProject(); });
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
@@ -1416,7 +1485,7 @@ $('#projectSort').addEventListener('change', event => { projectSort = ['updated'
 $$('[data-export]').forEach(button => button.addEventListener('click', async () => { const type = button.dataset.export; closeExport(); if (type === 'json') downloadProject(); else if (type === 'print') printAllPages(); else await exportImage(type); }));
 
 document.addEventListener('click', event => { if (!event.target.closest('.page-thumb-wrap')) closePageMenus(); });
-document.addEventListener('keydown', event => { const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editing) { event.preventDefault(); restoreLastUndo(); } if (event.key === 'Delete' && !editing) { if (selectedItemId) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); } if (event.key === 'Escape') { closeExport(); closeVersionModal(); closeNewProjectConfirm(); closeDeletePageConfirm(); closeClearPageConfirm(); closeDeleteProjectModal(); closePageMenus(); } });
+document.addEventListener('keydown', event => { const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && !editing && project && !$('#editorView').hidden) { event.preventDefault(); selectAllCurrentPage(); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editing) { event.preventDefault(); restoreLastUndo(); } if (event.key === 'Delete' && !editing) { if (selectedItems().length) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); } if (event.key === 'Escape') { closeExport(); closeVersionModal(); closeNewProjectConfirm(); closeDeletePageConfirm(); closeClearPageConfirm(); closeDeleteProjectModal(); closePageMenus(); } });
 
 showDashboard();
 hydrateProjectsFromIndexedDb();

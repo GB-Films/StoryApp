@@ -460,3 +460,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .background-preview { height:64px; margin-top:9px; border:1px solid #c9c9c9; background-color:#eee; background-position:center; background-repeat:no-repeat; background-size:cover; }
 .background-preview[hidden] { display:none; }
 .background-section .text-field { margin-top:4px; }
+.selection-actions { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.selection-actions .button { min-width:0; padding:0 7px; font-size:10px; }
+.selection-section > label:first-child output { color:#111; font:500 9px 'DM Mono',monospace; }
+.selection-section #batchFrameSection { margin-top:16px; padding-top:16px; border-top:1px solid #c9c9c9; }
+.selection-section #batchFrameSection > label { display:flex; margin-bottom:9px; color:#666; font:500 9px 'DM Mono',monospace; letter-spacing:.7px; }
+.batch-frame-options { grid-template-columns:1fr 1fr; gap:3px; }
