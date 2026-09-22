@@ -785,7 +785,7 @@ function storyboardMetaMarkup(pageNumber = currentPageIndex + 1, totalPages = pr
   const titleMarkup = project.showProjectTitle && project.title.trim() ? `<strong class="storyboard-meta-title">${escapeHtml(project.title)}</strong>` : '';
   const detailsMarkup = details.map(([label, value]) => `<span>${label === 'CLIENTE' && project.clientLogo ? `<img class="storyboard-meta-client-logo" src="${project.clientLogo}" alt="" />` : ''}<small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('');
   const pageMarkup = project.showPageNumber ? `<strong class="storyboard-meta-page">${String(pageNumber).padStart(2, '0')}</strong>` : '';
-  return `<div class="storyboard-meta-frame ${project.showProjectFrame ? '' : 'is-frame-hidden'}" style="--frame-text-color:${project.frameTextColor || '#111111'}" aria-hidden="true"><div class="storyboard-meta-top">${producerMarkup}${titleMarkup}</div><div class="storyboard-meta-bottom">${detailsMarkup ? `<div class="storyboard-meta-details">${detailsMarkup}</div>` : '<span></span>'}${pageMarkup}</div></div>`;
+  return `<div class="storyboard-meta-frame ${project.showProjectFrame ? '' : 'is-frame-hidden'}" style="--frame-text-color:${project.frameTextColor || '#111111'}" aria-hidden="true"><div class="storyboard-meta-top"><span class="storyboard-meta-rule"></span>${producerMarkup || '<span></span>'}<span class="storyboard-meta-rule"></span>${titleMarkup || '<span></span>'}<span class="storyboard-meta-rule"></span></div><div class="storyboard-meta-bottom"><span class="storyboard-meta-rule"></span>${detailsMarkup ? `<div class="storyboard-meta-details">${detailsMarkup}</div>` : '<span></span>'}<span class="storyboard-meta-rule"></span>${pageMarkup || '<span></span>'}<span class="storyboard-meta-rule"></span></div></div>`;
 }
 
 function renderLibrary() {
@@ -1361,23 +1361,46 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
     project.showDirectorMeta && project.director?.trim() ? ['DIRECTOR', project.director] : null
   ].filter(Boolean);
   ctx.save();
-  if (project.showProjectFrame) {
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = Math.max(1, Math.round(width / 1400));
-    ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2);
-  }
+  const frameLineWidth = Math.max(1, Math.round(width / 1400));
+  const frameRight = width - inset;
+  const frameBottom = height - inset;
+  const drawRule = (y, segments) => { if (!project.showProjectFrame) return; ctx.beginPath(); segments.forEach(([start, end]) => { if (end <= start) return; ctx.moveTo(start, y); ctx.lineTo(end, y); }); ctx.stroke(); };
+  if (project.showProjectFrame) { ctx.strokeStyle = '#111'; ctx.lineWidth = frameLineWidth; ctx.beginPath(); ctx.moveTo(inset, inset); ctx.lineTo(inset, frameBottom); ctx.moveTo(frameRight, inset); ctx.lineTo(frameRight, frameBottom); ctx.stroke(); }
   const frameTextColor = project.frameTextColor || '#111111';
   const fontSize = Math.max(11, Math.round(width * .009));
   ctx.font = `600 ${fontSize}px Arial`;
   ctx.textBaseline = 'middle';
   let leftX = inset + 22;
   if (logo) { const logoSize = Math.max(16, Math.round(barHeight * .7)); ctx.drawImage(logo, leftX, barY + (barHeight - logoSize) / 2, logoSize, logoSize); leftX += logoSize + 8; }
-  if (project.showProducerBranding && project.producer?.trim()) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'left'; ctx.fillText(project.producer.trim().toUpperCase().slice(0, 44), leftX, barY + barHeight / 2); }
-  if (project.showProjectTitle && project.title.trim()) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'right'; ctx.fillText(project.title.trim().toUpperCase().slice(0, 54), width - inset - 22, barY + barHeight / 2); }
-  let detailX = inset + 22;
+  let producerEnd = inset;
+  if (project.showProducerBranding && project.producer?.trim()) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'left'; const producerText = project.producer.trim().toUpperCase().slice(0, 44); ctx.fillText(producerText, leftX, barY + barHeight / 2); producerEnd = leftX + ctx.measureText(producerText).width; }
+  const titleText = project.showProjectTitle && project.title.trim() ? project.title.trim().toUpperCase().slice(0, 54) : '';
+  const titleEnd = frameRight - 22;
+  const titleStart = titleText ? titleEnd - (ctx.measureText(titleText).width) : frameRight;
+  if (titleText) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'right'; ctx.fillText(titleText, titleEnd, barY + barHeight / 2); }
+  ctx.lineWidth = frameLineWidth;
+  const topRuleSegments = [];
+  if (producerEnd > inset) topRuleSegments.push([inset, leftX - 8]);
+  if (producerEnd > inset || titleText) topRuleSegments.push([producerEnd > inset ? producerEnd + 8 : inset, titleText ? titleStart - 8 : frameRight]);
+  if (titleText) topRuleSegments.push([titleEnd + 8, frameRight]);
+  if (!topRuleSegments.length) topRuleSegments.push([inset, frameRight]);
+  drawRule(inset, topRuleSegments);
+  const detailsStart = inset + 22;
+  let detailX = detailsStart;
   ctx.textAlign = 'left';
   details.forEach(([label, value]) => { if (label === 'CLIENTE' && clientLogo) { const clientLogoSize = Math.max(12, Math.round(barHeight * .65)); ctx.drawImage(clientLogo, detailX, footerY + (barHeight - clientLogoSize) / 2, clientLogoSize, clientLogoSize); detailX += clientLogoSize + 5; } ctx.fillStyle = frameTextColor; ctx.font = `500 ${Math.max(8, Math.round(fontSize * .72))}px Arial`; const prefix = `${label} ·`; ctx.fillText(prefix, detailX, footerY + barHeight / 2); detailX += ctx.measureText(prefix).width + 5; ctx.fillStyle = frameTextColor; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; const text = value.trim().toUpperCase().slice(0, 30); ctx.fillText(text, detailX, footerY + barHeight / 2); detailX += ctx.measureText(text).width + 18; });
-  if (project.showPageNumber) { ctx.fillStyle = frameTextColor; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; ctx.textAlign = 'right'; ctx.fillText(String(pageNumber).padStart(2, '0'), width - inset - 22, footerY + barHeight / 2); }
+  const detailsEnd = detailX - (details.length ? 18 : 0);
+  const pageText = project.showPageNumber ? String(pageNumber).padStart(2, '0') : '';
+  ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`;
+  const pageEnd = frameRight - 22;
+  const pageStart = pageText ? pageEnd - ctx.measureText(pageText).width : frameRight;
+  if (pageText) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'right'; ctx.fillText(pageText, pageEnd, footerY + barHeight / 2); }
+  ctx.lineWidth = frameLineWidth;
+  const bottomRuleSegments = [];
+  if (details.length) bottomRuleSegments.push([inset, detailsStart - 8]);
+  bottomRuleSegments.push([details.length ? detailsEnd + 8 : inset, pageText ? pageStart - 8 : frameRight]);
+  if (pageText) bottomRuleSegments.push([pageEnd + 8, frameRight]);
+  drawRule(frameBottom, bottomRuleSegments);
   ctx.restore();
 }
 
