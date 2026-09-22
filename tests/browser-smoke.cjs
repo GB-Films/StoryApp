@@ -392,6 +392,11 @@ const fixture = () => {
     assert.equal(await page.locator('#pageTotal').textContent(), '3');
     assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
     await page.locator('[data-page-menu]').nth(2).click();
+    const pageMenu = page.locator('.page-thumb-menu').nth(2);
+    assert.equal(await pageMenu.locator('[data-copy-page="2"]').textContent(), 'Duplicar');
+    assert.equal(await pageMenu.locator('[data-export-page-png="2"]').textContent(), 'Exportar rápido como PNG');
+    const menuPlacement = await pageMenu.evaluate(menu => { const button = menu.parentElement.querySelector('[data-page-menu]').getBoundingClientRect(); const rect = menu.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, height: rect.height, styleTop: menu.style.top, viewport: window.innerHeight, isAbove: rect.bottom <= button.top + 1, isBelow: rect.top >= button.bottom - 1 }; });
+    assert.ok(menuPlacement.bottom <= menuPlacement.viewport && (menuPlacement.isAbove || menuPlacement.isBelow), 'page menu stays attached and inside the viewport');
     await page.locator('[data-delete-page-menu="2"]').click();
     assert.equal(await page.locator('#pageTotal').textContent(), '2');
     await page.keyboard.press('Control+Z');

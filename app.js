@@ -939,7 +939,7 @@ function removePageAt(pageIndex) {
   return true;
 }
 
-function closePageMenus() { $$('.page-thumb-wrap.is-menu-open').forEach(wrapper => { wrapper.classList.remove('is-menu-open'); const menu = wrapper.querySelector('.page-thumb-menu'); if (menu) { menu.style.left = ''; menu.style.top = ''; } }); }
+function closePageMenus() { $$('.page-thumb-wrap.is-menu-open').forEach(wrapper => { wrapper.classList.remove('is-menu-open'); const menu = wrapper.querySelector('.page-thumb-menu'); if (menu) { menu.classList.remove('opens-up'); menu.style.left = ''; menu.style.top = ''; } }); }
 
 function pageIndexAtPoint(clientX, clientY, track) {
   return [...track.querySelectorAll('[data-page-index]')].map(button => ({ button, rect: button.getBoundingClientRect() })).find(({ rect }) => clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom);
@@ -983,14 +983,15 @@ function renderPageCarousel() {
   const track = $('#pageCarouselTrack');
   if (!track) return;
   $('#carouselCount').textContent = `${project.pages.length} página${project.pages.length === 1 ? '' : 's'}`;
-  track.innerHTML = `${project.pages.map((page, index) => `<div class="page-thumb-wrap"><button class="page-thumb ${index === currentPageIndex ? 'is-active' : ''}" data-page-index="${index}" type="button"><span class="page-thumb-canvas ${pageFormatClass()}">${pageThumbnailMarkup(page)}</span><span class="page-thumb-label">${String(index + 1).padStart(2, '0')} · ${escapeHtml(page.title || `Página ${index + 1}`)}</span></button><button class="page-thumb-menu-button" data-page-menu type="button" aria-label="Opciones de ${escapeHtml(page.title || `Página ${index + 1}`)}" title="Opciones">⋯</button><div class="page-thumb-menu" role="menu"><button data-copy-page="${index}" type="button" role="menuitem">Copiar</button><button data-delete-page-menu="${index}" type="button" role="menuitem" ${project.pages.length <= 1 ? 'disabled' : ''}>Eliminar</button></div></div>`).join('')}<button class="page-thumb page-thumb-add" data-add-page type="button" aria-label="Agregar nueva página"><span class="page-thumb-canvas page-thumb-add-canvas ${pageFormatClass()}"><span class="page-thumb-add-symbol">＋</span></span><span class="page-thumb-label">＋ Nueva página</span></button>`;
+  track.innerHTML = `${project.pages.map((page, index) => `<div class="page-thumb-wrap"><button class="page-thumb ${index === currentPageIndex ? 'is-active' : ''}" data-page-index="${index}" type="button"><span class="page-thumb-canvas ${pageFormatClass()}">${pageThumbnailMarkup(page)}</span><span class="page-thumb-label">${String(index + 1).padStart(2, '0')} · ${escapeHtml(page.title || `Página ${index + 1}`)}</span></button><button class="page-thumb-menu-button" data-page-menu type="button" aria-label="Opciones de ${escapeHtml(page.title || `Página ${index + 1}`)}" title="Opciones">⋯</button><div class="page-thumb-menu" role="menu"><button data-copy-page="${index}" type="button" role="menuitem">Duplicar</button><button data-export-page-png="${index}" type="button" role="menuitem">Exportar rápido como PNG</button><button data-delete-page-menu="${index}" type="button" role="menuitem" ${project.pages.length <= 1 ? 'disabled' : ''}>Eliminar</button></div></div>`).join('')}<button class="page-thumb page-thumb-add" data-add-page type="button" aria-label="Agregar nueva página"><span class="page-thumb-canvas page-thumb-add-canvas ${pageFormatClass()}"><span class="page-thumb-add-symbol">＋</span></span><span class="page-thumb-label">＋ Nueva página</span></button>`;
   $$('.page-thumb-canvas:not(.page-thumb-add-canvas)', track).forEach(applyArtboardBackground);
   $$('[data-page-index]', track).forEach(button => {
     button.addEventListener('pointerdown', event => { if (event.altKey) startPageDuplicateDrag(Number(button.dataset.pageIndex), event, track); });
     button.addEventListener('click', () => { if (document.body.classList.contains('is-page-dragging')) return; currentPageIndex = Number(button.dataset.pageIndex); selectedItemId = null; activeInspector = 'page'; render(); });
   });
-  $$('[data-page-menu]', track).forEach(button => button.addEventListener('click', event => { event.stopPropagation(); const wrapper = button.closest('.page-thumb-wrap'); const menu = wrapper.querySelector('.page-thumb-menu'); const wasOpen = wrapper.classList.contains('is-menu-open'); closePageMenus(); if (!wasOpen) { const rect = button.getBoundingClientRect(); menu.style.left = `${Math.max(6, Math.min(window.innerWidth - 144, rect.right - 136))}px`; menu.style.top = `${Math.min(window.innerHeight - 82, rect.bottom + 4)}px`; wrapper.classList.add('is-menu-open'); } }));
+  $$('[data-page-menu]', track).forEach(button => button.addEventListener('click', event => { event.stopPropagation(); const wrapper = button.closest('.page-thumb-wrap'); const menu = wrapper.querySelector('.page-thumb-menu'); const wasOpen = wrapper.classList.contains('is-menu-open'); closePageMenus(); if (!wasOpen) { const rect = button.getBoundingClientRect(); wrapper.classList.add('is-menu-open'); menu.style.left = '0px'; menu.style.top = '0px'; const origin = menu.getBoundingClientRect(); const menuHeight = origin.height; const opensUp = window.innerHeight - rect.bottom < menuHeight + 10; const desiredLeft = Math.max(6, Math.min(window.innerWidth - 210, rect.right - 202)); const desiredTop = opensUp ? Math.max(6, rect.top - menuHeight - 4) : Math.min(window.innerHeight - menuHeight - 6, rect.bottom + 4); menu.classList.toggle('opens-up', opensUp); menu.style.left = `${desiredLeft - origin.left}px`; menu.style.top = `${desiredTop - origin.top}px`; } }));
   $$('[data-copy-page]', track).forEach(button => button.addEventListener('click', event => { event.stopPropagation(); duplicatePageAt(Number(button.dataset.copyPage)); }));
+  $$('[data-export-page-png]', track).forEach(button => button.addEventListener('click', event => { event.stopPropagation(); const pageIndex = Number(button.dataset.exportPagePng); closePageMenus(); exportPageAsPng(pageIndex); }));
   $$('[data-delete-page-menu]', track).forEach(button => button.addEventListener('click', event => { event.stopPropagation(); removePageAt(Number(button.dataset.deletePageMenu)); }));
   $('[data-add-page]', track)?.addEventListener('click', addNewPage);
 }
@@ -1591,6 +1592,16 @@ async function renderPageCanvas(page, pageIndex = currentPageIndex, totalPages =
   page.items.forEach(item => { const layout = itemLayout(item, page); drawCameraMoveOverlayCanvas(ctx, item, layout, width, height); drawPhotoAnnotationsCanvas(ctx, item, layout, width, height); const asset = findAsset(item.assetId); if (asset) drawItemMetadata(ctx, item, asset, layout, width, height); });
   await drawProjectMetaFrame(ctx, width, height, pageIndex + 1, totalPages);
   return canvas;
+}
+
+async function exportPageAsPng(pageIndex = currentPageIndex) {
+  const page = project.pages[pageIndex];
+  if (!page) return;
+  const canvas = await renderPageCanvas(page, pageIndex, project.pages.length);
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', .92));
+  if (!blob) return;
+  downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${pageIndex + 1}.png`);
+  showToast(`Página ${pageIndex + 1} exportada como PNG`);
 }
 
 async function exportImage(type) { const canvas = await renderPageCanvas(currentPage()); canvas.toBlob(blob => { downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${currentPageIndex + 1}.${type}`); showToast(`Página exportada como ${type.toUpperCase()}`); }, type === 'jpg' ? 'image/jpeg' : 'image/png', .92); }
