@@ -407,3 +407,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
   html:has(.workspace-app:not([hidden])), body:has(.workspace-app:not([hidden])) { height:100%; overflow:hidden; }
   .app-shell:has(.workspace-app:not([hidden])) { height:100vh; min-height:0; }
 }
+
+/* Main navigation: compact brand and Google account entry point. */
+.brand-logo { width:34px; height:34px; }
+.account-button { min-height:36px; display:inline-flex; align-items:center; gap:8px; padding:3px 8px 3px 4px; border:1px solid #4b4b4b; border-radius:2px; color:#fff; background:transparent; font:500 11px 'DM Sans',sans-serif; }
+.account-button:hover { color:#000; background:#fff; border-color:#fff; }
+.account-avatar { width:27px; height:27px; display:grid; place-items:center; overflow:hidden; border-radius:50%; color:#fff; background:#555; background-position:center; background-size:cover; font:600 12px 'Space Grotesk',sans-serif; }
+.account-button.is-authenticated .account-avatar { background-color:#fff; color:#000; }
+.account-label { max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width:800px) { .account-label { display:none; } .account-button { padding-right:4px; } }

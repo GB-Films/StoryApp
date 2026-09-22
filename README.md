@@ -27,3 +27,20 @@ Abrí `index.html` en el navegador. No requiere instalación ni servidor.
 ## Verificación
 
 `node --test tests/*.test.cjs` comprueba márgenes, proporciones, orden y ausencia de superposiciones en los tres formatos.
+
+## Acceso con Google
+
+La cabecera ya incluye el punto de entrada para la cuenta de Google. Para activarlo en una instalación, definí antes de cargar `auth.js` la configuración pública de la app web de Firebase:
+
+```html
+<script>
+  window.STORYBOARD_FIREBASE_CONFIG = {
+    apiKey: '...',
+    authDomain: 'tu-proyecto.firebaseapp.com',
+    projectId: 'tu-proyecto',
+    appId: '...'
+  };
+</script>
+```
+
+En Firebase Authentication hay que habilitar el proveedor Google y agregar `gb-films.github.io` a los dominios autorizados. Sin esa configuración, la app mantiene el modo local y muestra un aviso al intentar iniciar sesión.

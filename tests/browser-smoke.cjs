@@ -31,7 +31,7 @@ const fixture = () => {
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     const original = fixture();
-    await page.locator('#projectInput').setInputFiles({ name: 'storyboard.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(original)) });
+    await page.evaluate(data => { project = normalizeProject(data); currentProjectId = project.id; currentPageIndex = 0; selectedItemId = null; activeInspector = 'page'; showEditor(); render(); saveProject(); }, original);
     await page.waitForFunction(() => document.querySelectorAll('#canvasPage .design-item').length === 6);
     assert.equal(await page.locator('#canvasPage .storyboard-meta-page').textContent(), '01');
     await page.locator('#showProjectFrame').uncheck({ force: true });
@@ -54,6 +54,9 @@ const fixture = () => {
     assert.equal(await page.locator('#photosPerPage').count(), 0);
     assert.equal(await page.locator('#layoutDirection').count(), 0);
     assert.equal(await page.locator('#addPageBtn').count(), 0);
+    assert.equal(await page.locator('#importBtn').count(), 0);
+    assert.equal(await page.locator('#newProjectBtn').count(), 0);
+    assert.equal(await page.locator('#accountButton').count(), 1);
     assert.equal(await page.locator('.fit-btn').count(), 4);
     assert.equal(await page.locator('.fit-default-btn').count(), 4);
     assert.equal(await page.locator('#pageTotal').textContent(), '1');
