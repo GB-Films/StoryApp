@@ -231,9 +231,23 @@ function renderDashboard() {
     const preview = asset ? `<img src="${asset.image}" alt="" />` : '<span class="project-card-empty-mark">▱</span>';
     const pageCount = entry.pages.length;
     const photoCount = entry.assets.length;
-    return `<article class="project-card" style="--card-index:${index}"><button class="project-card-open" data-open-project="${entry.id}" type="button"><span class="project-card-preview ${asset ? '' : 'is-empty'}">${preview}<span class="project-card-format">${projectFormatLabel(entry.ratio)}</span></span><span class="project-card-body"><strong class="project-card-name">${escapeHtml(entry.title || 'Sin título')}</strong><small>${escapeHtml(entry.producer || 'Productora opcional')}</small><span class="project-card-meta"><span>${pageCount} página${pageCount === 1 ? '' : 's'}</span><span>${photoCount} foto${photoCount === 1 ? '' : 's'}</span><span>${projectDateLabel(entry.updatedAt)}</span></span></span><span class="project-card-arrow">↗</span></button><div class="project-card-footer"><label class="project-card-edit-label" for="dashboard-title-${entry.id}">TÍTULO DEL PROYECTO <span>EDITABLE</span></label><input id="dashboard-title-${entry.id}" class="project-card-title-input" data-project-title="${entry.id}" value="${escapeHtml(entry.title || '')}" placeholder="Título del proyecto" autocomplete="off" /><button class="project-card-delete" data-delete-project="${entry.id}" type="button">Eliminar proyecto</button></div></article>`;
+    const editIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.7 3.7 3.7-.7L18.5 8a2.5 2.5 0 0 0-3.5-3.5L4 16.5Zm9.5-9.5 4 4" /></svg>';
+    const deleteIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h8l1-13M10 11v6m4-6v6" /></svg>';
+    return `<article class="project-card" style="--card-index:${index}"><button class="project-card-open" data-open-project="${entry.id}" type="button"><span class="project-card-preview ${asset ? '' : 'is-empty'}">${preview}<span class="project-card-format">${projectFormatLabel(entry.ratio)}</span></span><span class="project-card-body"><strong class="project-card-name">${escapeHtml(entry.title || 'Sin título')}</strong><small>${escapeHtml(entry.producer || 'Productora opcional')}</small><span class="project-card-meta"><span>${pageCount} página${pageCount === 1 ? '' : 's'}</span><span>${photoCount} foto${photoCount === 1 ? '' : 's'}</span><span>${projectDateLabel(entry.updatedAt)}</span></span></span><span class="project-card-arrow">↗</span></button><div class="project-card-actions"><button class="project-card-action project-card-edit" data-edit-project="${entry.id}" type="button" aria-label="Editar nombre del proyecto" title="Editar nombre">${editIcon}</button><button class="project-card-action project-card-delete" data-delete-project="${entry.id}" type="button" aria-label="Eliminar proyecto" title="Eliminar proyecto">${deleteIcon}</button></div><div class="project-card-edit-row" data-edit-row="${entry.id}" hidden><label for="dashboard-title-${entry.id}">EDITAR NOMBRE</label><input id="dashboard-title-${entry.id}" class="project-card-title-input" data-project-title="${entry.id}" value="${escapeHtml(entry.title || '')}" placeholder="Título del proyecto" autocomplete="off" /><button class="project-card-edit-done" data-finish-edit="${entry.id}" type="button">Listo</button></div></article>`;
   }).join('');
   $$('[data-open-project]', grid).forEach(button => button.addEventListener('click', () => openProject(button.dataset.openProject)));
+  $$('[data-edit-project]', grid).forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    const card = button.closest('.project-card');
+    const input = card?.querySelector('[data-project-title]');
+    const row = card?.querySelector('[data-edit-row]');
+    if (!input || !row) return;
+    input.dataset.previousValue = input.value;
+    card.classList.add('is-editing');
+    row.hidden = false;
+    input.focus();
+    input.select();
+  }));
   $$('[data-project-title]', grid).forEach(input => {
     input.addEventListener('click', event => event.stopPropagation());
     input.addEventListener('input', event => {
@@ -244,8 +258,26 @@ function renderDashboard() {
       input.closest('.project-card')?.querySelector('.project-card-name')?.replaceChildren(document.createTextNode(entry.title || 'Sin título'));
       persistProjects();
     });
-    input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); input.blur(); } });
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); input.blur(); }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        input.value = input.dataset.previousValue || input.value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.blur();
+      }
+    });
+    input.addEventListener('blur', () => {
+      const card = input.closest('.project-card');
+      const row = card?.querySelector('[data-edit-row]');
+      if (row) row.hidden = true;
+      card?.classList.remove('is-editing');
+    });
   });
+  $$('[data-finish-edit]', grid).forEach(button => button.addEventListener('click', event => {
+    event.stopPropagation();
+    button.closest('.project-card')?.querySelector('[data-project-title]')?.blur();
+  }));
   $$('[data-delete-project]', grid).forEach(button => button.addEventListener('click', event => { event.stopPropagation(); openDeleteProjectModal(button.dataset.deleteProject); }));
 }
 
