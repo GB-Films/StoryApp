@@ -34,6 +34,7 @@ const CAMERA_MOVES = [
   { value: 'track-left', label: 'Travelling a izquierda', tag: 'TRACK ←' },
   { value: 'track-right', label: 'Travelling a derecha', tag: 'TRACK →' }
 ];
+const CAMERA_MOVE_VALUES = new Set(CAMERA_MOVES.map(move => move.value));
 
 const BACKGROUND_PATTERNS = new Set(['none', 'grid', 'dots', 'diagonal', 'blueprint']);
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
@@ -120,6 +121,7 @@ let draggedAssetId = null;
 let slotMode = false;
 let hoverSlotIndex = null;
 let slotDrag = null;
+let annotationToolMode = 'none';
 let zoom = 1;
 let toastTimer;
 let saveTimer;
@@ -136,6 +138,15 @@ const createId = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toS
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
 function shotTypeInfo(value) { return SHOT_TYPES.find(type => type.value === value) || SHOT_TYPES[0]; }
 function cameraMoveInfo(value) { return CAMERA_MOVES.find(move => move.value === value) || CAMERA_MOVES[0]; }
+function normalizeDrawingStrokes(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(-120).map(stroke => ({
+    id: typeof stroke?.id === 'string' ? stroke.id : createId('stroke'),
+    color: validHexColor(stroke?.color, '#ff3b30'),
+    width: clamp(Number(stroke?.width) || 2.4, .8, 8),
+    points: Array.isArray(stroke?.points) ? stroke.points.slice(0, 1500).map(point => ({ x: clamp(Number(point?.x) || 0, 0, 100), y: clamp(Number(point?.y) || 0, 0, 100) })) : []
+  })).filter(stroke => stroke.points.length);
+}
 function selectedItems() { const page = currentPage(); const ids = selectedItemIds.size ? selectedItemIds : selectedItemId ? new Set([selectedItemId]) : new Set(); return page ? page.items.filter(item => ids.has(item.id)) : []; }
 function itemIsSelected(item) { return selectedItemIds.size ? selectedItemIds.has(item.id) : item.id === selectedItemId; }
 function clearItemSelection() { selectedItemIds.clear(); selectionAnchorId = null; selectedItemId = null; }
@@ -257,7 +268,7 @@ function normalizeProject(data) {
     const migratedPage = { ...blankPage(`Página ${index + 1}`), ...page, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => {
       const legacyFit = migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit);
       const mode = validFrameMode(item.frame) ? item.frame : (legacyFit === 'cover' ? frameModeFromAspect(item.cropAspect || normalized.defaultCropAspect || formatAspect(normalized.ratio)) : 'original');
-      return { ...item, ...frameFields(mode), shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', cameraMove: item.cameraMove || 'none', cameraMoveMode: item.cameraMoveMode === 'between' ? 'between' : 'overlay', slot: Number.isFinite(item.slot) ? item.slot : itemIndex };
+      return { ...item, ...frameFields(mode), shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', cameraMove: CAMERA_MOVE_VALUES.has(item.cameraMove) ? item.cameraMove : 'none', cameraMoveMode: 'overlay', cameraMoveX: clamp(Number(item.cameraMoveX) || 50, 8, 92), cameraMoveY: clamp(Number(item.cameraMoveY) || 50, 8, 92), cameraMoveScale: clamp(Number(item.cameraMoveScale) || 1, .45, 1.45), cameraMoveColor: validHexColor(item.cameraMoveColor, '#ff3b30'), drawingColor: validHexColor(item.drawingColor, validHexColor(item.cameraMoveColor, '#ff3b30')), drawingWidth: clamp(Number(item.drawingWidth) || 2.4, .8, 8), drawingStrokes: normalizeDrawingStrokes(item.drawingStrokes), slot: Number.isFinite(item.slot) ? item.slot : itemIndex };
     }) : [] };
     if (data.layoutEngine !== 'adaptive') migratedPage.items.forEach(item => {
       if (item.fit === 'cover' && !item.cropAspect) item.cropAspect = legacyCropAspect(page, data);
@@ -672,55 +683,44 @@ function slotAtPoint(clientX, clientY) {
 
 function cameraMoveSvg(move, itemId, className = '') {
   const markerId = `camera-arrow-${String(itemId).replace(/[^a-z0-9_-]/gi, '')}`;
+  const straight = paths => paths.map(path => `<path d="${path}" marker-end="url(#${markerId})" />`).join('');
   let paths = '';
-  if (move.value === 'zoom-in' || move.value === 'dolly-in') paths = '<path d="M10 28 L28 10 M90 28 L72 10 M10 72 L28 90 M90 72 L72 90" marker-end="url(#' + markerId + ')" />';
-  if (move.value === 'zoom-out' || move.value === 'dolly-out') paths = '<path d="M28 10 L10 28 M72 10 L90 28 M28 90 L10 72 M72 90 L90 72" marker-end="url(#' + markerId + ')" />';
-  if (move.value === 'pan-left') paths = '<path d="M82 50 H18" marker-end="url(#' + markerId + ')" />';
-  if (move.value === 'pan-right') paths = '<path d="M18 50 H82" marker-end="url(#' + markerId + ')" />';
-  if (move.value === 'tilt-up') paths = '<path d="M50 82 V18" marker-end="url(#' + markerId + ')" />';
-  if (move.value === 'tilt-down') paths = '<path d="M50 18 V82" marker-end="url(#' + markerId + ')" />';
-  if (move.value === 'track-left') paths = '<path d="M82 42 H18 M82 58 H18" marker-end="url(#' + markerId + ')" />';
-  if (move.value === 'track-right') paths = '<path d="M18 42 H82 M18 58 H82" marker-end="url(#' + markerId + ')" />';
-  if (move.value === 'dolly-in' || move.value === 'dolly-out') paths += '<rect x="30" y="30" width="40" height="40" rx="2" />';
-  return `<svg class="${className}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="${markerId}" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L6 3 L0 6 Z" /></marker></defs><g>${paths}</g></svg>`;
+  if (move.value === 'zoom-in' || move.value === 'dolly-in') paths = straight(['M8 8 L35 35', 'M92 8 L65 35', 'M8 92 L35 65', 'M92 92 L65 65']);
+  if (move.value === 'zoom-out' || move.value === 'dolly-out') paths = straight(['M35 35 L8 8', 'M65 35 L92 8', 'M35 65 L8 92', 'M65 65 L92 92']);
+  if (move.value === 'pan-left') paths = straight(['M90 66 Q50 88 10 66']);
+  if (move.value === 'pan-right') paths = straight(['M10 66 Q50 88 90 66']);
+  if (move.value === 'tilt-up') paths = straight(['M72 90 Q90 50 72 10']);
+  if (move.value === 'tilt-down') paths = straight(['M72 10 Q90 50 72 90']);
+  if (move.value === 'track-left') paths = straight(['M90 40 L10 40', 'M90 62 L10 62']);
+  if (move.value === 'track-right') paths = straight(['M10 40 L90 40', 'M10 62 L90 62']);
+  if (move.value === 'dolly-in' || move.value === 'dolly-out') paths += '<rect x="31" y="31" width="38" height="38" rx="2" />';
+  return `<svg class="${className}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="${markerId}" viewBox="0 0 8 8" refX="6.8" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L8 4 L0 8 Z" /></marker></defs><g>${paths}</g></svg>`;
 }
 
 function cameraMoveMarkup(item) {
   const move = cameraMoveInfo(item.cameraMove);
-  if (move.value === 'none' || item.cameraMoveMode === 'between') return '';
-  return `<div class="camera-move-overlay camera-move-${move.value}" title="Movimiento de cámara: ${escapeHtml(move.label)}">${cameraMoveSvg(move, item.id)}<span>${escapeHtml(move.tag)}</span></div>`;
+  if (move.value === 'none') return '';
+  const editing = annotationToolMode === 'move' && selectedItemId === item.id;
+  return `<div class="camera-move-overlay camera-move-${move.value}${editing ? ' is-editing' : ''}" data-camera-overlay="${item.id}" style="--camera-x:${item.cameraMoveX ?? 50}%;--camera-y:${item.cameraMoveY ?? 50}%;--camera-scale:${item.cameraMoveScale ?? 1};--camera-color:${validHexColor(item.cameraMoveColor, '#ff3b30')}" title="${editing ? 'Arrastrá para mover las flechas' : `Movimiento de cámara: ${escapeHtml(move.label)}`}">${cameraMoveSvg(move, item.id)}</div>`;
 }
 
-function cameraMoveConnectorMarkup(page) {
-  const layouts = pageLayout(page);
-  const aspect = getPageAspect();
-  const pageWidth = aspect * 100;
-  const connections = [];
-  page.items.forEach((item, index) => {
-    const move = cameraMoveInfo(item.cameraMove);
-    const next = page.items[index + 1];
-    if (move.value === 'none' || item.cameraMoveMode !== 'between' || !next || !layouts[index] || !layouts[index + 1]) return;
-    const toPhysical = rect => ({ x: rect.x / 100 * pageWidth, y: rect.y, width: rect.width / 100 * pageWidth, height: rect.height });
-    const from = toPhysical(layouts[index].card);
-    const target = toPhysical(layouts[index + 1].card);
-    const fromCenter = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
-    const targetCenter = { x: target.x + target.width / 2, y: target.y + target.height / 2 };
-    const dx = targetCenter.x - fromCenter.x;
-    const dy = targetCenter.y - fromCenter.y;
-    const distance = Math.hypot(dx, dy);
-    if (!distance) return;
-    const ux = dx / distance;
-    const uy = dy / distance;
-    const edgePoint = (rect, x, y) => { const tx = Math.abs(x) > .001 ? rect.width / 2 / Math.abs(x) : Infinity; const ty = Math.abs(y) > .001 ? rect.height / 2 / Math.abs(y) : Infinity; const distanceToEdge = Math.min(tx, ty); return { x: rect.x + rect.width / 2 + x * distanceToEdge, y: rect.y + rect.height / 2 + y * distanceToEdge }; };
-    const start = edgePoint(from, ux, uy);
-    const end = edgePoint(target, -ux, -uy);
-    const markerId = `camera-connector-${String(item.id).replace(/[^a-z0-9_-]/gi, '')}`;
-    connections.push({ move, markerId, start, end, mid: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 } });
-  });
-  if (!connections.length) return '';
-  const lines = connections.map(({ markerId, start, end }) => `<defs><marker id="${markerId}" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L6 3 L0 6 Z" /></marker></defs><line x1="${start.x / pageWidth * 100}" y1="${start.y}" x2="${end.x / pageWidth * 100}" y2="${end.y}" marker-end="url(#${markerId})" />`).join('');
-  const labels = connections.map(({ move, mid }) => `<span class="camera-move-connector-label" style="left:${mid.x / pageWidth * 100}%;top:${mid.y}%">${escapeHtml(move.tag)}</span>`).join('');
-  return `<svg class="camera-move-connectors" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>${labels}`;
+function drawingPathData(points) {
+  if (!points?.length) return '';
+  if (points.length === 1) return `M${points[0].x} ${points[0].y} l.01 .01`;
+  let path = `M${points[0].x} ${points[0].y}`;
+  for (let index = 1; index < points.length - 1; index += 1) {
+    const midpoint = { x: (points[index].x + points[index + 1].x) / 2, y: (points[index].y + points[index + 1].y) / 2 };
+    path += ` Q${points[index].x} ${points[index].y} ${midpoint.x} ${midpoint.y}`;
+  }
+  const last = points.at(-1);
+  return `${path} L${last.x} ${last.y}`;
+}
+
+function drawingMarkup(item) {
+  const strokes = normalizeDrawingStrokes(item.drawingStrokes);
+  const editing = annotationToolMode === 'draw' && selectedItemId === item.id;
+  const paths = strokes.map(stroke => `<path data-stroke-id="${stroke.id}" d="${drawingPathData(stroke.points)}" stroke="${stroke.color}" stroke-width="${stroke.width}" />`).join('');
+  return `<svg class="photo-drawing-layer${editing ? ' is-editing' : ''}" data-drawing-layer="${item.id}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-label="Dibujo sobre la foto">${paths}</svg>`;
 }
 
 function itemImageBox(item, layout) {
@@ -749,7 +749,7 @@ function itemMarkup(item, page = currentPage()) {
   const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
   const infoMarkup = project.showDescriptions ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${PHOTO_INFO_OVERLAY_HEIGHT}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : '';
   return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${itemIsSelected(item) ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
-    <div class="design-photo" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${overlayInfo ? infoMarkup : ''}</div>
+    <div class="design-photo" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>
     ${overlayInfo ? '' : infoMarkup}
   </div>`;
 }
@@ -788,9 +788,10 @@ function renderPage() {
   applyArtboardBackground($('#canvasPage'));
   const guides = slotMode ? pageLayout(page).map(({ card: rect }, index) => `<div class="slot-guide" data-slot-index="${index}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%"><span>${String(index + 1).padStart(2, '0')}</span></div>`).join('') : '';
   const content = page?.items.length ? page.items.map(item => itemMarkup(item, page)).join('') : '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>';
-  const cameraConnectors = page ? cameraMoveConnectorMarkup(page) : '';
-  $('#canvasPage').innerHTML = guides + content + cameraConnectors + storyboardMetaMarkup();
+  $('#canvasPage').innerHTML = guides + content + storyboardMetaMarkup();
   $$('.design-item').forEach(item => bindDesignItem(item));
+  $$('[data-camera-overlay]').forEach(overlay => bindCameraOverlay(overlay));
+  $$('[data-drawing-layer]').forEach(layer => bindDrawingLayer(layer));
   $$('.description-editor').forEach(editor => {
     editor.addEventListener('pointerdown', event => event.stopPropagation());
     editor.addEventListener('click', event => event.stopPropagation());
@@ -838,12 +839,16 @@ function addNewPage() {
   showToast('Página nueva agregada');
 }
 
+function cloneStoryboardItem(item) {
+  return { ...item, id: createId('item'), drawingStrokes: normalizeDrawingStrokes(item.drawingStrokes).map(stroke => ({ ...stroke, id: createId('stroke'), points: stroke.points.map(point => ({ ...point })) })) };
+}
+
 function duplicatePage(source) {
   return {
     ...source,
     id: createId('page'),
     title: `${source.title || 'Página'} · copia`,
-    items: source.items.map(item => ({ ...item, id: createId('item') }))
+    items: source.items.map(cloneStoryboardItem)
   };
 }
 
@@ -1018,10 +1023,18 @@ function renderInspector() {
   $('#photoShotType').value = item.shotType || 'PG';
   $('#photoTitle').value = item.title || '';
   $('#photoDescription').value = item.description || '';
-  $('#photoCameraMove').value = item.cameraMove || 'none';
-  $('#photoCameraMoveMode').value = item.cameraMoveMode || 'overlay';
-  $('#photoCameraMoveMode').disabled = item.slot >= currentPage().items.length - 1;
-  $('#photoCameraMoveMode').title = item.slot >= currentPage().items.length - 1 ? 'El último plano no tiene un siguiente plano para conectar' : '';
+  $$('.camera-preset').forEach(button => button.classList.toggle('is-active', button.dataset.cameraPreset === (item.cameraMove || 'none')));
+  $('#photoAnnotationColor').value = validHexColor(item.drawingColor || item.cameraMoveColor, '#ff3b30');
+  $('#photoCameraScale').value = Math.round((item.cameraMoveScale ?? 1) * 100);
+  $('#cameraScaleValue').textContent = `${Math.round((item.cameraMoveScale ?? 1) * 100)}%`;
+  $('#photoDrawingWidth').value = item.drawingWidth ?? 2.4;
+  $('#drawingWidthValue').textContent = Number(item.drawingWidth ?? 2.4).toFixed(1);
+  $('#moveCameraOverlayBtn').classList.toggle('is-active', annotationToolMode === 'move');
+  $('#moveCameraOverlayBtn').disabled = !item.cameraMove || item.cameraMove === 'none';
+  $('#drawOnPhotoBtn').classList.toggle('is-active', annotationToolMode === 'draw');
+  $('#undoDrawingBtn').disabled = !item.drawingStrokes?.length;
+  $('#clearDrawingBtn').disabled = !item.drawingStrokes?.length;
+  $('#cameraToolHelp').textContent = annotationToolMode === 'move' ? 'Arrastrá las flechas directamente sobre la foto.' : annotationToolMode === 'draw' ? 'Dibujá sobre la foto. Desactivá el lápiz cuando termines.' : 'Elegí un movimiento. Después podés mover las flechas o dibujar directamente sobre la foto.';
   const frameModes = asset ? frameModesForAsset(asset) : ['original', ...Object.keys(FRAME_ASPECTS)];
   const currentFrame = itemFrameMode(item);
   renderFrameButtons('.fit-btn', frameModes, frameModes.includes(currentFrame) ? currentFrame : 'original');
@@ -1073,6 +1086,75 @@ function applyFrameToSelection(mode) {
   showToast(`Encuadre ${FRAME_LABELS[mode].toLowerCase()} aplicado a ${items.length} fotos`);
 }
 
+function setAnnotationToolMode(mode) {
+  annotationToolMode = annotationToolMode === mode ? 'none' : mode;
+  renderPage();
+  renderInspector();
+}
+
+function bindCameraOverlay(overlay) {
+  overlay.addEventListener('pointerdown', event => {
+    if (annotationToolMode !== 'move' || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const item = findItem(overlay.dataset.cameraOverlay);
+    const photo = overlay.closest('.design-photo');
+    if (!item || !photo) return;
+    const rect = photo.getBoundingClientRect();
+    const start = { x: event.clientX, y: event.clientY, itemX: item.cameraMoveX ?? 50, itemY: item.cameraMoveY ?? 50 };
+    overlay.setPointerCapture?.(event.pointerId);
+    const onMove = moveEvent => {
+      item.cameraMoveX = clamp(start.itemX + (moveEvent.clientX - start.x) / rect.width * 100, 8, 92);
+      item.cameraMoveY = clamp(start.itemY + (moveEvent.clientY - start.y) / rect.height * 100, 8, 92);
+      overlay.style.setProperty('--camera-x', `${item.cameraMoveX}%`);
+      overlay.style.setProperty('--camera-y', `${item.cameraMoveY}%`);
+    };
+    const finish = () => { overlay.removeEventListener('pointermove', onMove); overlay.removeEventListener('pointerup', finish); overlay.removeEventListener('pointercancel', finish); saveProject(); };
+    overlay.addEventListener('pointermove', onMove);
+    overlay.addEventListener('pointerup', finish);
+    overlay.addEventListener('pointercancel', finish);
+  });
+}
+
+function bindDrawingLayer(layer) {
+  layer.addEventListener('pointerdown', event => {
+    if (annotationToolMode !== 'draw' || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const item = findItem(layer.dataset.drawingLayer);
+    if (!item) return;
+    item.drawingStrokes = normalizeDrawingStrokes(item.drawingStrokes);
+    const stroke = { id: createId('stroke'), color: validHexColor(item.drawingColor, '#ff3b30'), width: clamp(Number(item.drawingWidth) || 2.4, .8, 8), points: [] };
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.dataset.strokeId = stroke.id;
+    path.setAttribute('stroke', stroke.color);
+    path.setAttribute('stroke-width', stroke.width);
+    layer.appendChild(path);
+    const addPoint = pointEvent => {
+      const rect = layer.getBoundingClientRect();
+      const point = { x: clamp((pointEvent.clientX - rect.left) / rect.width * 100, 0, 100), y: clamp((pointEvent.clientY - rect.top) / rect.height * 100, 0, 100) };
+      const previous = stroke.points.at(-1);
+      if (previous && Math.hypot(point.x - previous.x, point.y - previous.y) < .35) return;
+      stroke.points.push(point);
+      path.setAttribute('d', drawingPathData(stroke.points));
+    };
+    addPoint(event);
+    layer.setPointerCapture?.(event.pointerId);
+    const onMove = moveEvent => addPoint(moveEvent);
+    const finish = () => {
+      layer.removeEventListener('pointermove', onMove);
+      layer.removeEventListener('pointerup', finish);
+      layer.removeEventListener('pointercancel', finish);
+      if (stroke.points.length) item.drawingStrokes.push(stroke);
+      saveProject();
+      renderInspector();
+    };
+    layer.addEventListener('pointermove', onMove);
+    layer.addEventListener('pointerup', finish);
+    layer.addEventListener('pointercancel', finish);
+  });
+}
+
 function bindDesignItem(element) {
   const id = element.dataset.itemId;
   element.addEventListener('pointerdown', event => { if (!event.ctrlKey && !event.metaKey && !event.shiftKey) startSlotDrag(event, id); });
@@ -1108,7 +1190,7 @@ function startSlotDrag(event, id) {
     }
     if (targetSlot !== null) {
       if (slotDrag.duplicate) {
-        const copy = { ...item, id: createId('item') };
+        const copy = cloneStoryboardItem(item);
         currentPage().items.splice(targetSlot, 0, copy);
         renumberItems(currentPage());
         selectedItemId = copy.id;
@@ -1144,7 +1226,7 @@ function addAssetToPage(assetId, targetSlot = null) {
 }
 
 function createAutoItems(assets) {
-  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, ...frameFields(projectDefaultFrame()), focusX: 50, focusY: 50, shotType: 'PG', title: '', description: '', cameraMove: 'none', cameraMoveMode: 'overlay' }));
+  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, ...frameFields(projectDefaultFrame()), focusX: 50, focusY: 50, shotType: 'PG', title: '', description: '', cameraMove: 'none', cameraMoveMode: 'overlay', cameraMoveX: 50, cameraMoveY: 50, cameraMoveScale: 1, cameraMoveColor: '#ff3b30', drawingColor: '#ff3b30', drawingWidth: 2.4, drawingStrokes: [] }));
 }
 
 function autoArrange() {
@@ -1189,7 +1271,7 @@ function deleteSelected() {
   renumberItems(page); clearItemSelection(); activeInspector = 'page'; render(); saveProject();
   showToast(`${selected.length} foto${selected.length === 1 ? '' : 's'} quitada${selected.length === 1 ? '' : 's'} · distribución ajustada`);
 }
-function duplicateSelected() { const item = findItem(selectedItemId); if (!item) return; const copy = { ...item, id: createId('item') }; currentPage().items.splice(item.slot + 1, 0, copy); renumberItems(currentPage()); setItemSelection([copy], copy.id); render(); saveProject(); showToast('Foto duplicada · distribución ajustada'); }
+function duplicateSelected() { const item = findItem(selectedItemId); if (!item) return; const copy = cloneStoryboardItem(item); currentPage().items.splice(item.slot + 1, 0, copy); renumberItems(currentPage()); setItemSelection([copy], copy.id); render(); saveProject(); showToast('Foto duplicada · distribución ajustada'); }
 function deleteCurrentPage() {
   removePageAt(currentPageIndex);
 }
@@ -1296,35 +1378,52 @@ function drawCanvasArrow(ctx, x1, y1, x2, y2) {
   const angle = Math.atan2(y2 - y1, x2 - x1);
   const size = Math.max(8, Math.min(18, Math.hypot(x2 - x1, y2 - y1) * .08));
   ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - size * Math.cos(angle - Math.PI / 6), y2 - size * Math.sin(angle - Math.PI / 6)); ctx.lineTo(x2 - size * Math.cos(angle + Math.PI / 6), y2 - size * Math.sin(angle + Math.PI / 6)); ctx.closePath(); ctx.fill();
+  drawCanvasArrowHead(ctx, x2, y2, angle, size);
+}
+
+function drawCanvasArrowHead(ctx, x, y, angle, size) {
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - size * Math.cos(angle - Math.PI / 6), y - size * Math.sin(angle - Math.PI / 6)); ctx.lineTo(x - size * Math.cos(angle + Math.PI / 6), y - size * Math.sin(angle + Math.PI / 6)); ctx.closePath(); ctx.fill();
 }
 
 function drawCameraMoveOverlayCanvas(ctx, item, layout, width, height) {
   const move = cameraMoveInfo(item.cameraMove);
-  if (move.value === 'none' || item.cameraMoveMode === 'between') return;
-  const x = layout.card.x / 100 * width; const y = layout.card.y / 100 * height; const w = layout.card.width / 100 * width; const h = layout.card.height / 100 * height;
-  const inset = Math.min(w, h) * .12;
-  ctx.save(); ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = Math.max(2, Math.min(7, w * .012)); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = 4;
-  if (move.value === 'zoom-in' || move.value === 'dolly-in') { drawCanvasArrow(ctx, x + inset, y + inset * 2.4, x + inset * 3, y + inset); drawCanvasArrow(ctx, x + w - inset, y + inset * 2.4, x + w - inset * 3, y + inset); drawCanvasArrow(ctx, x + inset, y + h - inset * 2.4, x + inset * 3, y + h - inset); drawCanvasArrow(ctx, x + w - inset, y + h - inset * 2.4, x + w - inset * 3, y + h - inset); }
-  if (move.value === 'zoom-out' || move.value === 'dolly-out') { drawCanvasArrow(ctx, x + inset * 3, y + inset, x + inset, y + inset * 2.4); drawCanvasArrow(ctx, x + w - inset * 3, y + inset, x + w - inset, y + inset * 2.4); drawCanvasArrow(ctx, x + inset * 3, y + h - inset, x + inset, y + h - inset * 2.4); drawCanvasArrow(ctx, x + w - inset * 3, y + h - inset, x + w - inset, y + h - inset * 2.4); }
-  if (move.value === 'pan-left') drawCanvasArrow(ctx, x + w - inset, y + h / 2, x + inset, y + h / 2);
-  if (move.value === 'pan-right') drawCanvasArrow(ctx, x + inset, y + h / 2, x + w - inset, y + h / 2);
-  if (move.value === 'tilt-up') drawCanvasArrow(ctx, x + w / 2, y + h - inset, x + w / 2, y + inset);
-  if (move.value === 'tilt-down') drawCanvasArrow(ctx, x + w / 2, y + inset, x + w / 2, y + h - inset);
-  if (move.value === 'track-left') { drawCanvasArrow(ctx, x + w - inset, y + h * .43, x + inset, y + h * .43); drawCanvasArrow(ctx, x + w - inset, y + h * .57, x + inset, y + h * .57); }
-  if (move.value === 'track-right') { drawCanvasArrow(ctx, x + inset, y + h * .43, x + w - inset, y + h * .43); drawCanvasArrow(ctx, x + inset, y + h * .57, x + w - inset, y + h * .57); }
-  if (move.value === 'dolly-in' || move.value === 'dolly-out') { ctx.strokeRect(x + w * .32, y + h * .32, w * .36, h * .36); }
-  ctx.shadowBlur = 0; ctx.font = `600 ${Math.max(9, Math.round(width * .008))}px Arial`; const labelWidth = Math.min(w * .7, Math.max(70, ctx.measureText(move.tag).width + 16)); ctx.fillStyle = 'rgba(0,0,0,.78)'; ctx.fillRect(x + (w - labelWidth) / 2, y + h - Math.max(24, h * .12), labelWidth, Math.max(18, h * .1)); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(move.tag, x + w / 2, y + h - Math.max(24, h * .12) / 2); ctx.restore();
+  if (move.value === 'none') return;
+  const box = itemImageBox(item, layout);
+  const x = box.x / 100 * width; const y = box.y / 100 * height; const w = box.width / 100 * width; const h = box.height / 100 * height;
+  const scale = clamp(Number(item.cameraMoveScale) || 1, .45, 1.45) * .92;
+  const centerX = x + w * clamp(Number(item.cameraMoveX) || 50, 8, 92) / 100;
+  const centerY = y + h * clamp(Number(item.cameraMoveY) || 50, 8, 92) / 100;
+  const point = (px, py) => ({ x: centerX + (px - 50) / 100 * w * scale, y: centerY + (py - 50) / 100 * h * scale });
+  const line = (fromX, fromY, toX, toY) => { const from = point(fromX, fromY); const to = point(toX, toY); drawCanvasArrow(ctx, from.x, from.y, to.x, to.y); };
+  const curve = (fromX, fromY, controlX, controlY, toX, toY) => { const from = point(fromX, fromY); const control = point(controlX, controlY); const to = point(toX, toY); ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.quadraticCurveTo(control.x, control.y, to.x, to.y); ctx.stroke(); drawCanvasArrowHead(ctx, to.x, to.y, Math.atan2(to.y - control.y, to.x - control.x), Math.max(9, Math.min(20, Math.min(w, h) * .07))); };
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.strokeStyle = validHexColor(item.cameraMoveColor, '#ff3b30'); ctx.fillStyle = validHexColor(item.cameraMoveColor, '#ff3b30'); ctx.lineWidth = Math.max(2, Math.min(8, Math.min(w, h) * .018)); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.shadowColor = 'rgba(255,255,255,.95)'; ctx.shadowBlur = Math.max(1, ctx.lineWidth * .7);
+  if (move.value === 'zoom-in' || move.value === 'dolly-in') { line(8, 8, 35, 35); line(92, 8, 65, 35); line(8, 92, 35, 65); line(92, 92, 65, 65); }
+  if (move.value === 'zoom-out' || move.value === 'dolly-out') { line(35, 35, 8, 8); line(65, 35, 92, 8); line(35, 65, 8, 92); line(65, 65, 92, 92); }
+  if (move.value === 'pan-left') curve(90, 66, 50, 88, 10, 66);
+  if (move.value === 'pan-right') curve(10, 66, 50, 88, 90, 66);
+  if (move.value === 'tilt-up') curve(72, 90, 90, 50, 72, 10);
+  if (move.value === 'tilt-down') curve(72, 10, 90, 50, 72, 90);
+  if (move.value === 'track-left') { line(90, 40, 10, 40); line(90, 62, 10, 62); }
+  if (move.value === 'track-right') { line(10, 40, 90, 40); line(10, 62, 90, 62); }
+  if (move.value === 'dolly-in' || move.value === 'dolly-out') { const start = point(31, 31); const end = point(69, 69); ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y); }
+  ctx.restore();
 }
 
-function drawCameraMoveConnectorsCanvas(ctx, page, width, height) {
-  const layouts = pageLayout(page); const aspect = getPageAspect(); const pageWidth = aspect * 100;
-  page.items.forEach((item, index) => {
-    const move = cameraMoveInfo(item.cameraMove); const next = page.items[index + 1];
-    if (move.value === 'none' || item.cameraMoveMode !== 'between' || !next || !layouts[index] || !layouts[index + 1]) return;
-    const toPhysical = rect => ({ x: rect.x / 100 * pageWidth, y: rect.y, width: rect.width / 100 * pageWidth, height: rect.height }); const from = toPhysical(layouts[index].card); const target = toPhysical(layouts[index + 1].card); const fromCenter = { x: from.x + from.width / 2, y: from.y + from.height / 2 }; const targetCenter = { x: target.x + target.width / 2, y: target.y + target.height / 2 }; const dx = targetCenter.x - fromCenter.x; const dy = targetCenter.y - fromCenter.y; const distance = Math.hypot(dx, dy); if (!distance) return; const ux = dx / distance; const uy = dy / distance; const edgePoint = (rect, x, y) => { const tx = Math.abs(x) > .001 ? rect.width / 2 / Math.abs(x) : Infinity; const ty = Math.abs(y) > .001 ? rect.height / 2 / Math.abs(y) : Infinity; const edge = Math.min(tx, ty); return { x: rect.x + rect.width / 2 + x * edge, y: rect.y + rect.height / 2 + y * edge }; }; const start = edgePoint(from, ux, uy); const end = edgePoint(target, -ux, -uy); const sx = start.x / pageWidth * width; const sy = start.y / 100 * height; const ex = end.x / pageWidth * width; const ey = end.y / 100 * height;
-    ctx.save(); ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = Math.max(2, Math.min(6, width * .004)); ctx.lineCap = 'round'; ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = 4; drawCanvasArrow(ctx, sx, sy, ex, ey); ctx.shadowBlur = 0; ctx.font = `600 ${Math.max(9, Math.round(width * .007))}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const label = move.tag; const labelWidth = ctx.measureText(label).width + 14; const mx = (sx + ex) / 2; const my = (sy + ey) / 2; ctx.fillStyle = 'rgba(0,0,0,.82)'; ctx.fillRect(mx - labelWidth / 2, my - 11, labelWidth, 22); ctx.fillStyle = '#fff'; ctx.fillText(label, mx, my); ctx.restore();
+function drawPhotoAnnotationsCanvas(ctx, item, layout, width, height) {
+  const strokes = normalizeDrawingStrokes(item.drawingStrokes);
+  if (!strokes.length) return;
+  const box = itemImageBox(item, layout);
+  const x = box.x / 100 * width; const y = box.y / 100 * height; const w = box.width / 100 * width; const h = box.height / 100 * height;
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  strokes.forEach(stroke => {
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = Math.max(1, Math.min(w, h) * stroke.width / 100);
+    ctx.beginPath();
+    stroke.points.forEach((pointValue, index) => { const px = x + pointValue.x / 100 * w; const py = y + pointValue.y / 100 * h; if (!index) ctx.moveTo(px, py); else ctx.lineTo(px, py); });
+    if (stroke.points.length === 1) { const pointValue = stroke.points[0]; ctx.lineTo(x + pointValue.x / 100 * w + .01, y + pointValue.y / 100 * h + .01); }
+    ctx.stroke();
   });
+  ctx.restore();
 }
 
 async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) {
@@ -1386,8 +1485,7 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
 async function renderPageCanvas(page) {
   const width = project.ratio === 'portrait' ? 900 : 1600; const height = Math.round(width / getPageAspect()); const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); await drawArtboardBackground(ctx, width, height);
   await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const layout = itemLayout(item, page); image.onload = () => { drawImageInBox(ctx, image, layout.image.x / 100 * width, layout.image.y / 100 * height, layout.image.width / 100 * width, layout.image.height / 100 * height, item.fit, item.focusX, item.focusY); drawItemMetadata(ctx, item, asset, layout, width, height); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
-  page.items.forEach(item => drawCameraMoveOverlayCanvas(ctx, item, itemLayout(item, page), width, height));
-  drawCameraMoveConnectorsCanvas(ctx, page, width, height);
+  page.items.forEach(item => { const layout = itemLayout(item, page); drawCameraMoveOverlayCanvas(ctx, item, layout, width, height); drawPhotoAnnotationsCanvas(ctx, item, layout, width, height); });
   await drawProjectMetaFrame(ctx, width, height, currentPageIndex + 1, project.pages.length);
   return canvas;
 }
@@ -1414,11 +1512,9 @@ function printAllPages() {
       const node = document.createElement('div');
       node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`;
       node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`;
-      node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${overlayInfo ? infoMarkup : ''}</div>${overlayInfo ? '' : infoMarkup}`;
-      node.insertAdjacentHTML('beforeend', cameraMoveMarkup(item));
+      node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>${overlayInfo ? '' : infoMarkup}`;
       sheet.appendChild(node);
     });
-    sheet.insertAdjacentHTML('beforeend', cameraMoveConnectorMarkup(page));
     sheet.insertAdjacentHTML('beforeend', storyboardMetaMarkup(pageIndex + 1, project.pages.length));
     layer.appendChild(sheet);
   });
@@ -1574,7 +1670,15 @@ $('#selectAllPhotosBtn').addEventListener('click', selectAllCurrentPage);
 $('#clearPhotoSelectionBtn').addEventListener('click', () => { clearItemSelection(); activeInspector = 'page'; render(); });
 $$('.batch-fit-btn').forEach(button => button.addEventListener('click', () => applyFrameToSelection(button.dataset.frame)));
 $$('.fit-btn').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; Object.assign(item, frameFields(validFrameMode(button.dataset.frame) ? button.dataset.frame : 'original')); renderPage(); renderInspector(); saveProject(); }));
-$('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoShotType').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.shotType = event.target.value; renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); }); $('#photoCameraMove').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMove = event.target.value; if (item.cameraMove === 'none') item.cameraMoveMode = 'overlay'; render(); saveProject(); }); $('#photoCameraMoveMode').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveMode = event.target.value === 'between' ? 'between' : 'overlay'; render(); saveProject(); });
+$('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoShotType').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.shotType = event.target.value; renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); });
+$$('.camera-preset').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; item.cameraMove = CAMERA_MOVE_VALUES.has(button.dataset.cameraPreset) ? button.dataset.cameraPreset : 'none'; item.cameraMoveMode = 'overlay'; if (item.cameraMove === 'none' && annotationToolMode === 'move') annotationToolMode = 'none'; renderPage(); renderInspector(); saveProject(); }));
+$('#photoAnnotationColor').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; const color = validHexColor(event.target.value, '#ff3b30'); item.cameraMoveColor = color; item.drawingColor = color; renderPage(); saveProject(); });
+$('#photoCameraScale').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveScale = clamp(Number(event.target.value) / 100, .45, 1.45); $('#cameraScaleValue').textContent = `${Math.round(item.cameraMoveScale * 100)}%`; renderPage(); saveProject(); });
+$('#photoDrawingWidth').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.drawingWidth = clamp(Number(event.target.value), .8, 8); $('#drawingWidthValue').textContent = item.drawingWidth.toFixed(1); saveProject(); });
+$('#moveCameraOverlayBtn').addEventListener('click', () => setAnnotationToolMode('move'));
+$('#drawOnPhotoBtn').addEventListener('click', () => setAnnotationToolMode('draw'));
+$('#undoDrawingBtn').addEventListener('click', () => { const item = findItem(selectedItemId); if (!item?.drawingStrokes?.length) return; item.drawingStrokes.pop(); renderPage(); renderInspector(); saveProject(); });
+$('#clearDrawingBtn').addEventListener('click', () => { const item = findItem(selectedItemId); if (!item?.drawingStrokes?.length) return; item.drawingStrokes = []; renderPage(); renderInspector(); saveProject(); });
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
 
 $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#manageVersionsBtn').addEventListener('click', openVersionsModal); $('#createVersionBtn').addEventListener('click', openVersionModal); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $$('[data-version-format]').forEach(button => button.addEventListener('click', () => createProjectVersion(button.dataset.versionFormat))); $('#cancelVersionBtn').addEventListener('click', closeVersionModal); $('#versionModal').addEventListener('click', event => { if (event.target === $('#versionModal')) closeVersionModal(); }); $('#cancelVersionsBtn').addEventListener('click', closeVersionsModal); $('#versionsModal').addEventListener('click', event => { if (event.target === $('#versionsModal')) closeVersionsModal(); }); $('#cancelDeleteVersionBtn').addEventListener('click', closeDeleteVersionModal); $('#cancelDeleteVersionBtnSecondary').addEventListener('click', closeDeleteVersionModal); $('#confirmDeleteVersionBtn').addEventListener('click', confirmDeleteVersion); $('#deleteVersionModal').addEventListener('click', event => { if (event.target === $('#deleteVersionModal')) closeDeleteVersionModal(); }); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelClearPageBtn').addEventListener('click', closeClearPageConfirm); $('#cancelClearPageBtnSecondary').addEventListener('click', closeClearPageConfirm); $('#confirmClearPageBtn').addEventListener('click', confirmClearPage); $('#clearPageConfirmModal').addEventListener('click', event => { if (event.target === $('#clearPageConfirmModal')) closeClearPageConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });

@@ -134,15 +134,14 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .design-photo img { width:100%; height:100%; display:block; object-fit:contain; pointer-events:none; }
 .design-item.fit-cover .design-photo img { object-fit:cover; }
 .design-item.fit-contain { background:transparent; }
-.camera-move-overlay { position:absolute; z-index:8; inset:0; color:#fff; pointer-events:none; }
-.camera-move-overlay svg { width:100%; height:100%; overflow:visible; filter:drop-shadow(0 1px 2px rgba(0,0,0,.9)); }
-.camera-move-overlay svg path,.camera-move-overlay svg rect { fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2; vector-effect:non-scaling-stroke; }
+.camera-move-overlay { position:absolute; z-index:7; left:var(--camera-x,50%); top:var(--camera-y,50%); width:92%; height:92%; color:var(--camera-color,#ff3b30); pointer-events:none; transform:translate(-50%,-50%) scale(var(--camera-scale,1)); transform-origin:center; }
+.camera-move-overlay.is-editing { pointer-events:auto; cursor:move; touch-action:none; }
+.camera-move-overlay svg { width:100%; height:100%; overflow:visible; filter:drop-shadow(0 1px 1px rgba(255,255,255,.95)) drop-shadow(0 1px 2px rgba(0,0,0,.65)); }
+.camera-move-overlay svg path,.camera-move-overlay svg rect { fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:3; vector-effect:non-scaling-stroke; }
 .camera-move-overlay svg marker path { fill:currentColor; stroke:none; }
-.camera-move-overlay > span { position:absolute; left:50%; bottom:9%; padding:4px 7px; color:#fff; background:rgba(0,0,0,.78); font:600 clamp(7px,.72vw,10px)/1 'DM Mono',monospace; letter-spacing:.4px; transform:translateX(-50%); white-space:nowrap; }
-.camera-move-connectors { position:absolute; z-index:6; inset:0; width:100%; height:100%; overflow:visible; color:#fff; pointer-events:none; filter:drop-shadow(0 1px 2px rgba(0,0,0,.9)); }
-.camera-move-connectors line { fill:none; stroke:currentColor; stroke-linecap:round; stroke-width:.55; vector-effect:non-scaling-stroke; }
-.camera-move-connectors marker path { fill:currentColor; stroke:none; }
-.camera-move-connector-label { position:absolute; z-index:7; padding:4px 7px; color:#fff; background:rgba(0,0,0,.82); font:600 clamp(7px,.72vw,10px)/1 'DM Mono',monospace; letter-spacing:.4px; transform:translate(-50%,-50%); white-space:nowrap; }
+.photo-drawing-layer { position:absolute; z-index:8; inset:0; width:100%; height:100%; overflow:hidden; pointer-events:none; }
+.photo-drawing-layer.is-editing { pointer-events:auto; cursor:crosshair; touch-action:none; }
+.photo-drawing-layer path { fill:none; stroke-linecap:round; stroke-linejoin:round; }
 .description-box { width:100%; min-height:0; flex:0 0 auto; display:flex; flex-direction:column; justify-content:center; gap:2px; overflow:hidden; padding:2px 8px; border:1px solid #000; color:#fff; background:#000; text-align:left; pointer-events:auto; }
 .description-overlay { position:absolute; z-index:3; left:0; bottom:0; border:0; background:rgba(0,0,0,.78); }
 .description-overlay.is-empty { background:rgba(0,0,0,.42); }
@@ -247,6 +246,20 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .option-arrow { color:#000; }
 .toast { background:#000; box-shadow:var(--shadow); border-radius:2px; }
 .selection-status.photo-selected { color:#000; }
+.camera-preset-grid { display:grid; grid-template-columns:1fr 1fr; gap:5px; }
+.camera-preset { min-height:42px; display:flex; align-items:center; gap:7px; padding:6px 7px; border:1px solid #c9c9c9; border-radius:2px; color:#444; background:#fff; font:500 9px/1.15 'DM Mono',monospace; text-align:left; }
+.camera-preset:hover { border-color:#111; }
+.camera-preset.is-active { color:#fff; border-color:#000; background:#000; }
+.camera-preset span { min-width:27px; color:#ff3b30; font:700 14px/1 'DM Sans',sans-serif; text-align:center; }
+.camera-preset.is-active span { color:#fff; }
+.annotation-settings { display:grid; grid-template-columns:auto 36px; align-items:center; gap:8px 10px; margin-top:12px; }
+.annotation-settings label { display:flex; align-items:center; justify-content:space-between; color:#666; font:500 9px 'DM Mono',monospace; letter-spacing:.6px; }
+.annotation-settings input[type=color] { width:36px; height:28px; padding:2px; border:1px solid #c9c9c9; background:#fff; }
+.annotation-settings input[type=range] { grid-column:1 / -1; margin-top:-2px; }
+.annotation-tool-row { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
+.annotation-tool-row .button { min-height:34px; padding:7px 6px; font-size:9px; }
+.annotation-tool-row .button.is-active { color:#fff; border-color:#000; background:#000; }
+.annotation-secondary-actions { margin-top:6px; }
 .canvas-page.is-slot-mode .slot-guide { border-color:rgba(0,0,0,.55); background:rgba(255,255,255,.2); }
 .canvas-page.is-slot-mode .slot-guide span { color:#000; background:rgba(255,255,255,.9); }
 .canvas-page.is-slot-mode .slot-guide.is-target { border-color:#000; background:rgba(0,0,0,.14); box-shadow:0 0 0 3px rgba(0,0,0,.12); }
