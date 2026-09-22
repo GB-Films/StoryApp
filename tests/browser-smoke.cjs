@@ -33,6 +33,15 @@ const fixture = () => {
     const original = fixture();
     await page.locator('#projectInput').setInputFiles({ name: 'storyboard.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(original)) });
     await page.waitForFunction(() => document.querySelectorAll('#canvasPage .design-item').length === 6);
+    const viewportLayout = await page.evaluate(() => {
+      const workspace = document.querySelector('#canvasWorkspace').getBoundingClientRect();
+      const carousel = document.querySelector('#pageCarousel').getBoundingClientRect();
+      const inspector = document.querySelector('.inspector-panel');
+      return { workspaceScrolls: document.querySelector('#canvasWorkspace').scrollHeight > document.querySelector('#canvasWorkspace').clientHeight + 1, carouselInside: carousel.bottom <= workspace.bottom + 1, inspectorCanScroll: inspector.scrollHeight >= inspector.clientHeight };
+    });
+    assert.equal(viewportLayout.workspaceScrolls, false, 'canvas workspace does not need page scrolling');
+    assert.equal(viewportLayout.carouselInside, true, 'page thumbnails stay inside the fixed canvas area');
+    assert.equal(viewportLayout.inspectorCanScroll, true, 'long inspector content scrolls independently');
     assert.equal(await page.locator('#photosPerPage').count(), 0);
     assert.equal(await page.locator('#layoutDirection').count(), 0);
     assert.equal(await page.locator('#addPageBtn').count(), 0);

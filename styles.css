@@ -384,3 +384,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
   .modal-actions { flex-direction:column-reverse; }
   .modal-actions .button { width:100%; }
 }
+
+/* Keep the editor viewport stable while long side panels scroll independently. */
+.workspace-app { height:calc(100vh - 54px); min-height:0; overflow:hidden; }
+.editor-area { min-height:0; overflow:hidden; }
+.library-panel,.inspector-panel { min-height:0; overflow-y:auto; overflow-x:hidden; }
+.canvas-workspace { min-height:0; overflow:hidden; }
+.canvas-stage { min-width:0; min-height:0; overflow:hidden; }
+.canvas-stage .canvas-page { max-width:100%; max-height:100%; }
+.page-carousel { min-height:0; flex:0 0 auto; }
