@@ -230,7 +230,7 @@ const fixture = () => {
     await page.locator('[data-export="print"]').click();
     assert.equal(await page.locator('.print-page .design-item').count(), 16);
     await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
-    await page.waitForFunction(() => document.querySelector('#saveState').textContent.includes('Guardado local'));
+    await page.waitForTimeout(400);
     await page.reload();
     await page.waitForTimeout(250);
     await page.evaluate(() => { document.body.classList.remove('auth-locked'); document.querySelector('#authGate').hidden = true; });
@@ -295,14 +295,16 @@ const fixture = () => {
     await page.keyboard.press('Control+Z');
     assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
     await page.evaluate(() => { project.ratio = 'landscape'; render(); createProjectVersion('portrait'); });
-    await page.waitForFunction(() => document.querySelectorAll('#versionSwitcher option').length === 2);
-    assert.equal(await page.locator('#versionSwitcher').isVisible(), true);
-    assert.equal(await page.locator('#versionSwitcher').isDisabled(), false);
+    await page.waitForFunction(() => projectVersions().length === 2);
+    assert.equal(await page.locator('#versionSwitcher').count(), 0);
+    assert.equal(await page.locator('#saveState').count(), 0);
     const landscapeVersionId = await page.evaluate(() => projects.find(entry => entry.versionGroupId === project.versionGroupId && entry.ratio === 'landscape').id);
-    await page.locator('#versionSwitcher').selectOption(landscapeVersionId);
+    await page.locator('#manageVersionsBtn').click();
+    await page.locator(`[data-open-version="${landscapeVersionId}"]`).click();
     await page.waitForFunction(() => project.ratio === 'landscape');
     const portraitVersionId = await page.evaluate(() => projects.find(entry => entry.versionGroupId === project.versionGroupId && entry.ratio === 'portrait').id);
-    await page.locator('#versionSwitcher').selectOption(portraitVersionId);
+    await page.locator('#manageVersionsBtn').click();
+    await page.locator(`[data-open-version="${portraitVersionId}"]`).click();
     await page.waitForFunction(() => project.ratio === 'portrait');
     const portraitWorkspace = await page.evaluate(() => { const carousel = document.querySelector('#pageCarousel').getBoundingClientRect(); const canvas = document.querySelector('#canvasPage').getBoundingClientRect(); const stage = document.querySelector('#canvasStage').getBoundingClientRect(); return { carouselRight: carousel.right, canvasLeft: canvas.left, canvasHeight: canvas.height, stageHeight: stage.height }; });
     assert.ok(portraitWorkspace.carouselRight <= portraitWorkspace.canvasLeft + 1, 'portrait pages stay to the left of the canvas');
@@ -312,13 +314,13 @@ const fixture = () => {
     assert.equal(await page.locator('[data-version-row]').count(), 2);
     await page.locator('[data-version-name]').nth(1).fill('Vertical Stories');
     await page.locator('[data-version-name]').nth(1).press('Tab');
-    await page.waitForFunction(() => document.querySelector('#versionSwitcher').textContent.includes('Vertical Stories'));
+    await page.waitForFunction(() => projects.some(entry => entry.versionName === 'Vertical Stories'));
     await page.locator('[data-delete-version]').nth(1).click();
     assert.equal(await page.locator('#deleteVersionModal').isVisible(), true);
     await page.locator('#confirmDeleteVersionBtn').click();
     await page.waitForFunction(() => project.ratio === 'landscape');
     await page.evaluate(() => createProjectVersion('portrait'));
-    await page.waitForFunction(() => project.ratio === 'portrait' && document.querySelectorAll('#versionSwitcher option').length === 2);
+    await page.waitForFunction(() => project.ratio === 'portrait' && projectVersions().length === 2);
     await page.evaluate(() => showDashboard());
     assert.equal(await page.locator('.project-version-chip').count(), 0);
     assert.doesNotMatch(await page.locator('#projectCount').textContent(), /versi[oó]n/i);
@@ -332,7 +334,8 @@ const fixture = () => {
     assert.ok(groupedCardLayout.actionsBottom <= groupedCardLayout.openBottom, 'dashboard actions remain inside grouped project cards');
     await page.locator('[data-open-project]').first().click();
     const recreatedPortraitId = await page.evaluate(() => projects.find(entry => entry.versionGroupId === project.versionGroupId && entry.ratio === 'portrait').id);
-    await page.locator('#versionSwitcher').selectOption(recreatedPortraitId);
+    await page.locator('#manageVersionsBtn').click();
+    await page.locator(`[data-open-version="${recreatedPortraitId}"]`).click();
     await page.waitForFunction(() => project.ratio === 'portrait');
     // Check real-browser layout for mixed orientations on vertical and square pages too.
     for (const ratio of ['portrait', 'square']) {

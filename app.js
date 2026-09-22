@@ -343,17 +343,14 @@ function saveProject() {
   if (index === -1) projects.unshift(candidate);
   else projects[index] = candidate;
   clearTimeout(saveTimer);
-  $('#saveState').innerHTML = '<span class="status-dot is-saving"></span>Guardando…';
   saveTimer = setTimeout(() => {
     try {
       localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(candidate));
       localStorage.setItem(CURRENT_PROJECT_KEY, candidate.id);
       writeIndexedDbSnapshot();
-      $('#saveState').innerHTML = '<span class="status-dot"></span>Guardado local';
     } catch {
       writeIndexedDbSnapshot();
-      $('#saveState').innerHTML = '<span class="status-dot"></span>Guardado en navegador';
     }
   }, 320);
 }
@@ -534,18 +531,6 @@ function renderDashboard() {
   $$('[data-delete-project]', grid).forEach(button => button.addEventListener('click', event => { event.stopPropagation(); openDeleteProjectModal(button.dataset.deleteProject); }));
 }
 
-function renderVersionSwitcher() {
-  const switcher = $('#versionSwitcher');
-  if (!switcher) return;
-  if (!project) { switcher.hidden = true; switcher.innerHTML = ''; return; }
-  const versions = projectVersions();
-  switcher.hidden = false;
-  switcher.disabled = versions.length < 2;
-  switcher.title = versions.length < 2 ? 'Todavía no hay otras versiones' : 'Cambiar versión del proyecto';
-  switcher.innerHTML = versions.map(version => `<option value="${version.id}">${escapeHtml(version.versionName || 'Base')} · ${projectFormatLabel(version.ratio)}</option>`).join('');
-  switcher.value = project.id;
-}
-
 function projectVersions(groupId = project?.versionGroupId || project?.id) {
   return projects.filter(entry => (entry.versionGroupId || entry.id) === groupId).sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 }
@@ -563,7 +548,6 @@ function renderVersionManager() {
     entry.updatedAt = new Date().toISOString();
     if (project.id === entry.id) project.versionName = entry.versionName;
     persistProjects();
-    renderVersionSwitcher();
     renderVersionManager();
     showToast('Nombre de versión actualizado');
   }));
@@ -596,7 +580,6 @@ function confirmDeleteVersion() {
     closeVersionsModal();
     openProject(fallback.id);
   } else {
-    renderVersionSwitcher();
     renderVersionManager();
   }
   showToast(`Versión ${entry.versionName || projectFormatLabel(entry.ratio)} eliminada`);
@@ -613,11 +596,9 @@ function showDashboard() {
   $('#dashboardView').hidden = false;
   $('#editorView').hidden = true;
   $('#backToDashboardBtn').hidden = true;
-  $('#versionSwitcher').hidden = true;
   $('#manageVersionsBtn').hidden = true;
   $('#createVersionBtn').hidden = true;
   $('#exportBtn').hidden = true;
-  $('#saveState').innerHTML = '<span class="status-dot"></span>Guardado local';
   $('#breadcrumbTitle').textContent = 'Todos los proyectos';
   renderDashboard();
 }
@@ -626,7 +607,6 @@ function showEditor() {
   $('#dashboardView').hidden = true;
   $('#editorView').hidden = false;
   $('#backToDashboardBtn').hidden = false;
-  $('#versionSwitcher').hidden = false;
   $('#manageVersionsBtn').hidden = false;
   $('#createVersionBtn').hidden = false;
   $('#exportBtn').hidden = false;
@@ -962,7 +942,6 @@ function renderControls() {
   $('#projectAgency').value = project.agency || '';
   $('#projectDirector').value = project.director || '';
   $('#breadcrumbTitle').textContent = project.title || 'Sin título';
-  renderVersionSwitcher();
   $('#editorView').classList.toggle('is-portrait-layout', project.ratio === 'portrait');
   $('#backgroundColor').value = project.background;
   $('#backgroundValue').textContent = project.background.toUpperCase();
@@ -1599,7 +1578,6 @@ $('#photoFocusX').addEventListener('input', event => { const item = findItem(sel
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
 
 $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#manageVersionsBtn').addEventListener('click', openVersionsModal); $('#createVersionBtn').addEventListener('click', openVersionModal); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $$('[data-version-format]').forEach(button => button.addEventListener('click', () => createProjectVersion(button.dataset.versionFormat))); $('#cancelVersionBtn').addEventListener('click', closeVersionModal); $('#versionModal').addEventListener('click', event => { if (event.target === $('#versionModal')) closeVersionModal(); }); $('#cancelVersionsBtn').addEventListener('click', closeVersionsModal); $('#versionsModal').addEventListener('click', event => { if (event.target === $('#versionsModal')) closeVersionsModal(); }); $('#cancelDeleteVersionBtn').addEventListener('click', closeDeleteVersionModal); $('#cancelDeleteVersionBtnSecondary').addEventListener('click', closeDeleteVersionModal); $('#confirmDeleteVersionBtn').addEventListener('click', confirmDeleteVersion); $('#deleteVersionModal').addEventListener('click', event => { if (event.target === $('#deleteVersionModal')) closeDeleteVersionModal(); }); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelClearPageBtn').addEventListener('click', closeClearPageConfirm); $('#cancelClearPageBtnSecondary').addEventListener('click', closeClearPageConfirm); $('#confirmClearPageBtn').addEventListener('click', confirmClearPage); $('#clearPageConfirmModal').addEventListener('click', event => { if (event.target === $('#clearPageConfirmModal')) closeClearPageConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
-$('#versionSwitcher').addEventListener('change', event => { if (event.target.value && event.target.value !== project?.id) openProject(event.target.value); });
 $('#projectSort').addEventListener('change', event => { projectSort = ['updated', 'title', 'client'].includes(event.target.value) ? event.target.value : 'updated'; localStorage.setItem(PROJECT_SORT_KEY, projectSort); renderDashboard(); }); $('#cancelFormatBtn').addEventListener('click', () => pendingNewProject ? closeNewProjectFormat() : closeFormatModal()); $('#formatModal').addEventListener('click', event => { if (event.target === $('#formatModal')) pendingNewProject ? closeNewProjectFormat() : closeFormatModal(); });
 $$('[data-export]').forEach(button => button.addEventListener('click', async () => { const type = button.dataset.export; closeExport(); if (type === 'json') downloadProject(); else if (type === 'print') printAllPages(); else await exportImage(type); }));
 
