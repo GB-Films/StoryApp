@@ -154,6 +154,19 @@ const fixture = () => {
     assert.equal(arrowLayering.selectedZIndex, '20', 'the selected photo owns the arrow layer while editing');
     assert.equal(arrowLayering.overlayZIndex, '12');
     assert.equal(arrowLayering.overlayInsidePhoto, true);
+    assert.equal(await page.locator('#cameraMoveSpill').isChecked(), false, 'camera arrows stay clipped by default');
+    await page.locator('#cameraMoveSpill').check({ force: true });
+    const spillLayering = await page.evaluate(() => {
+      const item = document.querySelector('#canvasPage .design-item.is-selected');
+      const photo = item?.querySelector('.design-photo');
+      const overlay = photo?.querySelector('.camera-move-overlay');
+      return { itemClass: item?.classList.contains('has-camera-spill'), photoOverflow: getComputedStyle(photo).overflow, photoContain: getComputedStyle(photo).contain, overlayZIndex: getComputedStyle(overlay).zIndex };
+    });
+    assert.equal(spillLayering.itemClass, true, 'spill mode belongs to the selected shot');
+    assert.equal(spillLayering.photoOverflow, 'visible', 'spill mode lets the arrow leave the photo');
+    assert.equal(spillLayering.photoContain, 'none', 'spill mode releases the photo paint clip');
+    assert.equal(spillLayering.overlayZIndex, '30', 'spilled arrows sit above neighboring photos');
+    await page.locator('#cameraMoveSpill').uncheck({ force: true });
     await page.locator('#photoDrawingWidth').fill('4');
     await page.locator('#drawOnPhotoBtn').click();
     const drawingLayerBox = await page.locator('#canvasPage .photo-drawing-layer.is-editing').boundingBox();
@@ -244,7 +257,7 @@ const fixture = () => {
       const arrow = node.closest('.design-photo')?.querySelector('.camera-move-overlay');
       return { descriptionZIndex: getComputedStyle(node).zIndex, arrowZIndex: arrow ? getComputedStyle(arrow).zIndex : null };
     });
-    assert.equal(descriptionLayering.descriptionZIndex, '20', 'descriptions stay above camera arrows');
+    assert.equal(descriptionLayering.descriptionZIndex, '40', 'descriptions stay above camera arrows');
     assert.equal(descriptionLayering.arrowZIndex, '12');
     await page.locator('#infoPlacement').selectOption('below');
     assert.equal(await page.locator('#canvasPage .description-overlay').count(), 0);

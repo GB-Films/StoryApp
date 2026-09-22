@@ -268,7 +268,7 @@ function normalizeProject(data) {
     const migratedPage = { ...blankPage(`Página ${index + 1}`), ...page, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => {
       const legacyFit = migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit);
       const mode = validFrameMode(item.frame) ? item.frame : (legacyFit === 'cover' ? frameModeFromAspect(item.cropAspect || normalized.defaultCropAspect || formatAspect(normalized.ratio)) : 'original');
-      return { ...item, ...frameFields(mode), shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', cameraMove: CAMERA_MOVE_VALUES.has(item.cameraMove) ? item.cameraMove : 'none', cameraMoveMode: 'overlay', cameraMoveX: clamp(Number(item.cameraMoveX) || 50, 8, 92), cameraMoveY: clamp(Number(item.cameraMoveY) || 50, 8, 92), cameraMoveScale: clamp(Number(item.cameraMoveScale) || 1, .45, 1.45), cameraMoveColor: validHexColor(item.cameraMoveColor, '#ff3b30'), drawingColor: validHexColor(item.drawingColor, validHexColor(item.cameraMoveColor, '#ff3b30')), drawingWidth: clamp(Number(item.drawingWidth) || 2.4, .8, 8), drawingStrokes: normalizeDrawingStrokes(item.drawingStrokes), slot: Number.isFinite(item.slot) ? item.slot : itemIndex };
+      return { ...item, ...frameFields(mode), shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', cameraMove: CAMERA_MOVE_VALUES.has(item.cameraMove) ? item.cameraMove : 'none', cameraMoveMode: 'overlay', cameraMoveX: clamp(Number(item.cameraMoveX) || 50, 8, 92), cameraMoveY: clamp(Number(item.cameraMoveY) || 50, 8, 92), cameraMoveScale: clamp(Number(item.cameraMoveScale) || 1, .45, 1.45), cameraMoveColor: validHexColor(item.cameraMoveColor, '#ff3b30'), cameraMoveSpill: item.cameraMoveSpill === true, drawingColor: validHexColor(item.drawingColor, validHexColor(item.cameraMoveColor, '#ff3b30')), drawingWidth: clamp(Number(item.drawingWidth) || 2.4, .8, 8), drawingStrokes: normalizeDrawingStrokes(item.drawingStrokes), slot: Number.isFinite(item.slot) ? item.slot : itemIndex };
     }) : [] };
     if (data.layoutEngine !== 'adaptive') migratedPage.items.forEach(item => {
       if (item.fit === 'cover' && !item.cropAspect) item.cropAspect = legacyCropAspect(page, data);
@@ -701,7 +701,7 @@ function cameraMoveMarkup(item) {
   const move = cameraMoveInfo(item.cameraMove);
   if (move.value === 'none') return '';
   const editing = annotationToolMode === 'move' && selectedItemId === item.id;
-  return `<div class="camera-move-overlay camera-move-${move.value}${editing ? ' is-editing' : ''}" data-camera-overlay="${item.id}" style="--camera-x:${item.cameraMoveX ?? 50}%;--camera-y:${item.cameraMoveY ?? 50}%;--camera-scale:${item.cameraMoveScale ?? 1};--camera-color:${validHexColor(item.cameraMoveColor, '#ff3b30')}" title="${editing ? 'Arrastrá para mover las flechas' : `Movimiento de cámara: ${escapeHtml(move.label)}`}">${cameraMoveSvg(move, item.id)}</div>`;
+  return `<div class="camera-move-overlay camera-move-${move.value}${item.cameraMoveSpill ? ' camera-spill' : ''}${editing ? ' is-editing' : ''}" data-camera-overlay="${item.id}" style="--camera-x:${item.cameraMoveX ?? 50}%;--camera-y:${item.cameraMoveY ?? 50}%;--camera-scale:${item.cameraMoveScale ?? 1};--camera-color:${validHexColor(item.cameraMoveColor, '#ff3b30')}" title="${editing ? 'Arrastrá para mover las flechas' : `Movimiento de cámara: ${escapeHtml(move.label)}`}">${cameraMoveSvg(move, item.id)}</div>`;
 }
 
 function drawingPathData(points) {
@@ -748,8 +748,8 @@ function itemMarkup(item, page = currentPage()) {
   const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
   const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
   const infoMarkup = project.showDescriptions ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${PHOTO_INFO_OVERLAY_HEIGHT}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : '';
-  return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${itemIsSelected(item) ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
-    <div class="design-photo" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>
+  return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''} ${itemIsSelected(item) ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
+    <div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>
     ${overlayInfo ? '' : infoMarkup}
   </div>`;
 }
@@ -1027,6 +1027,8 @@ function renderInspector() {
   $('#photoAnnotationColor').value = validHexColor(item.drawingColor || item.cameraMoveColor, '#ff3b30');
   $('#photoCameraScale').value = Math.round((item.cameraMoveScale ?? 1) * 100);
   $('#cameraScaleValue').textContent = `${Math.round((item.cameraMoveScale ?? 1) * 100)}%`;
+  $('#cameraMoveSpill').checked = item.cameraMoveSpill === true;
+  $('#cameraMoveSpill').disabled = !item.cameraMove || item.cameraMove === 'none';
   $('#photoDrawingWidth').value = item.drawingWidth ?? 2.4;
   $('#drawingWidthValue').textContent = Number(item.drawingWidth ?? 2.4).toFixed(1);
   $('#moveCameraOverlayBtn').classList.toggle('is-active', annotationToolMode === 'move');
@@ -1226,7 +1228,7 @@ function addAssetToPage(assetId, targetSlot = null) {
 }
 
 function createAutoItems(assets) {
-  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, ...frameFields(projectDefaultFrame()), focusX: 50, focusY: 50, shotType: 'PG', title: '', description: '', cameraMove: 'none', cameraMoveMode: 'overlay', cameraMoveX: 50, cameraMoveY: 50, cameraMoveScale: 1, cameraMoveColor: '#ff3b30', drawingColor: '#ff3b30', drawingWidth: 2.4, drawingStrokes: [] }));
+  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, ...frameFields(projectDefaultFrame()), focusX: 50, focusY: 50, shotType: 'PG', title: '', description: '', cameraMove: 'none', cameraMoveMode: 'overlay', cameraMoveX: 50, cameraMoveY: 50, cameraMoveScale: 1, cameraMoveColor: '#ff3b30', cameraMoveSpill: false, drawingColor: '#ff3b30', drawingWidth: 2.4, drawingStrokes: [] }));
 }
 
 function autoArrange() {
@@ -1396,7 +1398,7 @@ function drawCameraMoveOverlayCanvas(ctx, item, layout, width, height) {
   const point = (px, py) => ({ x: centerX + (px - 50) / 100 * w * scale, y: centerY + (py - 50) / 100 * h * scale });
   const line = (fromX, fromY, toX, toY) => { const from = point(fromX, fromY); const to = point(toX, toY); drawCanvasArrow(ctx, from.x, from.y, to.x, to.y); };
   const curve = (fromX, fromY, controlX, controlY, toX, toY) => { const from = point(fromX, fromY); const control = point(controlX, controlY); const to = point(toX, toY); ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.quadraticCurveTo(control.x, control.y, to.x, to.y); ctx.stroke(); drawCanvasArrowHead(ctx, to.x, to.y, Math.atan2(to.y - control.y, to.x - control.x), Math.max(9, Math.min(20, Math.min(w, h) * .07))); };
-  ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); ctx.strokeStyle = validHexColor(item.cameraMoveColor, '#ff3b30'); ctx.fillStyle = validHexColor(item.cameraMoveColor, '#ff3b30'); ctx.lineWidth = Math.max(2, Math.min(8, Math.min(w, h) * .018)); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.shadowColor = 'rgba(255,255,255,.95)'; ctx.shadowBlur = Math.max(1, ctx.lineWidth * .7);
+  ctx.save(); if (!item.cameraMoveSpill) { ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip(); } ctx.strokeStyle = validHexColor(item.cameraMoveColor, '#ff3b30'); ctx.fillStyle = validHexColor(item.cameraMoveColor, '#ff3b30'); ctx.lineWidth = Math.max(2, Math.min(8, Math.min(w, h) * .018)); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.shadowColor = 'rgba(255,255,255,.95)'; ctx.shadowBlur = Math.max(1, ctx.lineWidth * .7);
   if (move.value === 'zoom-in' || move.value === 'dolly-in') { line(8, 8, 35, 35); line(92, 8, 65, 35); line(8, 92, 35, 65); line(92, 92, 65, 65); }
   if (move.value === 'zoom-out' || move.value === 'dolly-out') { line(35, 35, 8, 8); line(65, 35, 92, 8); line(35, 65, 8, 92); line(65, 65, 92, 92); }
   if (move.value === 'pan-left') curve(90, 66, 50, 88, 10, 66);
@@ -1510,9 +1512,9 @@ function printAllPages() {
       const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
       const infoMarkup = project.showDescriptions ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description ? '' : 'is-empty'}" style="height:${overlayInfo ? PHOTO_INFO_OVERLAY_HEIGHT : captionHeight}%;--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : '';
       const node = document.createElement('div');
-      node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`;
+      node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''}`;
       node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`;
-      node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>${overlayInfo ? '' : infoMarkup}`;
+      node.innerHTML = `<div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>${overlayInfo ? '' : infoMarkup}`;
       sheet.appendChild(node);
     });
     sheet.insertAdjacentHTML('beforeend', storyboardMetaMarkup(pageIndex + 1, project.pages.length));
@@ -1674,6 +1676,7 @@ $('#photoFocusX').addEventListener('input', event => { const item = findItem(sel
 $$('.camera-preset').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; item.cameraMove = CAMERA_MOVE_VALUES.has(button.dataset.cameraPreset) ? button.dataset.cameraPreset : 'none'; item.cameraMoveMode = 'overlay'; if (item.cameraMove === 'none' && annotationToolMode === 'move') annotationToolMode = 'none'; renderPage(); renderInspector(); saveProject(); }));
 $('#photoAnnotationColor').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; const color = validHexColor(event.target.value, '#ff3b30'); item.cameraMoveColor = color; item.drawingColor = color; renderPage(); saveProject(); });
 $('#photoCameraScale').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveScale = clamp(Number(event.target.value) / 100, .45, 1.45); $('#cameraScaleValue').textContent = `${Math.round(item.cameraMoveScale * 100)}%`; renderPage(); saveProject(); });
+$('#cameraMoveSpill').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveSpill = event.target.checked; renderPage(); renderInspector(); saveProject(); });
 $('#photoDrawingWidth').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.drawingWidth = clamp(Number(event.target.value), .8, 8); $('#drawingWidthValue').textContent = item.drawingWidth.toFixed(1); saveProject(); });
 $('#moveCameraOverlayBtn').addEventListener('click', () => setAnnotationToolMode('move'));
 $('#drawOnPhotoBtn').addEventListener('click', () => setAnnotationToolMode('draw'));
