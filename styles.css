@@ -235,6 +235,19 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .format-btn:disabled { opacity:.65; cursor:not-allowed; }
 .project-title-overlay { position:absolute; z-index:7; top:2%; right:2.5%; max-width:42%; color:#fff; mix-blend-mode:difference; font:500 clamp(8px,1.15vw,14px)/1.2 'DM Mono',monospace; letter-spacing:.7px; text-align:right; text-transform:uppercase; outline:0; cursor:text; }
 .project-title-overlay:empty::before { content:'Título del proyecto'; opacity:.45; }
+.storyboard-meta-frame { position:absolute; z-index:7; inset:3.5%; border:1px solid rgba(0,0,0,.68); color:#111; pointer-events:none; font:500 clamp(7px,.72vw,11px)/1.1 'DM Mono',monospace; letter-spacing:.5px; text-transform:uppercase; }
+.storyboard-meta-top,.storyboard-meta-bottom { position:absolute; left:12px; right:12px; display:flex; align-items:center; justify-content:space-between; min-height:24px; padding:4px 8px; background:rgba(255,255,255,.94); }
+.storyboard-meta-top { top:-13px; }
+.storyboard-meta-bottom { bottom:-13px; }
+.storyboard-meta-producer { display:flex; align-items:center; gap:6px; max-width:48%; overflow:hidden; }
+.storyboard-meta-producer img { width:18px; height:18px; flex:0 0 auto; object-fit:contain; }
+.storyboard-meta-producer strong,.storyboard-meta-title,.storyboard-meta-page { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.storyboard-meta-title { max-width:48%; text-align:right; }
+.storyboard-meta-details { display:flex; align-items:center; gap:12px; min-width:0; overflow:hidden; }
+.storyboard-meta-details span { display:flex; align-items:baseline; gap:4px; min-width:0; }
+.storyboard-meta-details small { color:#777; font-size:.75em; }
+.storyboard-meta-details strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.storyboard-meta-page { flex:none; margin-left:12px; }
 .project-fields { display:flex; flex-direction:column; align-items:flex-start; min-width:240px; }
 .project-fields label { display:flex; align-items:center; gap:7px; margin:0 0 3px; }
 .project-fields .producer-label { margin-top:8px; }
@@ -243,6 +256,10 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .project-fields #projectTitle { width:min(330px,35vw); font:600 21px 'Space Grotesk',sans-serif; letter-spacing:-.5px; }
 .project-fields #projectProducer { width:min(270px,30vw); font:500 13px 'Space Grotesk',sans-serif; }
 .project-fields input::placeholder { color:#9b9b9b; opacity:1; }
+.metadata-fields { display:grid; gap:6px; margin-bottom:12px; }
+.metadata-fields label { color:#777; font:500 9px 'DM Mono',monospace; letter-spacing:.6px; }
+.metadata-fields .text-field { margin-top:-2px; }
+.storyboard-meta-settings .switch-row + .switch-row { margin-top:9px; }
 .format-modal-backdrop { background:rgba(0,0,0,.72); }
 .format-modal { width:min(620px,100%); }
 .format-options { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:24px; }

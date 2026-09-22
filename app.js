@@ -48,7 +48,7 @@ let projects = loadProjects();
 let currentProjectId = null;
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, layoutEngine: 'adaptive', title: 'Storyboard X', producer: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, producerLogo: '', producerLogoName: '', background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, layoutEngine: 'adaptive', title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
 
 function legacyCropAspect(page, data) {
   const count = Number(page.photosPerPage || data.photosPerPage) || 4;
@@ -73,12 +73,20 @@ function normalizeProject(data) {
   normalized.updatedAt = data.updatedAt || normalized.createdAt;
   normalized.producer = typeof data.producer === 'string' ? data.producer : (data.author && data.author !== 'Tu nombre' ? data.author : '');
   normalized.author = normalized.producer;
+  normalized.client = typeof data.client === 'string' ? data.client : '';
+  normalized.agency = typeof data.agency === 'string' ? data.agency : '';
+  normalized.director = typeof data.director === 'string' ? data.director : '';
   if (normalized.title === 'Mi nuevo video') normalized.title = 'Storyboard X';
   const migrateOldCropDefault = data.version !== 2;
   normalized.version = 2;
   normalized.formatLocked = typeof data.formatLocked === 'boolean' ? data.formatLocked : true;
   normalized.showProjectTitle = typeof data.showProjectTitle === 'boolean' ? data.showProjectTitle : true;
   normalized.showProducerBranding = typeof data.showProducerBranding === 'boolean' ? data.showProducerBranding : false;
+  normalized.showClientMeta = typeof data.showClientMeta === 'boolean' ? data.showClientMeta : false;
+  normalized.showAgencyMeta = typeof data.showAgencyMeta === 'boolean' ? data.showAgencyMeta : false;
+  normalized.showDirectorMeta = typeof data.showDirectorMeta === 'boolean' ? data.showDirectorMeta : false;
+  normalized.showProjectFrame = typeof data.showProjectFrame === 'boolean' ? data.showProjectFrame : false;
+  normalized.showPageNumber = typeof data.showPageNumber === 'boolean' ? data.showPageNumber : true;
   normalized.producerLogo = typeof data.producerLogo === 'string' ? data.producerLogo : '';
   normalized.producerLogoName = typeof data.producerLogoName === 'string' ? data.producerLogoName : '';
   normalized.showDescriptions = typeof data.showDescriptions === 'boolean' ? data.showDescriptions : true;
@@ -377,6 +385,21 @@ function itemMarkup(item, page = currentPage()) {
   </div>`;
 }
 
+function storyboardMetaMarkup(pageNumber = currentPageIndex + 1, totalPages = project.pages.length) {
+  if (!project.showProjectFrame) return '';
+  const producer = project.showProducerBranding && (project.producer?.trim() || project.producerLogo);
+  const details = [
+    project.showClientMeta && project.client?.trim() ? ['CLIENTE', project.client] : null,
+    project.showAgencyMeta && project.agency?.trim() ? ['AGENCIA', project.agency] : null,
+    project.showDirectorMeta && project.director?.trim() ? ['DIRECTOR', project.director] : null
+  ].filter(Boolean);
+  const producerMarkup = producer ? `<span class="storyboard-meta-producer">${project.producerLogo ? `<img src="${project.producerLogo}" alt="" />` : ''}${project.producer?.trim() ? `<strong>${escapeHtml(project.producer)}</strong>` : ''}</span>` : '';
+  const titleMarkup = project.showProjectTitle && project.title.trim() ? `<strong class="storyboard-meta-title">${escapeHtml(project.title)}</strong>` : '';
+  const detailsMarkup = details.map(([label, value]) => `<span><small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('');
+  const pageMarkup = project.showPageNumber ? `<strong class="storyboard-meta-page">STORYBOARD · ${String(pageNumber).padStart(2, '0')} / ${String(totalPages).padStart(2, '0')}</strong>` : '';
+  return `<div class="storyboard-meta-frame" aria-hidden="true"><div class="storyboard-meta-top">${producerMarkup}${titleMarkup}</div><div class="storyboard-meta-bottom">${detailsMarkup ? `<div class="storyboard-meta-details">${detailsMarkup}</div>` : '<span></span>'}${pageMarkup}</div></div>`;
+}
+
 function renderLibrary() {
   const placed = placedAssetIds();
   $('#assetCount').textContent = project.assets.length;
@@ -397,9 +420,9 @@ function renderPage() {
   $('#canvasPage').style.background = page ? project.background : '#ffffff';
   const guides = slotMode ? pageLayout(page).map(({ card: rect }, index) => `<div class="slot-guide" data-slot-index="${index}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%"><span>${String(index + 1).padStart(2, '0')}</span></div>`).join('') : '';
   const content = page?.items.length ? page.items.map(item => itemMarkup(item, page)).join('') : '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>';
-  const producerBrand = project.showProducerBranding && (project.producer?.trim() || project.producerLogo) ? `<div class="producer-brand-overlay" id="canvasProducerBrand">${project.producerLogo ? `<img src="${project.producerLogo}" alt="" />` : ''}${project.producer?.trim() ? `<span>${escapeHtml(project.producer.trim())}</span>` : ''}</div>` : '';
-  const titleOverlay = project.showProjectTitle && project.title.trim() ? `<div class="project-title-overlay" id="canvasProjectTitle" contenteditable="true" spellcheck="false">${escapeHtml(project.title)}</div>` : '';
-  $('#canvasPage').innerHTML = guides + content + producerBrand + titleOverlay;
+  const producerBrand = !project.showProjectFrame && project.showProducerBranding && (project.producer?.trim() || project.producerLogo) ? `<div class="producer-brand-overlay" id="canvasProducerBrand">${project.producerLogo ? `<img src="${project.producerLogo}" alt="" />` : ''}${project.producer?.trim() ? `<span>${escapeHtml(project.producer.trim())}</span>` : ''}</div>` : '';
+  const titleOverlay = !project.showProjectFrame && project.showProjectTitle && project.title.trim() ? `<div class="project-title-overlay" id="canvasProjectTitle" contenteditable="true" spellcheck="false">${escapeHtml(project.title)}</div>` : '';
+  $('#canvasPage').innerHTML = guides + content + producerBrand + titleOverlay + storyboardMetaMarkup();
   $$('.design-item').forEach(item => bindDesignItem(item));
   $$('.description-editor').forEach(editor => {
     editor.addEventListener('pointerdown', event => event.stopPropagation());
@@ -512,6 +535,9 @@ function renderPageCarousel() {
 function renderControls() {
   $('#projectTitle').value = project.title;
   $('#projectProducer').value = project.producer || '';
+  $('#projectClient').value = project.client || '';
+  $('#projectAgency').value = project.agency || '';
+  $('#projectDirector').value = project.director || '';
   $('#breadcrumbTitle').textContent = project.title || 'Sin título';
   $('#backgroundColor').value = project.background;
   $('#backgroundValue').textContent = project.background.toUpperCase();
@@ -526,6 +552,11 @@ function renderControls() {
   $('#infoStyle').disabled = !project.showDescriptions;
   $('#showProjectTitle').checked = project.showProjectTitle;
   $('#showProducerBranding').checked = project.showProducerBranding;
+  $('#showProjectFrame').checked = project.showProjectFrame;
+  $('#showClientMeta').checked = project.showClientMeta;
+  $('#showAgencyMeta').checked = project.showAgencyMeta;
+  $('#showDirectorMeta').checked = project.showDirectorMeta;
+  $('#showPageNumber').checked = project.showPageNumber;
   $('#producerLogoPreview').hidden = !project.producerLogo;
   $('#producerLogoPreview').innerHTML = project.producerLogo ? `<img src="${project.producerLogo}" alt="" /><span>${escapeHtml(project.producerLogoName || 'Logo cargado')}</span>` : '';
   $('#removeProducerLogoBtn').disabled = !project.producerLogo;
@@ -774,11 +805,44 @@ function drawProjectTitle(ctx, width, height) {
   ctx.restore();
 }
 
+async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) {
+  if (!project.showProjectFrame) return;
+  const inset = Math.max(18, Math.round(Math.min(width, height) * .035));
+  const barHeight = Math.max(24, Math.round(height * .045));
+  const barY = inset - Math.round(barHeight / 2);
+  const footerY = height - inset - Math.round(barHeight / 2);
+  const logo = project.showProducerBranding && project.producerLogo ? await loadImageSource(project.producerLogo) : null;
+  const details = [
+    project.showClientMeta && project.client?.trim() ? ['CLIENTE', project.client] : null,
+    project.showAgencyMeta && project.agency?.trim() ? ['AGENCIA', project.agency] : null,
+    project.showDirectorMeta && project.director?.trim() ? ['DIRECTOR', project.director] : null
+  ].filter(Boolean);
+  ctx.save();
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = Math.max(1, Math.round(width / 1400));
+  ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2);
+  ctx.fillStyle = 'rgba(255,255,255,.94)';
+  ctx.fillRect(inset + 12, barY, width - inset * 2 - 24, barHeight);
+  ctx.fillRect(inset + 12, footerY, width - inset * 2 - 24, barHeight);
+  const fontSize = Math.max(11, Math.round(width * .009));
+  ctx.font = `600 ${fontSize}px Arial`;
+  ctx.textBaseline = 'middle';
+  let leftX = inset + 22;
+  if (logo) { const logoSize = Math.max(16, Math.round(barHeight * .7)); ctx.drawImage(logo, leftX, barY + (barHeight - logoSize) / 2, logoSize, logoSize); leftX += logoSize + 8; }
+  if (project.showProducerBranding && project.producer?.trim()) { ctx.fillStyle = '#111'; ctx.textAlign = 'left'; ctx.fillText(project.producer.trim().toUpperCase().slice(0, 44), leftX, barY + barHeight / 2); }
+  if (project.showProjectTitle && project.title.trim()) { ctx.fillStyle = '#111'; ctx.textAlign = 'right'; ctx.fillText(project.title.trim().toUpperCase().slice(0, 54), width - inset - 22, barY + barHeight / 2); }
+  let detailX = inset + 22;
+  ctx.textAlign = 'left';
+  details.forEach(([label, value]) => { ctx.fillStyle = '#777'; ctx.font = `500 ${Math.max(8, Math.round(fontSize * .72))}px Arial`; const prefix = `${label} ·`; ctx.fillText(prefix, detailX, footerY + barHeight / 2); detailX += ctx.measureText(prefix).width + 5; ctx.fillStyle = '#111'; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; const text = value.trim().toUpperCase().slice(0, 30); ctx.fillText(text, detailX, footerY + barHeight / 2); detailX += ctx.measureText(text).width + 18; });
+  if (project.showPageNumber) { ctx.fillStyle = '#111'; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; ctx.textAlign = 'right'; ctx.fillText(`STORYBOARD · ${String(pageNumber).padStart(2, '0')} / ${String(totalPages).padStart(2, '0')}`, width - inset - 22, footerY + barHeight / 2); }
+  ctx.restore();
+}
+
 async function renderPageCanvas(page) {
   const width = project.ratio === 'portrait' ? 900 : 1600; const height = Math.round(width / getPageAspect()); const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.fillStyle = project.background; ctx.fillRect(0, 0, width, height);
   await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const layout = itemLayout(item, page); image.onload = () => { drawImageInBox(ctx, image, layout.image.x / 100 * width, layout.image.y / 100 * height, layout.image.width / 100 * width, layout.image.height / 100 * height, item.fit, item.focusX, item.focusY); drawItemMetadata(ctx, item, asset, layout, width, height); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
-  await drawProducerBranding(ctx, width, height);
-  drawProjectTitle(ctx, width, height);
+  if (project.showProjectFrame) await drawProjectMetaFrame(ctx, width, height, currentPageIndex + 1, project.pages.length);
+  else { await drawProducerBranding(ctx, width, height); drawProjectTitle(ctx, width, height); }
   return canvas;
 }
 
@@ -786,7 +850,38 @@ async function exportImage(type) { const canvas = await renderPageCanvas(current
 
 function printAllPages() {
   const layer = document.createElement('div'); layer.className = 'print-layer';
-  project.pages.forEach(page => { const sheet = document.createElement('div'); sheet.className = `canvas-page print-page ${pageFormatClass()}`; sheet.style.background = project.background; page.items.forEach(item => { const asset = findAsset(item.assetId); if (!asset) return; const layout = itemLayout(item, page); const label = itemDisplayTitle(item, asset); const number = String((item.slot ?? 0) + 1).padStart(2, '0'); const imageHeight = layout.image.height / layout.card.height * 100; const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0; const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay'; const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`; const infoMarkup = project.showDescriptions ? `<div class="description-box ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description ? '' : 'is-empty'}" style="height:${overlayInfo ? PHOTO_INFO_OVERLAY_HEIGHT : captionHeight}%"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : ''; const node = document.createElement('div'); node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`; node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`; node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${overlayInfo ? infoMarkup : ''}</div>${overlayInfo ? '' : infoMarkup}`; sheet.appendChild(node); }); if (project.showProducerBranding && (project.producer?.trim() || project.producerLogo)) { const brand = document.createElement('div'); brand.className = 'producer-brand-overlay print-producer-brand'; if (project.producerLogo) { const image = document.createElement('img'); image.src = project.producerLogo; image.alt = ''; brand.appendChild(image); } if (project.producer?.trim()) { const name = document.createElement('span'); name.textContent = project.producer.trim(); brand.appendChild(name); } sheet.appendChild(brand); } if (project.showProjectTitle && project.title.trim()) { const title = document.createElement('div'); title.className = 'project-title-overlay'; title.textContent = project.title; sheet.appendChild(title); } layer.appendChild(sheet); });
+  project.pages.forEach((page, pageIndex) => {
+    const sheet = document.createElement('div');
+    sheet.className = `canvas-page print-page ${pageFormatClass()}`;
+    sheet.style.background = project.background;
+    page.items.forEach(item => {
+      const asset = findAsset(item.assetId); if (!asset) return;
+      const layout = itemLayout(item, page);
+      const label = itemDisplayTitle(item, asset);
+      const number = String((item.slot ?? 0) + 1).padStart(2, '0');
+      const imageHeight = layout.image.height / layout.card.height * 100;
+      const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
+      const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
+      const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
+      const infoMarkup = project.showDescriptions ? `<div class="description-box ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description ? '' : 'is-empty'}" style="height:${overlayInfo ? PHOTO_INFO_OVERLAY_HEIGHT : captionHeight}%"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : '';
+      const node = document.createElement('div');
+      node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`;
+      node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`;
+      node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${overlayInfo ? infoMarkup : ''}</div>${overlayInfo ? '' : infoMarkup}`;
+      sheet.appendChild(node);
+    });
+    if (project.showProjectFrame) sheet.insertAdjacentHTML('beforeend', storyboardMetaMarkup(pageIndex + 1, project.pages.length));
+    else {
+      if (project.showProducerBranding && (project.producer?.trim() || project.producerLogo)) {
+        const brand = document.createElement('div'); brand.className = 'producer-brand-overlay print-producer-brand';
+        if (project.producerLogo) { const image = document.createElement('img'); image.src = project.producerLogo; image.alt = ''; brand.appendChild(image); }
+        if (project.producer?.trim()) { const name = document.createElement('span'); name.textContent = project.producer.trim(); brand.appendChild(name); }
+        sheet.appendChild(brand);
+      }
+      if (project.showProjectTitle && project.title.trim()) { const title = document.createElement('div'); title.className = 'project-title-overlay'; title.textContent = project.title; sheet.appendChild(title); }
+    }
+    layer.appendChild(sheet);
+  });
   document.body.appendChild(layer); const cleanup = () => layer.remove(); window.addEventListener('afterprint', cleanup, { once: true }); window.print(); setTimeout(cleanup, 2500);
 }
 
@@ -843,10 +938,15 @@ $$('.format-btn').forEach(button => button.addEventListener('click', () => { if 
 $('#zoomOutBtn').addEventListener('click', () => { zoom = clamp(zoom - .1, .6, 1.4); renderControls(); }); $('#zoomInBtn').addEventListener('click', () => { zoom = clamp(zoom + .1, .6, 1.4); renderControls(); });
 $('#prevPageBtn').addEventListener('click', () => { if (currentPageIndex > 0) { currentPageIndex--; selectedItemId = null; render(); } }); $('#nextPageBtn').addEventListener('click', () => { if (currentPageIndex < project.pages.length - 1) { currentPageIndex++; selectedItemId = null; render(); } });
 
-['projectTitle', 'projectProducer'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer' }[id]; project[key] = event.target.value; if (id === 'projectProducer') { project.author = project.producer; renderPage(); } $('#breadcrumbTitle').textContent = project.title || 'Sin título'; if (id === 'projectTitle' && $('#canvasProjectTitle')) $('#canvasProjectTitle').textContent = project.title; saveProject(); }));
+['projectTitle', 'projectProducer', 'projectClient', 'projectAgency', 'projectDirector'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer', projectClient: 'client', projectAgency: 'agency', projectDirector: 'director' }[id]; project[key] = event.target.value; if (id === 'projectProducer') project.author = project.producer; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; renderPage(); saveProject(); }));
 $('#backgroundColor').addEventListener('input', event => { project.background = event.target.value; render(); saveProject(); });
 $('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = event.target.value === 'overlay' ? 'overlay' : 'below'; render(); saveProject(); }); $('#infoStyle').addEventListener('change', event => { project.infoStyle = event.target.value === 'light' ? 'light' : 'dark'; render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
 $('#showProducerBranding').addEventListener('change', event => { project.showProducerBranding = event.target.checked; render(); saveProject(); });
+$('#showProjectFrame').addEventListener('change', event => { project.showProjectFrame = event.target.checked; render(); saveProject(); });
+$('#showClientMeta').addEventListener('change', event => { project.showClientMeta = event.target.checked; render(); saveProject(); });
+$('#showAgencyMeta').addEventListener('change', event => { project.showAgencyMeta = event.target.checked; render(); saveProject(); });
+$('#showDirectorMeta').addEventListener('change', event => { project.showDirectorMeta = event.target.checked; render(); saveProject(); });
+$('#showPageNumber').addEventListener('change', event => { project.showPageNumber = event.target.checked; render(); saveProject(); });
 $('#producerLogoBtn').addEventListener('click', () => $('#producerLogoInput').click());
 $('#producerLogoInput').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith('image/')) { showToast('Elegí un archivo de imagen'); event.target.value = ''; return; } const reader = new FileReader(); reader.onload = () => { project.producerLogo = reader.result; project.producerLogoName = file.name; project.showProducerBranding = true; render(); saveProject(); showToast('Logo de productora cargado'); }; reader.readAsDataURL(file); event.target.value = ''; });
 $('#removeProducerLogoBtn').addEventListener('click', () => { project.producerLogo = ''; project.producerLogoName = ''; render(); saveProject(); });
