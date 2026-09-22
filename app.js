@@ -48,7 +48,7 @@ let projects = loadProjects();
 let currentProjectId = null;
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, layoutEngine: 'adaptive', title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
 
 function legacyCropAspect(page, data) {
   const count = Number(page.photosPerPage || data.photosPerPage) || 4;
@@ -79,6 +79,8 @@ function normalizeProject(data) {
   if (normalized.title === 'Mi nuevo video') normalized.title = 'Storyboard X';
   const migrateOldCropDefault = data.version !== 2;
   normalized.version = 2;
+  normalized.layoutEngineVersion = 1;
+  normalized.layoutEngine = data.layoutEngineVersion === 1 && data.layoutEngine === 'adaptive' ? 'adaptive' : 'grid';
   normalized.formatLocked = typeof data.formatLocked === 'boolean' ? data.formatLocked : true;
   normalized.showProjectTitle = typeof data.showProjectTitle === 'boolean' ? data.showProjectTitle : true;
   normalized.showProducerBranding = typeof data.showProducerBranding === 'boolean' ? data.showProducerBranding : false;
@@ -108,7 +110,6 @@ function normalizeProject(data) {
   }) : [blankPage()];
   delete normalized.photosPerPage;
   delete normalized.layoutDirection;
-  normalized.layoutEngine = 'adaptive';
   return normalized;
 }
 
@@ -215,7 +216,7 @@ function renumberItems(page) { page.items.forEach((item, index) => { item.slot =
 const layoutCache = new WeakMap();
 function pageLayout(page = currentPage()) {
   const aspects = page.items.map(item => item.fit === 'cover' ? (item.cropAspect || getPageAspect()) : assetAspect(findAsset(item.assetId)));
-  const options = { aspect: getPageAspect(), padding: project.padding, gap: project.gap, captions: project.showDescriptions && project.infoPlacement !== 'overlay' };
+  const options = { engine: project.layoutEngine, aspect: getPageAspect(), padding: project.padding, gap: project.gap, captions: project.showDescriptions && project.infoPlacement !== 'overlay' };
   const key = JSON.stringify([aspects, options]);
   const cached = layoutCache.get(page);
   if (cached?.key === key) return cached.rects;
@@ -545,6 +546,9 @@ function renderControls() {
   $('#pageGapValue').textContent = `${project.gap} px`;
   $('#pagePadding').value = project.padding;
   $('#pagePaddingValue').textContent = `${project.padding}%`;
+  $('#layoutEngine').value = project.layoutEngine || 'grid';
+  $('#layoutModeLabel').textContent = project.layoutEngine === 'adaptive' ? '✦ Distribución adaptable' : '✦ Grilla equitativa';
+  $('#autoLayoutStatus').title = project.layoutEngine === 'adaptive' ? 'Las fotos se distribuyen según sus proporciones' : 'La grilla mantiene celdas iguales y deja espacios vacíos cuando faltan fotos';
   $('#showDescriptions').checked = project.showDescriptions;
   $('#infoPlacement').value = project.infoPlacement || 'below';
   $('#infoPlacement').disabled = !project.showDescriptions;
@@ -940,6 +944,7 @@ $('#prevPageBtn').addEventListener('click', () => { if (currentPageIndex > 0) { 
 
 ['projectTitle', 'projectProducer', 'projectClient', 'projectAgency', 'projectDirector'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer', projectClient: 'client', projectAgency: 'agency', projectDirector: 'director' }[id]; project[key] = event.target.value; if (id === 'projectProducer') project.author = project.producer; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; renderPage(); saveProject(); }));
 $('#backgroundColor').addEventListener('input', event => { project.background = event.target.value; render(); saveProject(); });
+$('#layoutEngine').addEventListener('change', event => { project.layoutEngine = event.target.value === 'adaptive' ? 'adaptive' : 'grid'; project.layoutEngineVersion = 1; render(); saveProject(); });
 $('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = event.target.value === 'overlay' ? 'overlay' : 'below'; render(); saveProject(); }); $('#infoStyle').addEventListener('change', event => { project.infoStyle = event.target.value === 'light' ? 'light' : 'dark'; render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
 $('#showProducerBranding').addEventListener('change', event => { project.showProducerBranding = event.target.checked; render(); saveProject(); });
 $('#showProjectFrame').addEventListener('change', event => { project.showProjectFrame = event.target.checked; render(); saveProject(); });

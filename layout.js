@@ -6,9 +6,54 @@
     return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
   };
 
+  function arrangeGrid(ratios, options) {
+    const pageHeight = 100;
+    const pageWidth = pageHeight * bounded(options.aspect, 16 / 9, .1, 10);
+    const padding = bounded(options.padding, 6, 6, 12);
+    const insetX = pageWidth * padding / 100;
+    const insetY = pageHeight * padding / 100;
+    const width = pageWidth - 2 * insetX;
+    const height = pageHeight - 2 * insetY;
+    const count = ratios.length;
+    const gap = Math.min((1.6 + bounded(options.gap, 16, 0, 48) / 10) * Math.min(pageWidth, pageHeight) / 100,
+      Math.min(width, height) / (4 * Math.ceil(Math.sqrt(count))));
+    const horizontal = ratios.filter(ratio => ratio > 1.15).length;
+    const vertical = ratios.filter(ratio => ratio < .85).length;
+    const slotAspect = horizontal > vertical ? 16 / 9 : vertical > horizontal ? 9 / 16 : 1;
+    const preferredColumns = pageWidth / pageHeight > 1.25 ? 4 : pageWidth / pageHeight < .8 ? 2 : 3;
+    const columns = count === 1 ? 1 : count === 2 ? 2 : preferredColumns;
+    const rows = Math.ceil(count / columns);
+    const cellWidth = Math.min((width - gap * (columns - 1)) / columns, (height - gap * (rows - 1)) * slotAspect / rows);
+    const cellHeight = cellWidth / slotAspect;
+    const gridWidth = cellWidth * columns + gap * (columns - 1);
+    const gridHeight = cellHeight * rows + gap * (rows - 1);
+    const startX = insetX + (width - gridWidth) / 2;
+    const startY = insetY + (height - gridHeight) / 2;
+    const captionRatio = options.captions ? .24 : 0;
+    const percent = rect => ({ x: rect.x / pageWidth * 100, y: rect.y, width: rect.width / pageWidth * 100, height: rect.height });
+    return ratios.map((ratio, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const cardX = startX + column * (cellWidth + gap);
+      const cardY = startY + row * (cellHeight + gap);
+      const captionHeight = cellHeight * captionRatio;
+      const imageBoxHeight = cellHeight - captionHeight;
+      const imageWidth = Math.min(cellWidth, imageBoxHeight * ratio);
+      const imageHeight = imageWidth / ratio;
+      const imageX = cardX + (cellWidth - imageWidth) / 2;
+      const imageY = cardY + (imageBoxHeight - imageHeight) / 2;
+      return {
+        card: percent({ x: cardX, y: cardY, width: cellWidth, height: cellHeight }),
+        image: percent({ x: imageX, y: imageY, width: imageWidth, height: imageHeight }),
+        caption: captionRatio ? percent({ x: cardX, y: cardY + imageBoxHeight, width: cellWidth, height: captionHeight }) : null
+      };
+    });
+  }
+
   function arrange(aspects, options = {}) {
     if (!aspects.length) return [];
     const ratios = aspects.map(value => Number.isFinite(value) && value > 0 ? value : 16 / 9);
+    if (options.engine === 'grid') return arrangeGrid(ratios, options);
     // Work in physical units so horizontal and vertical spacing are identical.
     const pageHeight = 100;
     const pageWidth = pageHeight * bounded(options.aspect, 16 / 9, .1, 10);

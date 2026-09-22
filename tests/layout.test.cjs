@@ -59,6 +59,22 @@ test('layout adapts to the actual assets, and removing a photo reclaims space', 
   assert.ok(after.width * after.height > before.width * before.height);
 });
 
+test('equal grid keeps stable cells and leaves the next slot empty', () => {
+  const options = { engine: 'grid', aspect: 16 / 9, captions: true, padding: 6, gap: 16 };
+  const three = arrange([16 / 9, 16 / 9, 16 / 9], options);
+  const four = arrange([16 / 9, 16 / 9, 16 / 9, 16 / 9], options);
+  assert.equal(three.length, 3);
+  assert.equal(four.length, 4);
+  three.forEach((rect, index) => {
+    assert.equal(rect.card.width, four[index].card.width);
+    assert.equal(rect.card.height, four[index].card.height);
+    assert.equal(rect.card.x, four[index].card.x);
+    assert.equal(rect.card.y, four[index].card.y);
+  });
+  assert.ok(four[3].card.x > four[2].card.x);
+  assert.ok(Math.abs(four[3].card.y - four[2].card.y) < 1e-8);
+});
+
 test('empty pages, invalid dimensions and dense pages remain usable', () => {
   assert.deepEqual(arrange([]), []);
   assert.equal(arrange([NaN, -1, Infinity, 0]).length, 4);

@@ -200,6 +200,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .info-style-select { margin-top:7px; }
 .auto-layout-status { display:flex; flex-direction:column; gap:3px; color:#666; font-size:10px; }
 .auto-layout-status strong { color:#111; font-size:11px; font-weight:600; white-space:nowrap; }
+.layout-engine-group { align-items:flex-start; }
+.layout-engine-group .text-field { width:150px; height:30px; margin:0; padding:0 8px; font-size:10px; }
 .auto-layout-help { margin:0 0 18px; color:#666; line-height:1.5; }
 .editor-toolbar { flex-wrap:wrap; }
 .canvas-page.is-slot-mode .slot-guide { z-index:8; }
