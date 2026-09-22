@@ -553,3 +553,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .clear-library-confirm-modal h2,.delete-asset-confirm-modal h2 { max-width:420px; margin-top:10px; }
 .clear-library-confirm-modal .modal-copy,.delete-asset-confirm-modal .modal-copy { max-width:430px; }
 .delete-asset-confirm-modal .modal-copy strong { color:#000; }
+
+/* The artboard gets its size from its height, so its declared aspect ratio is never overridden by a short viewport. */
+.canvas-stage .canvas-page { width:auto; height:100%; max-width:100%; max-height:100%; flex:0 0 auto; aspect-ratio:16 / 9; }
+.canvas-stage .canvas-page.format-portrait { aspect-ratio:9 / 16; }
+.canvas-stage .canvas-page.format-square { aspect-ratio:1; }
+.workspace-app .canvas-stage .canvas-page.format-portrait,.workspace-app .canvas-stage .canvas-page.format-square { width:auto; }

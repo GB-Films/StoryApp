@@ -826,6 +826,17 @@ function renderLibrary() {
   });
 }
 
+function fitCanvasPage() {
+  const pageElement = $('#canvasPage');
+  const stage = $('#canvasStage');
+  if (!pageElement || !stage || !stage.clientWidth || !stage.clientHeight) return;
+  const aspect = getPageAspect();
+  const width = Math.max(0, Math.min(stage.clientWidth, stage.clientHeight * aspect));
+  const height = width / aspect;
+  pageElement.style.width = `${width}px`;
+  pageElement.style.height = `${height}px`;
+}
+
 function renderPage() {
   const page = currentPage();
   $('#canvasPage').className = `canvas-page ${pageFormatClass()} ${slotMode ? 'is-slot-mode' : ''}`;
@@ -852,6 +863,7 @@ function renderPage() {
   $('#selectionStatus').classList.toggle('photo-selected', selectionCount > 0);
   renderPageCarousel();
   updateSlotGuides();
+  requestAnimationFrame(fitCanvasPage);
 }
 
 function pageThumbnailMarkup(page) {
@@ -1534,15 +1546,23 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
   ctx.restore();
 }
 
-async function renderPageCanvas(page) {
+async function renderPageCanvas(page, pageIndex = currentPageIndex, totalPages = project.pages.length) {
   const width = project.ratio === 'portrait' ? 900 : 1600; const height = Math.round(width / getPageAspect()); const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); await drawArtboardBackground(ctx, width, height);
   await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const layout = itemLayout(item, page); image.onload = () => { drawImageInBox(ctx, image, layout.image.x / 100 * width, layout.image.y / 100 * height, layout.image.width / 100 * width, layout.image.height / 100 * height, item.fit, item.focusX, item.focusY); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
   page.items.forEach(item => { const layout = itemLayout(item, page); drawCameraMoveOverlayCanvas(ctx, item, layout, width, height); drawPhotoAnnotationsCanvas(ctx, item, layout, width, height); const asset = findAsset(item.assetId); if (asset) drawItemMetadata(ctx, item, asset, layout, width, height); });
-  await drawProjectMetaFrame(ctx, width, height, currentPageIndex + 1, project.pages.length);
+  await drawProjectMetaFrame(ctx, width, height, pageIndex + 1, totalPages);
   return canvas;
 }
 
 async function exportImage(type) { const canvas = await renderPageCanvas(currentPage()); canvas.toBlob(blob => { downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${currentPageIndex + 1}.${type}`); showToast(`Página exportada como ${type.toUpperCase()}`); }, type === 'jpg' ? 'image/jpeg' : 'image/png', .92); }
+async function exportAllPagesPng() {
+  const totalPages = project.pages.length;
+  for (let pageIndex = 0; pageIndex < totalPages; pageIndex += 1) {
+    const canvas = await renderPageCanvas(project.pages[pageIndex], pageIndex, totalPages);
+    await new Promise(resolve => canvas.toBlob(blob => { downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${pageIndex + 1}.png`); resolve(); }, 'image/png', .92));
+  }
+  showToast(`${totalPages} página${totalPages === 1 ? '' : 's'} exportada${totalPages === 1 ? '' : 's'} como PNG`);
+}
 
 function printAllPages() {
   const layer = document.createElement('div'); layer.className = 'print-layer';
@@ -1736,9 +1756,10 @@ $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePho
 
 $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#manageVersionsBtn').addEventListener('click', openVersionsModal); $('#createVersionBtn').addEventListener('click', openVersionModal); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $$('[data-version-format]').forEach(button => button.addEventListener('click', () => createProjectVersion(button.dataset.versionFormat))); $('#cancelVersionBtn').addEventListener('click', closeVersionModal); $('#versionModal').addEventListener('click', event => { if (event.target === $('#versionModal')) closeVersionModal(); }); $('#cancelVersionsBtn').addEventListener('click', closeVersionsModal); $('#versionsModal').addEventListener('click', event => { if (event.target === $('#versionsModal')) closeVersionsModal(); }); $('#cancelDeleteVersionBtn').addEventListener('click', closeDeleteVersionModal); $('#cancelDeleteVersionBtnSecondary').addEventListener('click', closeDeleteVersionModal); $('#confirmDeleteVersionBtn').addEventListener('click', confirmDeleteVersion); $('#deleteVersionModal').addEventListener('click', event => { if (event.target === $('#deleteVersionModal')) closeDeleteVersionModal(); }); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelClearPageBtn').addEventListener('click', closeClearPageConfirm); $('#cancelClearPageBtnSecondary').addEventListener('click', closeClearPageConfirm); $('#confirmClearPageBtn').addEventListener('click', confirmClearPage); $('#clearPageConfirmModal').addEventListener('click', event => { if (event.target === $('#clearPageConfirmModal')) closeClearPageConfirm(); }); $('#cancelClearLibraryBtn').addEventListener('click', closeClearLibraryConfirm); $('#cancelClearLibraryBtnSecondary').addEventListener('click', closeClearLibraryConfirm); $('#confirmClearLibraryBtn').addEventListener('click', confirmClearLibrary); $('#clearLibraryConfirmModal').addEventListener('click', event => { if (event.target === $('#clearLibraryConfirmModal')) closeClearLibraryConfirm(); }); $('#cancelDeleteAssetBtn').addEventListener('click', closeDeleteAssetModal); $('#cancelDeleteAssetBtnSecondary').addEventListener('click', closeDeleteAssetModal); $('#confirmDeleteAssetBtn').addEventListener('click', confirmDeleteAsset); $('#deleteAssetConfirmModal').addEventListener('click', event => { if (event.target === $('#deleteAssetConfirmModal')) closeDeleteAssetModal(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
 $('#projectSort').addEventListener('change', event => { projectSort = ['updated', 'title', 'client'].includes(event.target.value) ? event.target.value : 'updated'; localStorage.setItem(PROJECT_SORT_KEY, projectSort); renderDashboard(); }); $('#cancelFormatBtn').addEventListener('click', () => pendingNewProject ? closeNewProjectFormat() : closeFormatModal()); $('#formatModal').addEventListener('click', event => { if (event.target === $('#formatModal')) pendingNewProject ? closeNewProjectFormat() : closeFormatModal(); });
-$$('[data-export]').forEach(button => button.addEventListener('click', async () => { const type = button.dataset.export; closeExport(); if (type === 'json') downloadProject(); else if (type === 'print') printAllPages(); else await exportImage(type); }));
+$$('[data-export]').forEach(button => button.addEventListener('click', async () => { const type = button.dataset.export; closeExport(); if (type === 'png-all') await exportAllPagesPng(); else if (type === 'print') printAllPages(); else await exportImage(type); }));
 
 document.addEventListener('click', event => { if (!event.target.closest('.page-thumb-wrap')) closePageMenus(); });
+window.addEventListener('resize', () => requestAnimationFrame(fitCanvasPage));
 document.addEventListener('keydown', event => { const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && !editing && project && !$('#editorView').hidden) { event.preventDefault(); selectAllCurrentPage(); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editing) { event.preventDefault(); restoreLastUndo(); } if (event.key === 'Delete' && !editing) { if (selectedItems().length) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); } if (event.key === 'Escape') { closeExport(); closeVersionModal(); closeNewProjectConfirm(); closeDeletePageConfirm(); closeClearPageConfirm(); closeClearLibraryConfirm(); closeDeleteAssetModal(); closeDeleteProjectModal(); closePageMenus(); } });
 
 showDashboard();

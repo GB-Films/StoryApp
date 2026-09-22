@@ -41,6 +41,8 @@ const fixture = () => {
     await page.waitForFunction(() => document.querySelectorAll('#canvasPage .design-item').length === 6);
     assert.equal(await page.locator('.library-tip').count(), 0);
     assert.equal(await page.locator('[data-delete-asset]').count(), 15);
+    const initialCanvasBox = await page.locator('#canvasPage').boundingBox();
+    assert.ok(Math.abs(initialCanvasBox.width / initialCanvasBox.height - 16 / 9) < .03, 'landscape canvas keeps its aspect ratio');
     const squarePhoto = await page.locator('#canvasPage .design-item').first().locator('.design-photo').boundingBox();
     assert.ok(Math.abs(squarePhoto.width / squarePhoto.height - 1) < .03, 'original square photos stay inside square frames');
     const titleAlignment = await page.evaluate(() => { const frame = document.querySelector('#canvasPage .storyboard-meta-frame').getBoundingClientRect(); const title = document.querySelector('#canvasPage .storyboard-meta-title').getBoundingClientRect(); return { frameRight: frame.right, titleRight: title.right }; });
@@ -316,20 +318,22 @@ const fixture = () => {
       });
     });
     assert.ok(check, 'DOM photos and captions respect safe layout');
-    for (const type of ['png', 'jpg', 'json']) {
+    for (const type of ['png', 'jpg']) {
       await page.locator('#exportBtn').click();
       const downloadPromise = page.waitForEvent('download');
       await page.locator(`[data-export="${type}"]`).click();
       const download = await downloadPromise;
       assert.ok((await fs.promises.stat(await download.path())).size > 100);
       if (type === 'png') await download.saveAs(path.join(os.tmpdir(), 'storyapp-adaptive-export.png'));
-      if (type === 'json') {
-        const saved = JSON.parse(await fs.promises.readFile(await download.path(), 'utf8'));
-        assert.equal(saved.pages.length, 1);
-        assert.equal(saved.pages[0].items.length, 16);
-        assert.equal(saved.pages[0].items.at(-1).title, expectedLastTitle);
-      }
     }
+    assert.equal(await page.locator('[data-export="json"]').count(), 0);
+    const totalPagesForPng = await page.evaluate(() => project.pages.length);
+    const allPngDownloads = Array.from({ length: totalPagesForPng }, () => page.waitForEvent('download'));
+    await page.locator('#exportBtn').click();
+    await page.locator('[data-export="png-all"]').click();
+    const downloadedPages = await Promise.all(allPngDownloads);
+    assert.equal(downloadedPages.length, totalPagesForPng);
+    for (const download of downloadedPages) assert.ok((await fs.promises.stat(await download.path())).size > 100);
     await page.evaluate(() => { window.print = () => {}; });
     await page.locator('#exportBtn').click();
     await page.locator('[data-export="print"]').click();
@@ -457,6 +461,9 @@ const fixture = () => {
         });
       });
       assert.ok(inside, ratio);
+      const canvasBox = await page.locator('#canvasPage').boundingBox();
+      const expectedAspect = ratio === 'portrait' ? 9 / 16 : 1;
+      assert.ok(Math.abs(canvasBox.width / canvasBox.height - expectedAspect) < .03, `${ratio} canvas keeps its aspect ratio`);
       await page.locator('#canvasPage').screenshot({ path: path.join(os.tmpdir(), `storyapp-adaptive-${ratio}.png`) });
     }
     assert.equal(await page.locator('#clearLibraryConfirmModal').isVisible(), false);
