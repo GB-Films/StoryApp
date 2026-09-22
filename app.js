@@ -88,7 +88,8 @@ function drawBackgroundPattern(ctx, width, height, pattern) {
       for (let y = 0; y <= height; y += 18) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
     }
   } else if (pattern === 'dots') {
-    for (let x = 9; x <= width; x += 18) for (let y = 9; y <= height; y += 18) ctx.fillRect(x, y, Math.max(1, width / 1600), Math.max(1, width / 1600));
+    ctx.fillStyle = 'rgba(0,0,0,.18)';
+    for (let x = 9; x <= width; x += 18) for (let y = 9; y <= height; y += 18) { ctx.beginPath(); ctx.arc(x, y, 1, 0, Math.PI * 2); ctx.fill(); }
   } else if (pattern === 'diagonal') {
     const step = 13;
     for (let offset = -height; offset < width + height; offset += step) { ctx.beginPath(); ctx.moveTo(offset, 0); ctx.lineTo(offset + height, height); ctx.stroke(); }
@@ -1406,12 +1407,17 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.beginPath();
   ctx.rect(x, y, image.width / 100 * width, image.height / 100 * height);
   ctx.clip();
+  const badgeX = x + 7;
+  const badgeY = y + 7;
+  ctx.font = '500 10px "DM Mono", monospace';
+  const badgeWidth = Math.max(24, ctx.measureText(number).width + 10);
+  const badgeHeight = 20;
   ctx.fillStyle = 'rgba(0,0,0,.86)';
-  ctx.fillRect(x + 10, y + 10, 34, 24);
+  ctx.fillRect(badgeX, badgeY, badgeWidth, badgeHeight);
   ctx.fillStyle = '#fff';
-  ctx.font = '12px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(number, x + 27, y + 26);
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(number, badgeX + badgeWidth / 2, badgeY + 14);
   ctx.restore();
   ctx.textAlign = 'left';
   const title = itemDisplayTitle(item, asset);
@@ -1428,12 +1434,23 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.clip();
   const lightInfo = project.infoStyle === 'light';
   const descriptionTextColor = project.descriptionTextColor || (lightInfo ? '#000000' : '#ffffff');
-  ctx.fillStyle = lightInfo ? 'rgba(255,255,255,.92)' : 'rgba(0,0,0,.86)';
+  ctx.fillStyle = lightInfo ? '#fff' : '#000';
   ctx.fillRect(captionX, captionY, captionWidth, captionHeight);
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1;
+  if (!description && lightInfo) ctx.setLineDash([3, 3]);
+  ctx.strokeRect(captionX + .5, captionY + .5, Math.max(0, captionWidth - 1), Math.max(0, captionHeight - 1));
+  ctx.setLineDash([]);
   ctx.fillStyle = descriptionTextColor;
-  ctx.font = '600 13px Arial';
-  ctx.fillText(title.slice(0, 48), captionX + 8, captionY + Math.min(17, captionHeight - 7));
-  if (description && captionHeight > 30) { ctx.font = '11px Arial'; ctx.fillStyle = descriptionTextColor; ctx.fillText(description.slice(0, 68), captionX + 8, captionY + Math.min(34, captionHeight - 7)); }
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = '600 10px "Space Grotesk", sans-serif';
+  const titleBaseline = captionY + captionHeight / 2 - 1;
+  ctx.fillText(title.slice(0, 48), captionX + 8, titleBaseline, Math.max(0, captionWidth - 16));
+  if (captionHeight > 24) {
+    ctx.font = '400 9px "DM Sans", sans-serif';
+    ctx.fillStyle = description ? descriptionTextColor : (lightInfo ? '#555' : '#d0d0d0');
+    ctx.fillText((description || 'Agregar descripción…').slice(0, 68), captionX + 8, titleBaseline + 13, Math.max(0, captionWidth - 16));
+  }
   ctx.restore();
 }
 
@@ -1531,10 +1548,11 @@ function drawPhotoAnnotationsCanvas(ctx, item, layout, width, height) {
 }
 
 async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) {
-  const inset = Math.max(18, Math.round(Math.min(width, height) * .035));
+  const insetX = width * .035;
+  const insetY = height * .035;
   const barHeight = Math.max(24, Math.round(height * .045));
-  const barY = inset - Math.round(barHeight / 2);
-  const footerY = height - inset - Math.round(barHeight / 2);
+  const barY = insetY - Math.round(barHeight / 2);
+  const footerY = height - insetY - Math.round(barHeight / 2);
   const logo = project.showProducerBranding && project.producerLogo ? await loadImageSource(project.producerLogo) : null;
   const clientLogo = project.showClientMeta && project.clientLogo ? await loadImageSource(project.clientLogo) : null;
   const details = [
@@ -1543,52 +1561,58 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
     project.showDirectorMeta && project.director?.trim() ? ['DIRECTOR', project.director] : null
   ].filter(Boolean);
   ctx.save();
-  const frameLineWidth = Math.max(1, Math.round(width / 1400));
-  const frameRight = width - inset;
-  const frameBottom = height - inset;
+  const frameLineWidth = 1;
+  const frameRight = width - insetX;
+  const frameBottom = height - insetY;
   const drawRule = (y, segments) => { if (!project.showProjectFrame) return; ctx.beginPath(); segments.forEach(([start, end]) => { if (end <= start) return; ctx.moveTo(start, y); ctx.lineTo(end, y); }); ctx.stroke(); };
-  if (project.showProjectFrame) { ctx.strokeStyle = '#111'; ctx.lineWidth = frameLineWidth; ctx.beginPath(); ctx.moveTo(inset, inset); ctx.lineTo(inset, frameBottom); ctx.moveTo(frameRight, inset); ctx.lineTo(frameRight, frameBottom); ctx.stroke(); }
+  if (project.showProjectFrame) { ctx.strokeStyle = 'rgba(0,0,0,.68)'; ctx.lineWidth = frameLineWidth; ctx.beginPath(); ctx.moveTo(insetX, insetY); ctx.lineTo(insetX, frameBottom); ctx.moveTo(frameRight, insetY); ctx.lineTo(frameRight, frameBottom); ctx.stroke(); }
   const frameTextColor = project.frameTextColor || '#111111';
-  const fontSize = Math.max(11, Math.round(width * .009));
-  ctx.font = `600 ${fontSize}px Arial`;
+  const fontSize = Math.max(7, Math.min(11, width * .0072));
+  ctx.font = `500 ${fontSize}px "DM Mono", monospace`;
   ctx.textBaseline = 'middle';
-  let leftX = inset + 22;
-  if (logo) { const logoSize = Math.max(16, Math.round(barHeight * .7)); ctx.drawImage(logo, leftX, barY + (barHeight - logoSize) / 2, logoSize, logoSize); leftX += logoSize + 8; }
-  let producerEnd = inset;
+  const producerStart = insetX + 30;
+  let leftX = producerStart;
+  let producerEnd = insetX;
+  if (logo) { const logoSize = 18; ctx.drawImage(logo, leftX, barY + (barHeight - logoSize) / 2, logoSize, logoSize); leftX += logoSize + 6; producerEnd = leftX - 6; }
   if (project.showProducerBranding && project.producer?.trim()) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'left'; const producerText = project.producer.trim().toUpperCase().slice(0, 44); ctx.fillText(producerText, leftX, barY + barHeight / 2); producerEnd = leftX + ctx.measureText(producerText).width; }
   const titleText = project.showProjectTitle && project.title.trim() ? project.title.trim().toUpperCase().slice(0, 54) : '';
-  const titleEnd = frameRight - 22;
+  const titleEnd = frameRight - 30;
   const titleStart = titleText ? titleEnd - (ctx.measureText(titleText).width) : frameRight;
   if (titleText) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'right'; ctx.fillText(titleText, titleEnd, barY + barHeight / 2); }
   ctx.lineWidth = frameLineWidth;
   const topRuleSegments = [];
-  if (producerEnd > inset) topRuleSegments.push([inset, leftX - 8]);
-  if (producerEnd > inset || titleText) topRuleSegments.push([producerEnd > inset ? producerEnd + 8 : inset, titleText ? titleStart - 8 : frameRight]);
+  if (producerEnd > insetX) topRuleSegments.push([insetX, producerStart - 8]);
+  if (producerEnd > insetX || titleText) topRuleSegments.push([producerEnd > insetX ? producerEnd + 8 : insetX, titleText ? titleStart - 8 : frameRight]);
   if (titleText) topRuleSegments.push([titleEnd + 8, frameRight]);
-  if (!topRuleSegments.length) topRuleSegments.push([inset, frameRight]);
-  drawRule(inset, topRuleSegments);
-  const detailsStart = inset + 22;
+  ctx.strokeStyle = frameTextColor;
+  ctx.globalAlpha = .68;
+  if (project.showProducerBranding && (project.producer?.trim() || project.producerLogo) || titleText) drawRule(insetY, topRuleSegments);
+  ctx.globalAlpha = 1;
+  const detailsStart = insetX + 30;
   let detailX = detailsStart;
   ctx.textAlign = 'left';
-  details.forEach(([label, value]) => { if (label === 'CLIENTE' && clientLogo) { const clientLogoSize = Math.max(12, Math.round(barHeight * .65)); ctx.drawImage(clientLogo, detailX, footerY + (barHeight - clientLogoSize) / 2, clientLogoSize, clientLogoSize); detailX += clientLogoSize + 5; } ctx.fillStyle = frameTextColor; ctx.font = `500 ${Math.max(8, Math.round(fontSize * .72))}px Arial`; const prefix = `${label} ·`; ctx.fillText(prefix, detailX, footerY + barHeight / 2); detailX += ctx.measureText(prefix).width + 5; ctx.fillStyle = frameTextColor; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; const text = value.trim().toUpperCase().slice(0, 30); ctx.fillText(text, detailX, footerY + barHeight / 2); detailX += ctx.measureText(text).width + 18; });
-  const detailsEnd = detailX - (details.length ? 18 : 0);
+  details.forEach(([label, value]) => { if (label === 'CLIENTE' && clientLogo) { const clientLogoSize = 18; ctx.drawImage(clientLogo, detailX, footerY + (barHeight - clientLogoSize) / 2, clientLogoSize, clientLogoSize); detailX += clientLogoSize + 4; } ctx.fillStyle = frameTextColor; ctx.font = `500 ${Math.max(7, fontSize * .75)}px "DM Mono", monospace`; const prefix = label; ctx.fillText(prefix, detailX, footerY + barHeight / 2); detailX += ctx.measureText(prefix).width + 4; ctx.fillStyle = frameTextColor; ctx.font = `500 ${fontSize}px "DM Mono", monospace`; const text = value.trim().toUpperCase().slice(0, 30); ctx.fillText(text, detailX, footerY + barHeight / 2); detailX += ctx.measureText(text).width + 12; });
+  const detailsEnd = detailX - (details.length ? 12 : 0);
   const pageText = project.showPageNumber ? String(pageNumber).padStart(2, '0') : '';
-  ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`;
-  const pageEnd = frameRight - 22;
+  ctx.font = `500 ${fontSize}px "DM Mono", monospace`;
+  const pageEnd = frameRight - 30;
   const pageStart = pageText ? pageEnd - ctx.measureText(pageText).width : frameRight;
   if (pageText) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'right'; ctx.fillText(pageText, pageEnd, footerY + barHeight / 2); }
+  ctx.strokeStyle = frameTextColor;
+  ctx.globalAlpha = .68;
   ctx.lineWidth = frameLineWidth;
   const bottomRuleSegments = [];
-  if (details.length) bottomRuleSegments.push([inset, detailsStart - 8]);
-  bottomRuleSegments.push([details.length ? detailsEnd + 8 : inset, pageText ? pageStart - 8 : frameRight]);
+  if (details.length) bottomRuleSegments.push([insetX, detailsStart - 8]);
+  bottomRuleSegments.push([details.length ? detailsEnd + 8 : insetX, pageText ? pageStart - 8 : frameRight]);
   if (pageText) bottomRuleSegments.push([pageEnd + 8, frameRight]);
-  drawRule(frameBottom, bottomRuleSegments);
+  if (details.length || pageText) drawRule(frameBottom, bottomRuleSegments);
   ctx.restore();
 }
 
 async function renderPageCanvas(page, pageIndex = currentPageIndex, totalPages = project.pages.length) {
+  await document.fonts.ready;
   const width = project.ratio === 'portrait' ? 900 : 1600; const height = Math.round(width / getPageAspect()); const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); await drawArtboardBackground(ctx, width, height);
-  await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const layout = itemLayout(item, page); image.onload = () => { drawImageInBox(ctx, image, layout.image.x / 100 * width, layout.image.y / 100 * height, layout.image.width / 100 * width, layout.image.height / 100 * height, item.fit, item.focusX, item.focusY); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
+  await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const layout = itemLayout(item, page); image.onload = () => { const box = itemImageBox(item, layout); const x = box.x / 100 * width; const y = box.y / 100 * height; const w = box.width / 100 * width; const h = box.height / 100 * height; if (item.fit === 'contain') { ctx.fillStyle = '#eee'; ctx.fillRect(x, y, w, h); } drawImageInBox(ctx, image, x, y, w, h, item.fit, item.focusX, item.focusY); ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, Math.max(0, w - 1), Math.max(0, h - 1)); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
   page.items.forEach(item => { const layout = itemLayout(item, page); drawCameraMoveOverlayCanvas(ctx, item, layout, width, height); drawPhotoAnnotationsCanvas(ctx, item, layout, width, height); const asset = findAsset(item.assetId); if (asset) drawItemMetadata(ctx, item, asset, layout, width, height); });
   await drawProjectMetaFrame(ctx, width, height, pageIndex + 1, totalPages);
   return canvas;
