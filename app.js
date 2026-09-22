@@ -19,6 +19,20 @@ const SHOT_TYPES = [
   { value: 'TRK', label: 'Seguimiento' }
 ];
 
+const CAMERA_MOVES = [
+  { value: 'none', label: 'Sin movimiento', tag: '' },
+  { value: 'zoom-in', label: 'Zoom in', tag: 'ZOOM IN' },
+  { value: 'zoom-out', label: 'Zoom out', tag: 'ZOOM OUT' },
+  { value: 'pan-left', label: 'Pan a izquierda', tag: 'PAN ←' },
+  { value: 'pan-right', label: 'Pan a derecha', tag: 'PAN →' },
+  { value: 'tilt-up', label: 'Tilt hacia arriba', tag: 'TILT ↑' },
+  { value: 'tilt-down', label: 'Tilt hacia abajo', tag: 'TILT ↓' },
+  { value: 'dolly-in', label: 'Dolly in / Push in', tag: 'DOLLY IN' },
+  { value: 'dolly-out', label: 'Dolly out / Pull out', tag: 'DOLLY OUT' },
+  { value: 'track-left', label: 'Travelling a izquierda', tag: 'TRACK ←' },
+  { value: 'track-right', label: 'Travelling a derecha', tag: 'TRACK →' }
+];
+
 let currentPageIndex = 0;
 let selectedItemId = null;
 let activeInspector = 'page';
@@ -38,6 +52,7 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const createId = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
 function shotTypeInfo(value) { return SHOT_TYPES.find(type => type.value === value) || SHOT_TYPES[0]; }
+function cameraMoveInfo(value) { return CAMERA_MOVES.find(move => move.value === value) || CAMERA_MOVES[0]; }
 function itemDisplayTitle(item, asset) {
   const type = shotTypeInfo(item.shotType);
   const base = item.title?.trim() || asset?.name || `Plano ${(item.slot ?? 0) + 1}`;
@@ -98,7 +113,7 @@ function normalizeProject(data) {
   if (migrateOldCropDefault) normalized.defaultFit = 'contain';
   normalized.assets = Array.isArray(data.assets) ? data.assets : [];
   normalized.pages = Array.isArray(data.pages) && data.pages.length ? data.pages.map((page, index) => {
-    const migratedPage = { ...blankPage(`Página ${index + 1}`), ...page, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => ({ ...item, shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', slot: Number.isFinite(item.slot) ? item.slot : itemIndex, fit: migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit) })) : [] };
+    const migratedPage = { ...blankPage(`Página ${index + 1}`), ...page, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => ({ ...item, shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', cameraMove: item.cameraMove || 'none', cameraMoveMode: item.cameraMoveMode === 'between' ? 'between' : 'overlay', slot: Number.isFinite(item.slot) ? item.slot : itemIndex, fit: migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit) })) : [] };
     if (data.layoutEngine !== 'adaptive') migratedPage.items.forEach(item => {
       if (item.fit === 'cover' && !item.cropAspect) item.cropAspect = legacyCropAspect(page, data);
     });
@@ -369,6 +384,59 @@ function slotAtPoint(clientX, clientY) {
   return closest + (x > target.x + target.width / 2 || y > target.y + target.height ? 1 : 0);
 }
 
+function cameraMoveSvg(move, itemId, className = '') {
+  const markerId = `camera-arrow-${String(itemId).replace(/[^a-z0-9_-]/gi, '')}`;
+  let paths = '';
+  if (move.value === 'zoom-in' || move.value === 'dolly-in') paths = '<path d="M10 28 L28 10 M90 28 L72 10 M10 72 L28 90 M90 72 L72 90" marker-end="url(#' + markerId + ')" />';
+  if (move.value === 'zoom-out' || move.value === 'dolly-out') paths = '<path d="M28 10 L10 28 M72 10 L90 28 M28 90 L10 72 M72 90 L90 72" marker-end="url(#' + markerId + ')" />';
+  if (move.value === 'pan-left') paths = '<path d="M82 50 H18" marker-end="url(#' + markerId + ')" />';
+  if (move.value === 'pan-right') paths = '<path d="M18 50 H82" marker-end="url(#' + markerId + ')" />';
+  if (move.value === 'tilt-up') paths = '<path d="M50 82 V18" marker-end="url(#' + markerId + ')" />';
+  if (move.value === 'tilt-down') paths = '<path d="M50 18 V82" marker-end="url(#' + markerId + ')" />';
+  if (move.value === 'track-left') paths = '<path d="M82 42 H18 M82 58 H18" marker-end="url(#' + markerId + ')" />';
+  if (move.value === 'track-right') paths = '<path d="M18 42 H82 M18 58 H82" marker-end="url(#' + markerId + ')" />';
+  if (move.value === 'dolly-in' || move.value === 'dolly-out') paths += '<rect x="30" y="30" width="40" height="40" rx="2" />';
+  return `<svg class="${className}" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><marker id="${markerId}" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L6 3 L0 6 Z" /></marker></defs><g>${paths}</g></svg>`;
+}
+
+function cameraMoveMarkup(item) {
+  const move = cameraMoveInfo(item.cameraMove);
+  if (move.value === 'none' || item.cameraMoveMode === 'between') return '';
+  return `<div class="camera-move-overlay camera-move-${move.value}" title="Movimiento de cámara: ${escapeHtml(move.label)}">${cameraMoveSvg(move, item.id)}<span>${escapeHtml(move.tag)}</span></div>`;
+}
+
+function cameraMoveConnectorMarkup(page) {
+  const layouts = pageLayout(page);
+  const aspect = getPageAspect();
+  const pageWidth = aspect * 100;
+  const connections = [];
+  page.items.forEach((item, index) => {
+    const move = cameraMoveInfo(item.cameraMove);
+    const next = page.items[index + 1];
+    if (move.value === 'none' || item.cameraMoveMode !== 'between' || !next || !layouts[index] || !layouts[index + 1]) return;
+    const toPhysical = rect => ({ x: rect.x / 100 * pageWidth, y: rect.y, width: rect.width / 100 * pageWidth, height: rect.height });
+    const from = toPhysical(layouts[index].card);
+    const target = toPhysical(layouts[index + 1].card);
+    const fromCenter = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
+    const targetCenter = { x: target.x + target.width / 2, y: target.y + target.height / 2 };
+    const dx = targetCenter.x - fromCenter.x;
+    const dy = targetCenter.y - fromCenter.y;
+    const distance = Math.hypot(dx, dy);
+    if (!distance) return;
+    const ux = dx / distance;
+    const uy = dy / distance;
+    const edgePoint = (rect, x, y) => { const tx = Math.abs(x) > .001 ? rect.width / 2 / Math.abs(x) : Infinity; const ty = Math.abs(y) > .001 ? rect.height / 2 / Math.abs(y) : Infinity; const distanceToEdge = Math.min(tx, ty); return { x: rect.x + rect.width / 2 + x * distanceToEdge, y: rect.y + rect.height / 2 + y * distanceToEdge }; };
+    const start = edgePoint(from, ux, uy);
+    const end = edgePoint(target, -ux, -uy);
+    const markerId = `camera-connector-${String(item.id).replace(/[^a-z0-9_-]/gi, '')}`;
+    connections.push({ move, markerId, start, end, mid: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 } });
+  });
+  if (!connections.length) return '';
+  const lines = connections.map(({ markerId, start, end }) => `<defs><marker id="${markerId}" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L6 3 L0 6 Z" /></marker></defs><line x1="${start.x / pageWidth * 100}" y1="${start.y}" x2="${end.x / pageWidth * 100}" y2="${end.y}" marker-end="url(#${markerId})" />`).join('');
+  const labels = connections.map(({ move, mid }) => `<span class="camera-move-connector-label" style="left:${mid.x / pageWidth * 100}%;top:${mid.y}%">${escapeHtml(move.tag)}</span>`).join('');
+  return `<svg class="camera-move-connectors" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>${labels}`;
+}
+
 function itemMarkup(item, page = currentPage()) {
   const asset = findAsset(item.assetId); if (!asset) return '';
   const label = itemDisplayTitle(item, asset);
@@ -423,7 +491,8 @@ function renderPage() {
   const content = page?.items.length ? page.items.map(item => itemMarkup(item, page)).join('') : '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>';
   const producerBrand = !project.showProjectFrame && project.showProducerBranding && (project.producer?.trim() || project.producerLogo) ? `<div class="producer-brand-overlay" id="canvasProducerBrand">${project.producerLogo ? `<img src="${project.producerLogo}" alt="" />` : ''}${project.producer?.trim() ? `<span>${escapeHtml(project.producer.trim())}</span>` : ''}</div>` : '';
   const titleOverlay = !project.showProjectFrame && project.showProjectTitle && project.title.trim() ? `<div class="project-title-overlay" id="canvasProjectTitle" contenteditable="true" spellcheck="false">${escapeHtml(project.title)}</div>` : '';
-  $('#canvasPage').innerHTML = guides + content + producerBrand + titleOverlay + storyboardMetaMarkup();
+  const cameraConnectors = page ? cameraMoveConnectorMarkup(page) : '';
+  $('#canvasPage').innerHTML = guides + content + cameraConnectors + producerBrand + titleOverlay + storyboardMetaMarkup();
   $$('.design-item').forEach(item => bindDesignItem(item));
   $$('.description-editor').forEach(editor => {
     editor.addEventListener('pointerdown', event => event.stopPropagation());
@@ -623,6 +692,10 @@ function renderInspector() {
   $('#photoShotType').value = item.shotType || 'PG';
   $('#photoTitle').value = item.title || '';
   $('#photoDescription').value = item.description || '';
+  $('#photoCameraMove').value = item.cameraMove || 'none';
+  $('#photoCameraMoveMode').value = item.cameraMoveMode || 'overlay';
+  $('#photoCameraMoveMode').disabled = item.slot >= currentPage().items.length - 1;
+  $('#photoCameraMoveMode').title = item.slot >= currentPage().items.length - 1 ? 'El último plano no tiene un siguiente plano para conectar' : '';
   $$('.fit-btn').forEach(button => button.classList.toggle('is-active', button.dataset.fit === item.fit));
 }
 
@@ -701,7 +774,7 @@ function addAssetToPage(assetId, targetSlot = null) {
 }
 
 function createAutoItems(assets) {
-  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, fit: project.defaultFit, focusX: 50, focusY: 50, shotType: 'PG', title: '', description: '' }));
+  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, fit: project.defaultFit, focusX: 50, focusY: 50, shotType: 'PG', title: '', description: '', cameraMove: 'none', cameraMoveMode: 'overlay' }));
 }
 
 function autoArrange() {
@@ -840,6 +913,41 @@ function drawProjectTitle(ctx, width, height) {
   ctx.restore();
 }
 
+function drawCanvasArrow(ctx, x1, y1, x2, y2) {
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const size = Math.max(8, Math.min(18, Math.hypot(x2 - x1, y2 - y1) * .08));
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - size * Math.cos(angle - Math.PI / 6), y2 - size * Math.sin(angle - Math.PI / 6)); ctx.lineTo(x2 - size * Math.cos(angle + Math.PI / 6), y2 - size * Math.sin(angle + Math.PI / 6)); ctx.closePath(); ctx.fill();
+}
+
+function drawCameraMoveOverlayCanvas(ctx, item, layout, width, height) {
+  const move = cameraMoveInfo(item.cameraMove);
+  if (move.value === 'none' || item.cameraMoveMode === 'between') return;
+  const x = layout.card.x / 100 * width; const y = layout.card.y / 100 * height; const w = layout.card.width / 100 * width; const h = layout.card.height / 100 * height;
+  const inset = Math.min(w, h) * .12;
+  ctx.save(); ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = Math.max(2, Math.min(7, w * .012)); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = 4;
+  if (move.value === 'zoom-in' || move.value === 'dolly-in') { drawCanvasArrow(ctx, x + inset, y + inset * 2.4, x + inset * 3, y + inset); drawCanvasArrow(ctx, x + w - inset, y + inset * 2.4, x + w - inset * 3, y + inset); drawCanvasArrow(ctx, x + inset, y + h - inset * 2.4, x + inset * 3, y + h - inset); drawCanvasArrow(ctx, x + w - inset, y + h - inset * 2.4, x + w - inset * 3, y + h - inset); }
+  if (move.value === 'zoom-out' || move.value === 'dolly-out') { drawCanvasArrow(ctx, x + inset * 3, y + inset, x + inset, y + inset * 2.4); drawCanvasArrow(ctx, x + w - inset * 3, y + inset, x + w - inset, y + inset * 2.4); drawCanvasArrow(ctx, x + inset * 3, y + h - inset, x + inset, y + h - inset * 2.4); drawCanvasArrow(ctx, x + w - inset * 3, y + h - inset, x + w - inset, y + h - inset * 2.4); }
+  if (move.value === 'pan-left') drawCanvasArrow(ctx, x + w - inset, y + h / 2, x + inset, y + h / 2);
+  if (move.value === 'pan-right') drawCanvasArrow(ctx, x + inset, y + h / 2, x + w - inset, y + h / 2);
+  if (move.value === 'tilt-up') drawCanvasArrow(ctx, x + w / 2, y + h - inset, x + w / 2, y + inset);
+  if (move.value === 'tilt-down') drawCanvasArrow(ctx, x + w / 2, y + inset, x + w / 2, y + h - inset);
+  if (move.value === 'track-left') { drawCanvasArrow(ctx, x + w - inset, y + h * .43, x + inset, y + h * .43); drawCanvasArrow(ctx, x + w - inset, y + h * .57, x + inset, y + h * .57); }
+  if (move.value === 'track-right') { drawCanvasArrow(ctx, x + inset, y + h * .43, x + w - inset, y + h * .43); drawCanvasArrow(ctx, x + inset, y + h * .57, x + w - inset, y + h * .57); }
+  if (move.value === 'dolly-in' || move.value === 'dolly-out') { ctx.strokeRect(x + w * .32, y + h * .32, w * .36, h * .36); }
+  ctx.shadowBlur = 0; ctx.font = `600 ${Math.max(9, Math.round(width * .008))}px Arial`; const labelWidth = Math.min(w * .7, Math.max(70, ctx.measureText(move.tag).width + 16)); ctx.fillStyle = 'rgba(0,0,0,.78)'; ctx.fillRect(x + (w - labelWidth) / 2, y + h - Math.max(24, h * .12), labelWidth, Math.max(18, h * .1)); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(move.tag, x + w / 2, y + h - Math.max(24, h * .12) / 2); ctx.restore();
+}
+
+function drawCameraMoveConnectorsCanvas(ctx, page, width, height) {
+  const layouts = pageLayout(page); const aspect = getPageAspect(); const pageWidth = aspect * 100;
+  page.items.forEach((item, index) => {
+    const move = cameraMoveInfo(item.cameraMove); const next = page.items[index + 1];
+    if (move.value === 'none' || item.cameraMoveMode !== 'between' || !next || !layouts[index] || !layouts[index + 1]) return;
+    const toPhysical = rect => ({ x: rect.x / 100 * pageWidth, y: rect.y, width: rect.width / 100 * pageWidth, height: rect.height }); const from = toPhysical(layouts[index].card); const target = toPhysical(layouts[index + 1].card); const fromCenter = { x: from.x + from.width / 2, y: from.y + from.height / 2 }; const targetCenter = { x: target.x + target.width / 2, y: target.y + target.height / 2 }; const dx = targetCenter.x - fromCenter.x; const dy = targetCenter.y - fromCenter.y; const distance = Math.hypot(dx, dy); if (!distance) return; const ux = dx / distance; const uy = dy / distance; const edgePoint = (rect, x, y) => { const tx = Math.abs(x) > .001 ? rect.width / 2 / Math.abs(x) : Infinity; const ty = Math.abs(y) > .001 ? rect.height / 2 / Math.abs(y) : Infinity; const edge = Math.min(tx, ty); return { x: rect.x + rect.width / 2 + x * edge, y: rect.y + rect.height / 2 + y * edge }; }; const start = edgePoint(from, ux, uy); const end = edgePoint(target, -ux, -uy); const sx = start.x / pageWidth * width; const sy = start.y / 100 * height; const ex = end.x / pageWidth * width; const ey = end.y / 100 * height;
+    ctx.save(); ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = Math.max(2, Math.min(6, width * .004)); ctx.lineCap = 'round'; ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = 4; drawCanvasArrow(ctx, sx, sy, ex, ey); ctx.shadowBlur = 0; ctx.font = `600 ${Math.max(9, Math.round(width * .007))}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const label = move.tag; const labelWidth = ctx.measureText(label).width + 14; const mx = (sx + ex) / 2; const my = (sy + ey) / 2; ctx.fillStyle = 'rgba(0,0,0,.82)'; ctx.fillRect(mx - labelWidth / 2, my - 11, labelWidth, 22); ctx.fillStyle = '#fff'; ctx.fillText(label, mx, my); ctx.restore();
+  });
+}
+
 async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) {
   if (!project.showProjectFrame) return;
   const inset = Math.max(18, Math.round(Math.min(width, height) * .035));
@@ -876,6 +984,8 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
 async function renderPageCanvas(page) {
   const width = project.ratio === 'portrait' ? 900 : 1600; const height = Math.round(width / getPageAspect()); const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.fillStyle = project.background; ctx.fillRect(0, 0, width, height);
   await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const layout = itemLayout(item, page); image.onload = () => { drawImageInBox(ctx, image, layout.image.x / 100 * width, layout.image.y / 100 * height, layout.image.width / 100 * width, layout.image.height / 100 * height, item.fit, item.focusX, item.focusY); drawItemMetadata(ctx, item, asset, layout, width, height); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
+  page.items.forEach(item => drawCameraMoveOverlayCanvas(ctx, item, itemLayout(item, page), width, height));
+  drawCameraMoveConnectorsCanvas(ctx, page, width, height);
   if (project.showProjectFrame) await drawProjectMetaFrame(ctx, width, height, currentPageIndex + 1, project.pages.length);
   else { await drawProducerBranding(ctx, width, height); drawProjectTitle(ctx, width, height); }
   return canvas;
@@ -903,8 +1013,10 @@ function printAllPages() {
       node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`;
       node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`;
       node.innerHTML = `<div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${overlayInfo ? infoMarkup : ''}</div>${overlayInfo ? '' : infoMarkup}`;
+      node.insertAdjacentHTML('beforeend', cameraMoveMarkup(item));
       sheet.appendChild(node);
     });
+    sheet.insertAdjacentHTML('beforeend', cameraMoveConnectorMarkup(page));
     if (project.showProjectFrame) sheet.insertAdjacentHTML('beforeend', storyboardMetaMarkup(pageIndex + 1, project.pages.length));
     else {
       if (project.showProducerBranding && (project.producer?.trim() || project.producerLogo)) {
@@ -992,7 +1104,7 @@ $('#deletePageBtn').addEventListener('click', deleteCurrentPage);
 
 $$('.inspector-tab').forEach(tab => tab.addEventListener('click', () => { activeInspector = tab.dataset.inspector; renderInspector(); }));
 $$('.fit-btn').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; item.fit = button.dataset.fit; renderPage(); renderInspector(); saveProject(); }));
-$('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoShotType').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.shotType = event.target.value; renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); });
+$('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoShotType').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.shotType = event.target.value; renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); }); $('#photoCameraMove').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMove = event.target.value; if (item.cameraMove === 'none') item.cameraMoveMode = 'overlay'; render(); saveProject(); }); $('#photoCameraMoveMode').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveMode = event.target.value === 'between' ? 'between' : 'overlay'; render(); saveProject(); });
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
 
 $('#newProjectBtn').addEventListener('click', resetProject); $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });

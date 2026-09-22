@@ -136,6 +136,15 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .design-photo img { width:100%; height:100%; display:block; object-fit:contain; pointer-events:none; }
 .design-item.fit-cover .design-photo img { object-fit:cover; }
 .design-item.fit-contain { background:transparent; }
+.camera-move-overlay { position:absolute; z-index:8; inset:0; color:#fff; pointer-events:none; }
+.camera-move-overlay svg { width:100%; height:100%; overflow:visible; filter:drop-shadow(0 1px 2px rgba(0,0,0,.9)); }
+.camera-move-overlay svg path,.camera-move-overlay svg rect { fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2.2; vector-effect:non-scaling-stroke; }
+.camera-move-overlay svg marker path { fill:currentColor; stroke:none; }
+.camera-move-overlay > span { position:absolute; left:50%; bottom:9%; padding:4px 7px; color:#fff; background:rgba(0,0,0,.78); font:600 clamp(7px,.72vw,10px)/1 'DM Mono',monospace; letter-spacing:.4px; transform:translateX(-50%); white-space:nowrap; }
+.camera-move-connectors { position:absolute; z-index:6; inset:0; width:100%; height:100%; overflow:visible; color:#fff; pointer-events:none; filter:drop-shadow(0 1px 2px rgba(0,0,0,.9)); }
+.camera-move-connectors line { fill:none; stroke:currentColor; stroke-linecap:round; stroke-width:.55; vector-effect:non-scaling-stroke; }
+.camera-move-connectors marker path { fill:currentColor; stroke:none; }
+.camera-move-connector-label { position:absolute; z-index:7; padding:4px 7px; color:#fff; background:rgba(0,0,0,.82); font:600 clamp(7px,.72vw,10px)/1 'DM Mono',monospace; letter-spacing:.4px; transform:translate(-50%,-50%); white-space:nowrap; }
 .description-box { width:100%; min-height:0; flex:0 0 auto; display:flex; flex-direction:column; justify-content:center; gap:2px; overflow:hidden; padding:2px 8px; border:1px solid #000; color:#fff; background:#000; text-align:left; pointer-events:auto; }
 .description-overlay { position:absolute; z-index:3; left:0; bottom:0; border:0; background:rgba(0,0,0,.78); }
 .description-overlay.is-empty { background:rgba(0,0,0,.42); }
