@@ -1680,13 +1680,30 @@ async function renderPageCanvas(page, pageIndex = currentPageIndex, totalPages =
   catch (error) { console.warn('Se usará el render de respaldo para exportar esta página.', error); return renderPageCanvasLegacy(page, pageIndex, totalPages); }
 }
 
+function canvasToBlob(canvas, type = 'image/png', quality = .92) {
+  return new Promise((resolve, reject) => {
+    if (typeof canvas?.toBlob !== 'function') { reject(new Error('Este navegador no puede crear el archivo de imagen')); return; }
+    try { canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('El navegador no pudo crear el archivo de imagen')), type, quality); }
+    catch (error) { reject(error); }
+  });
+}
+
+async function renderPageBlob(page, pageIndex = currentPageIndex, totalPages = project.pages.length, type = 'image/png', quality = .92) {
+  const canvas = await renderPageCanvas(page, pageIndex, totalPages);
+  try { return await canvasToBlob(canvas, type, quality); }
+  catch (error) {
+    console.warn('Falló la conversión del artboard; se reintentará con el render de respaldo.', error);
+    const fallbackCanvas = await renderPageCanvasLegacy(page, pageIndex, totalPages);
+    return canvasToBlob(fallbackCanvas, type, quality);
+  }
+}
+
 async function exportPageAsPng(pageIndex = currentPageIndex) {
   const page = project.pages[pageIndex];
   if (!page) return;
   showToast(`Preparando el PNG de la página ${pageIndex + 1}…`);
   try {
-    const canvas = await renderPageCanvas(page, pageIndex, project.pages.length);
-    const blob = await new Promise((resolve, reject) => { try { canvas.toBlob(result => result ? resolve(result) : reject(new Error('El navegador no pudo crear el archivo PNG')), 'image/png'); } catch (error) { reject(error); } });
+    const blob = await renderPageBlob(page, pageIndex, project.pages.length, 'image/png');
     downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${pageIndex + 1}.png`);
     showToast(`Página ${pageIndex + 1} exportada como PNG`);
   } catch (error) {
@@ -1695,17 +1712,35 @@ async function exportPageAsPng(pageIndex = currentPageIndex) {
   }
 }
 
-async function exportImage(type) { const canvas = await renderPageCanvas(currentPage()); canvas.toBlob(blob => { downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${currentPageIndex + 1}.${type}`); showToast(`Página exportada como ${type.toUpperCase()}`); }, type === 'jpg' ? 'image/jpeg' : 'image/png', .92); }
-async function exportAllPagesPng() {
-  const totalPages = project.pages.length;
-  const entries = [];
-  for (let pageIndex = 0; pageIndex < totalPages; pageIndex += 1) {
-    const canvas = await renderPageCanvas(project.pages[pageIndex], pageIndex, totalPages);
-    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', .92));
-    if (blob) entries.push({ name: `pagina-${String(pageIndex + 1).padStart(2, '0')}.png`, data: new Uint8Array(await blob.arrayBuffer()) });
+async function exportImage(type) {
+  const page = currentPage();
+  if (!page) return;
+  showToast(`Preparando la página como ${type.toUpperCase()}…`);
+  try {
+    const mimeType = type === 'jpg' ? 'image/jpeg' : 'image/png';
+    const blob = await renderPageBlob(page, currentPageIndex, project.pages.length, mimeType);
+    downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${currentPageIndex + 1}.${type}`);
+    showToast(`Página exportada como ${type.toUpperCase()}`);
+  } catch (error) {
+    console.error('No se pudo exportar la página.', error);
+    showToast(`No se pudo exportar como ${type.toUpperCase()}. Probá de nuevo.`);
   }
-  downloadBlob(createZipBlob(entries), `${project.title || 'storyboard'}-todas-las-paginas-png.zip`);
-  showToast(`${entries.length} página${entries.length === 1 ? '' : 's'} exportada${entries.length === 1 ? '' : 's'} como PNG`);
+}
+async function exportAllPagesPng() {
+  showToast('Preparando las páginas como PNG…');
+  try {
+    const totalPages = project.pages.length;
+    const entries = [];
+    for (let pageIndex = 0; pageIndex < totalPages; pageIndex += 1) {
+      const blob = await renderPageBlob(project.pages[pageIndex], pageIndex, totalPages);
+      entries.push({ name: `pagina-${String(pageIndex + 1).padStart(2, '0')}.png`, data: new Uint8Array(await blob.arrayBuffer()) });
+    }
+    downloadBlob(createZipBlob(entries), `${project.title || 'storyboard'}-todas-las-paginas-png.zip`);
+    showToast(`${entries.length} página${entries.length === 1 ? '' : 's'} exportada${entries.length === 1 ? '' : 's'} como PNG`);
+  } catch (error) {
+    console.error('No se pudieron exportar todas las páginas como PNG.', error);
+    showToast('No se pudieron exportar las páginas como PNG. Probá de nuevo.');
+  }
 }
 
 function printAllPages() {
