@@ -189,6 +189,15 @@ const fixture = () => {
     await page.waitForSelector('#canvasPage .storyboard-meta-producer img');
     assert.equal(await page.locator('#canvasPage .storyboard-meta-producer img').count(), 1);
     assert.match(await page.locator('#canvasPage .storyboard-meta-producer').textContent(), /GB Films/);
+    await page.locator('[data-inspector="info"]').click();
+    await page.locator('#projectClient').fill('Cliente prueba');
+    await page.locator('[data-inspector="page"]').click();
+    await page.locator('#showClientMeta').check({ force: true });
+    await page.locator('[data-inspector="info"]').click();
+    await page.locator('#clientLogoInput').setInputFiles({ name: 'cliente.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle cx="16" cy="16" r="16" fill="#ff00aa"/></svg>') });
+    await page.waitForSelector('#canvasPage .storyboard-meta-client-logo');
+    assert.equal(await page.locator('#canvasPage .storyboard-meta-client-logo').count(), 1);
+    assert.equal(await page.locator('#removeClientLogoBtn').isDisabled(), false);
     assert.equal(await page.locator('#canvasPage .storyboard-meta-frame').evaluate(node => node.classList.contains('is-frame-hidden')), true);
     // No image/caption may extend beyond its assigned card or beyond the safe area.
     const check = await page.evaluate(() => {

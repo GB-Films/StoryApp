@@ -150,7 +150,7 @@ let projects = [];
 let currentProjectId = null;
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', background: '#ffffff', backgroundImage: '', backgroundImageName: '', backgroundPattern: 'none', frameTextColor: '#111111', descriptionTextColor: '', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', clientLogo: '', clientLogoName: '', background: '#ffffff', backgroundImage: '', backgroundImageName: '', backgroundPattern: 'none', frameTextColor: '#111111', descriptionTextColor: '', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
 
 const FRAME_ASPECTS = Object.freeze({ horizontal: 16 / 9, vertical: 9 / 16, square: 1 });
 const FRAME_MODES = new Set(['original', 'horizontal', 'vertical', 'square']);
@@ -236,6 +236,8 @@ function normalizeProject(data) {
   normalized.showPageNumber = typeof data.showPageNumber === 'boolean' ? data.showPageNumber : true;
   normalized.producerLogo = typeof data.producerLogo === 'string' ? data.producerLogo : '';
   normalized.producerLogoName = typeof data.producerLogoName === 'string' ? data.producerLogoName : '';
+  normalized.clientLogo = typeof data.clientLogo === 'string' ? data.clientLogo : '';
+  normalized.clientLogoName = typeof data.clientLogoName === 'string' ? data.clientLogoName : '';
   normalized.background = typeof data.background === 'string' && data.background ? data.background : '#ffffff';
   normalized.backgroundImage = typeof data.backgroundImage === 'string' ? data.backgroundImage : '';
   normalized.backgroundImageName = typeof data.backgroundImageName === 'string' ? data.backgroundImageName : '';
@@ -781,7 +783,7 @@ function storyboardMetaMarkup(pageNumber = currentPageIndex + 1, totalPages = pr
   ].filter(Boolean);
   const producerMarkup = producer ? `<span class="storyboard-meta-producer">${project.producerLogo ? `<img src="${project.producerLogo}" alt="" />` : ''}${project.producer?.trim() ? `<strong>${escapeHtml(project.producer)}</strong>` : ''}</span>` : '';
   const titleMarkup = project.showProjectTitle && project.title.trim() ? `<strong class="storyboard-meta-title">${escapeHtml(project.title)}</strong>` : '';
-  const detailsMarkup = details.map(([label, value]) => `<span><small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('');
+  const detailsMarkup = details.map(([label, value]) => `<span>${label === 'CLIENTE' && project.clientLogo ? `<img class="storyboard-meta-client-logo" src="${project.clientLogo}" alt="" />` : ''}<small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('');
   const pageMarkup = project.showPageNumber ? `<strong class="storyboard-meta-page">${String(pageNumber).padStart(2, '0')}</strong>` : '';
   return `<div class="storyboard-meta-frame ${project.showProjectFrame ? '' : 'is-frame-hidden'}" style="--frame-text-color:${project.frameTextColor || '#111111'}" aria-hidden="true"><div class="storyboard-meta-top">${producerMarkup}${titleMarkup}</div><div class="storyboard-meta-bottom">${detailsMarkup ? `<div class="storyboard-meta-details">${detailsMarkup}</div>` : '<span></span>'}${pageMarkup}</div></div>`;
 }
@@ -1001,6 +1003,9 @@ function renderControls() {
   $('#producerLogoPreview').hidden = !project.producerLogo;
   $('#producerLogoPreview').innerHTML = project.producerLogo ? `<img src="${project.producerLogo}" alt="" /><span>${escapeHtml(project.producerLogoName || 'Logo cargado')}</span>` : '';
   $('#removeProducerLogoBtn').disabled = !project.producerLogo;
+  $('#clientLogoPreview').hidden = !project.clientLogo;
+  $('#clientLogoPreview').innerHTML = project.clientLogo ? `<img src="${project.clientLogo}" alt="" /><span>${escapeHtml(project.clientLogoName || 'Logo cargado')}</span>` : '';
+  $('#removeClientLogoBtn').disabled = !project.clientLogo;
   $$('.format-btn').forEach(button => { button.classList.toggle('is-active', button.dataset.format === project.ratio); button.disabled = project.formatLocked; button.title = project.formatLocked ? 'El formato queda fijo durante este proyecto' : 'Elegí el formato del proyecto'; });
   renderFrameButtons('.fit-default-btn', ['original', ...Object.keys(FRAME_ASPECTS)], projectDefaultFrame());
   document.documentElement.style.setProperty('--zoom', zoom);
@@ -1349,6 +1354,7 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
   const barY = inset - Math.round(barHeight / 2);
   const footerY = height - inset - Math.round(barHeight / 2);
   const logo = project.showProducerBranding && project.producerLogo ? await loadImageSource(project.producerLogo) : null;
+  const clientLogo = project.showClientMeta && project.clientLogo ? await loadImageSource(project.clientLogo) : null;
   const details = [
     project.showClientMeta && project.client?.trim() ? ['CLIENTE', project.client] : null,
     project.showAgencyMeta && project.agency?.trim() ? ['AGENCIA', project.agency] : null,
@@ -1370,7 +1376,7 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
   if (project.showProjectTitle && project.title.trim()) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'right'; ctx.fillText(project.title.trim().toUpperCase().slice(0, 54), width - inset - 22, barY + barHeight / 2); }
   let detailX = inset + 22;
   ctx.textAlign = 'left';
-  details.forEach(([label, value]) => { ctx.fillStyle = frameTextColor; ctx.font = `500 ${Math.max(8, Math.round(fontSize * .72))}px Arial`; const prefix = `${label} ·`; ctx.fillText(prefix, detailX, footerY + barHeight / 2); detailX += ctx.measureText(prefix).width + 5; ctx.fillStyle = frameTextColor; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; const text = value.trim().toUpperCase().slice(0, 30); ctx.fillText(text, detailX, footerY + barHeight / 2); detailX += ctx.measureText(text).width + 18; });
+  details.forEach(([label, value]) => { if (label === 'CLIENTE' && clientLogo) { const clientLogoSize = Math.max(12, Math.round(barHeight * .65)); ctx.drawImage(clientLogo, detailX, footerY + (barHeight - clientLogoSize) / 2, clientLogoSize, clientLogoSize); detailX += clientLogoSize + 5; } ctx.fillStyle = frameTextColor; ctx.font = `500 ${Math.max(8, Math.round(fontSize * .72))}px Arial`; const prefix = `${label} ·`; ctx.fillText(prefix, detailX, footerY + barHeight / 2); detailX += ctx.measureText(prefix).width + 5; ctx.fillStyle = frameTextColor; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; const text = value.trim().toUpperCase().slice(0, 30); ctx.fillText(text, detailX, footerY + barHeight / 2); detailX += ctx.measureText(text).width + 18; });
   if (project.showPageNumber) { ctx.fillStyle = frameTextColor; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; ctx.textAlign = 'right'; ctx.fillText(String(pageNumber).padStart(2, '0'), width - inset - 22, footerY + barHeight / 2); }
   ctx.restore();
 }
@@ -1555,6 +1561,9 @@ $('#showPageNumber').addEventListener('change', event => { project.showPageNumbe
 $('#producerLogoBtn').addEventListener('click', () => $('#producerLogoInput').click());
 $('#producerLogoInput').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith('image/')) { showToast('Elegí un archivo de imagen'); event.target.value = ''; return; } const reader = new FileReader(); reader.onload = () => { project.producerLogo = reader.result; project.producerLogoName = file.name; project.showProducerBranding = true; render(); saveProject(); showToast('Logo de productora cargado'); }; reader.readAsDataURL(file); event.target.value = ''; });
 $('#removeProducerLogoBtn').addEventListener('click', () => { project.producerLogo = ''; project.producerLogoName = ''; render(); saveProject(); });
+$('#clientLogoBtn').addEventListener('click', () => $('#clientLogoInput').click());
+$('#clientLogoInput').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith('image/')) { showToast('Elegí un archivo de imagen'); event.target.value = ''; return; } const reader = new FileReader(); reader.onload = () => { project.clientLogo = reader.result; project.clientLogoName = file.name; render(); saveProject(); showToast('Logo de cliente cargado'); }; reader.readAsDataURL(file); event.target.value = ''; });
+$('#removeClientLogoBtn').addEventListener('click', () => { project.clientLogo = ''; project.clientLogoName = ''; render(); saveProject(); });
 $$('.fit-default-btn').forEach(button => button.addEventListener('click', () => { const mode = validFrameMode(button.dataset.frame) ? button.dataset.frame : 'original'; project.defaultFrame = mode; project.defaultCropAspect = frameAspect(mode); project.defaultFit = mode === 'original' ? 'contain' : 'cover'; renderControls(); saveProject(); }));
 $('#clearPageBtn').addEventListener('click', () => { if (currentPage().items.length) $('#clearPageConfirmModal').hidden = false; });
 
