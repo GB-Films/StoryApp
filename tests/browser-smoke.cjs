@@ -12,7 +12,7 @@ const fixture = () => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="${['#578e89', '#ce8b51', '#56698c'][index % 3]}"/><circle cx="${width / 2}" cy="${height / 2}" r="${width / 3}" fill="#ffffff" opacity=".15"/><text x="50%" y="50%" text-anchor="middle" fill="white" font-size="90" font-family="sans-serif">${index + 1}</text></svg>`;
     return { id: `asset-${index}`, name: `Toma ${index + 1}`, width, height, image: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}` };
   });
-  return { version: 2, title: 'Prueba · secuencia automática', ratio: 'landscape', padding: 0, gap: 0, showDescriptions: true, assets,
+  return { version: 2, title: 'Prueba · secuencia automática', ratio: 'landscape', padding: 0, gap: 0, showDescriptions: true, showProjectFrame: true, showPageNumber: true, assets,
     pages: [{ id: 'page-1', photosPerPage: 4, layoutDirection: 'columns', items: assets.slice(0, 6).map((asset, slot) => ({ id: `item-${slot}`, assetId: asset.id, slot, fit: 'contain', title: `Escena ${slot + 1}`, description: `Descripción conservada ${slot + 1}`, shotType: 'PP', focusX: 50, focusY: 50 })) }] };
 };
 
@@ -33,6 +33,8 @@ const fixture = () => {
     const original = fixture();
     await page.locator('#projectInput').setInputFiles({ name: 'storyboard.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(original)) });
     await page.waitForFunction(() => document.querySelectorAll('#canvasPage .design-item').length === 6);
+    assert.equal(await page.locator('#canvasPage .storyboard-meta-page').textContent(), '01');
+    await page.locator('#showProjectFrame').uncheck({ force: true });
     const viewportLayout = await page.evaluate(() => {
       const workspace = document.querySelector('#canvasWorkspace').getBoundingClientRect();
       const carousel = document.querySelector('#pageCarousel').getBoundingClientRect();

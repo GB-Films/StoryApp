@@ -471,7 +471,7 @@ function storyboardMetaMarkup(pageNumber = currentPageIndex + 1, totalPages = pr
   const producerMarkup = producer ? `<span class="storyboard-meta-producer">${project.producerLogo ? `<img src="${project.producerLogo}" alt="" />` : ''}${project.producer?.trim() ? `<strong>${escapeHtml(project.producer)}</strong>` : ''}</span>` : '';
   const titleMarkup = project.showProjectTitle && project.title.trim() ? `<strong class="storyboard-meta-title">${escapeHtml(project.title)}</strong>` : '';
   const detailsMarkup = details.map(([label, value]) => `<span><small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('');
-  const pageMarkup = project.showPageNumber ? `<strong class="storyboard-meta-page">STORYBOARD · ${String(pageNumber).padStart(2, '0')} / ${String(totalPages).padStart(2, '0')}</strong>` : '';
+  const pageMarkup = project.showPageNumber ? `<strong class="storyboard-meta-page">${String(pageNumber).padStart(2, '0')}</strong>` : '';
   return `<div class="storyboard-meta-frame" aria-hidden="true"><div class="storyboard-meta-top">${producerMarkup}${titleMarkup}</div><div class="storyboard-meta-bottom">${detailsMarkup ? `<div class="storyboard-meta-details">${detailsMarkup}</div>` : '<span></span>'}${pageMarkup}</div></div>`;
 }
 
@@ -983,7 +983,7 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
   let detailX = inset + 22;
   ctx.textAlign = 'left';
   details.forEach(([label, value]) => { ctx.fillStyle = '#777'; ctx.font = `500 ${Math.max(8, Math.round(fontSize * .72))}px Arial`; const prefix = `${label} ·`; ctx.fillText(prefix, detailX, footerY + barHeight / 2); detailX += ctx.measureText(prefix).width + 5; ctx.fillStyle = '#111'; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; const text = value.trim().toUpperCase().slice(0, 30); ctx.fillText(text, detailX, footerY + barHeight / 2); detailX += ctx.measureText(text).width + 18; });
-  if (project.showPageNumber) { ctx.fillStyle = '#111'; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; ctx.textAlign = 'right'; ctx.fillText(`STORYBOARD · ${String(pageNumber).padStart(2, '0')} / ${String(totalPages).padStart(2, '0')}`, width - inset - 22, footerY + barHeight / 2); }
+  if (project.showPageNumber) { ctx.fillStyle = '#111'; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; ctx.textAlign = 'right'; ctx.fillText(String(pageNumber).padStart(2, '0'), width - inset - 22, footerY + barHeight / 2); }
   ctx.restore();
 }
 
