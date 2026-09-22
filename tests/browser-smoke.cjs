@@ -246,6 +246,12 @@ const fixture = () => {
     await page.locator('[data-project-title]').press('Enter');
     await page.locator('[data-open-project]').first().click();
     assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
+    await page.evaluate(() => { project.background = '#111111'; project.frameTextColor = '#ff00aa'; project.descriptionTextColor = '#00aaff'; render(); });
+    const customTextVisual = await page.evaluate(() => { const top = document.querySelector('.storyboard-meta-top'); const description = document.querySelector('.description-box'); return { topBackground: getComputedStyle(top).backgroundColor, frameColor: getComputedStyle(document.querySelector('.storyboard-meta-frame')).color, descriptionColor: getComputedStyle(description).color }; });
+    assert.equal(customTextVisual.topBackground, 'rgba(0, 0, 0, 0)', 'editorial frame stays transparent over custom backgrounds');
+    assert.equal(customTextVisual.frameColor, 'rgb(255, 0, 170)', 'editorial frame text color is customizable');
+    assert.equal(customTextVisual.descriptionColor, 'rgb(0, 170, 255)', 'shot text color is customizable');
+    await page.evaluate(() => { project.background = '#ffffff'; project.frameTextColor = '#111111'; project.descriptionTextColor = ''; render(); });
     assert.match(await page.locator('#canvasPage .design-item').last().textContent(), new RegExp(expectedLastTitle));
     await page.locator('[data-add-page]').click();
     assert.equal(await page.locator('#pageTotal').textContent(), '2');

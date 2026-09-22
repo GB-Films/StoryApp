@@ -36,6 +36,8 @@ const CAMERA_MOVES = [
 ];
 
 const BACKGROUND_PATTERNS = new Set(['none', 'grid', 'dots', 'diagonal', 'blueprint']);
+const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
+function validHexColor(value, fallback) { return HEX_COLOR_PATTERN.test(value || '') ? value : fallback; }
 
 function backgroundPatternCss(pattern) {
   const patterns = {
@@ -148,7 +150,7 @@ let projects = [];
 let currentProjectId = null;
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', background: '#ffffff', backgroundImage: '', backgroundImageName: '', backgroundPattern: 'none', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', background: '#ffffff', backgroundImage: '', backgroundImageName: '', backgroundPattern: 'none', frameTextColor: '#111111', descriptionTextColor: '', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
 
 const FRAME_ASPECTS = Object.freeze({ horizontal: 16 / 9, vertical: 9 / 16, square: 1 });
 const FRAME_MODES = new Set(['original', 'horizontal', 'vertical', 'square']);
@@ -238,6 +240,8 @@ function normalizeProject(data) {
   normalized.backgroundImage = typeof data.backgroundImage === 'string' ? data.backgroundImage : '';
   normalized.backgroundImageName = typeof data.backgroundImageName === 'string' ? data.backgroundImageName : '';
   normalized.backgroundPattern = BACKGROUND_PATTERNS.has(data.backgroundPattern) ? data.backgroundPattern : 'none';
+  normalized.frameTextColor = validHexColor(data.frameTextColor, '#111111');
+  normalized.descriptionTextColor = validHexColor(data.descriptionTextColor, '');
   normalized.showDescriptions = typeof data.showDescriptions === 'boolean' ? data.showDescriptions : true;
   normalized.infoPlacement = data.infoPlacement === 'overlay' ? 'overlay' : 'below';
   normalized.infoStyle = data.infoStyle === 'light' ? 'light' : 'dark';
@@ -760,7 +764,8 @@ function itemMarkup(item, page = currentPage()) {
   const description = item.description?.trim() || '';
   const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
   const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
-  const infoMarkup = project.showDescriptions ? `<div class="description-box ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${PHOTO_INFO_OVERLAY_HEIGHT}%` : `${captionStyle}width:100%;`}"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : '';
+  const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
+  const infoMarkup = project.showDescriptions ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${PHOTO_INFO_OVERLAY_HEIGHT}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : '';
   return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${itemIsSelected(item) ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
     <div class="design-photo" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${overlayInfo ? infoMarkup : ''}</div>
     ${overlayInfo ? '' : infoMarkup}
@@ -778,7 +783,7 @@ function storyboardMetaMarkup(pageNumber = currentPageIndex + 1, totalPages = pr
   const titleMarkup = project.showProjectTitle && project.title.trim() ? `<strong class="storyboard-meta-title">${escapeHtml(project.title)}</strong>` : '';
   const detailsMarkup = details.map(([label, value]) => `<span><small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('');
   const pageMarkup = project.showPageNumber ? `<strong class="storyboard-meta-page">${String(pageNumber).padStart(2, '0')}</strong>` : '';
-  return `<div class="storyboard-meta-frame ${project.showProjectFrame ? '' : 'is-frame-hidden'}" aria-hidden="true"><div class="storyboard-meta-top">${producerMarkup}${titleMarkup}</div><div class="storyboard-meta-bottom">${detailsMarkup ? `<div class="storyboard-meta-details">${detailsMarkup}</div>` : '<span></span>'}${pageMarkup}</div></div>`;
+  return `<div class="storyboard-meta-frame ${project.showProjectFrame ? '' : 'is-frame-hidden'}" style="--frame-text-color:${project.frameTextColor || '#111111'}" aria-hidden="true"><div class="storyboard-meta-top">${producerMarkup}${titleMarkup}</div><div class="storyboard-meta-bottom">${detailsMarkup ? `<div class="storyboard-meta-details">${detailsMarkup}</div>` : '<span></span>'}${pageMarkup}</div></div>`;
 }
 
 function renderLibrary() {
@@ -834,7 +839,8 @@ function pageThumbnailMarkup(page) {
     const captionStyle = layout.caption ? boxStyleWithinCard(layout.caption, layout.card) : '';
     const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
     const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
-    const caption = project.showDescriptions ? `<div class="page-thumb-caption ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${PHOTO_INFO_OVERLAY_HEIGHT}%` : `${captionStyle}width:100%;`}">${escapeHtml(label)}</div>` : '';
+    const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
+    const caption = project.showDescriptions ? `<div class="page-thumb-caption has-description-color ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${PHOTO_INFO_OVERLAY_HEIGHT}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};">${escapeHtml(label)}</div>` : '';
     const objectFit = item.fit === 'cover' ? 'cover' : 'contain';
     return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block"><div class="page-thumb-photo" style="${imageStyle}"><img src="${asset.image}" alt="" style="object-fit:${objectFit};object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${overlayInfo ? '' : caption}</div>`;
   }).join('');
@@ -980,6 +986,11 @@ function renderControls() {
   $('#infoPlacement').disabled = !project.showDescriptions;
   $('#infoStyle').value = project.infoStyle || 'dark';
   $('#infoStyle').disabled = !project.showDescriptions;
+  $('#frameTextColor').value = project.frameTextColor || '#111111';
+  $('#frameTextColorValue').textContent = (project.frameTextColor || '#111111').toUpperCase();
+  const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
+  $('#descriptionTextColor').value = descriptionTextColor;
+  $('#descriptionTextColorValue').textContent = descriptionTextColor.toUpperCase();
   $('#showProjectTitle').checked = project.showProjectTitle;
   $('#showProducerBranding').checked = project.showProducerBranding;
   $('#showProjectFrame').checked = project.showProjectFrame;
@@ -1250,12 +1261,13 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.rect(captionX, captionY, captionWidth, captionHeight);
   ctx.clip();
   const lightInfo = project.infoStyle === 'light';
+  const descriptionTextColor = project.descriptionTextColor || (lightInfo ? '#000000' : '#ffffff');
   ctx.fillStyle = lightInfo ? 'rgba(255,255,255,.92)' : 'rgba(0,0,0,.86)';
   ctx.fillRect(captionX, captionY, captionWidth, captionHeight);
-  ctx.fillStyle = lightInfo ? '#000' : '#fff';
+  ctx.fillStyle = descriptionTextColor;
   ctx.font = '600 13px Arial';
   ctx.fillText(title.slice(0, 48), captionX + 8, captionY + Math.min(17, captionHeight - 7));
-  if (description && captionHeight > 30) { ctx.font = '11px Arial'; ctx.fillStyle = lightInfo ? '#555' : '#d0d0d0'; ctx.fillText(description.slice(0, 68), captionX + 8, captionY + Math.min(34, captionHeight - 7)); }
+  if (description && captionHeight > 30) { ctx.font = '11px Arial'; ctx.fillStyle = descriptionTextColor; ctx.fillText(description.slice(0, 68), captionX + 8, captionY + Math.min(34, captionHeight - 7)); }
   ctx.restore();
 }
 
@@ -1348,20 +1360,18 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
     ctx.lineWidth = Math.max(1, Math.round(width / 1400));
     ctx.strokeRect(inset, inset, width - inset * 2, height - inset * 2);
   }
-  ctx.fillStyle = 'rgba(255,255,255,.94)';
-  ctx.fillRect(inset + 12, barY, width - inset * 2 - 24, barHeight);
-  ctx.fillRect(inset + 12, footerY, width - inset * 2 - 24, barHeight);
+  const frameTextColor = project.frameTextColor || '#111111';
   const fontSize = Math.max(11, Math.round(width * .009));
   ctx.font = `600 ${fontSize}px Arial`;
   ctx.textBaseline = 'middle';
   let leftX = inset + 22;
   if (logo) { const logoSize = Math.max(16, Math.round(barHeight * .7)); ctx.drawImage(logo, leftX, barY + (barHeight - logoSize) / 2, logoSize, logoSize); leftX += logoSize + 8; }
-  if (project.showProducerBranding && project.producer?.trim()) { ctx.fillStyle = '#111'; ctx.textAlign = 'left'; ctx.fillText(project.producer.trim().toUpperCase().slice(0, 44), leftX, barY + barHeight / 2); }
-  if (project.showProjectTitle && project.title.trim()) { ctx.fillStyle = '#111'; ctx.textAlign = 'right'; ctx.fillText(project.title.trim().toUpperCase().slice(0, 54), width - inset - 22, barY + barHeight / 2); }
+  if (project.showProducerBranding && project.producer?.trim()) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'left'; ctx.fillText(project.producer.trim().toUpperCase().slice(0, 44), leftX, barY + barHeight / 2); }
+  if (project.showProjectTitle && project.title.trim()) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'right'; ctx.fillText(project.title.trim().toUpperCase().slice(0, 54), width - inset - 22, barY + barHeight / 2); }
   let detailX = inset + 22;
   ctx.textAlign = 'left';
-  details.forEach(([label, value]) => { ctx.fillStyle = '#777'; ctx.font = `500 ${Math.max(8, Math.round(fontSize * .72))}px Arial`; const prefix = `${label} ·`; ctx.fillText(prefix, detailX, footerY + barHeight / 2); detailX += ctx.measureText(prefix).width + 5; ctx.fillStyle = '#111'; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; const text = value.trim().toUpperCase().slice(0, 30); ctx.fillText(text, detailX, footerY + barHeight / 2); detailX += ctx.measureText(text).width + 18; });
-  if (project.showPageNumber) { ctx.fillStyle = '#111'; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; ctx.textAlign = 'right'; ctx.fillText(String(pageNumber).padStart(2, '0'), width - inset - 22, footerY + barHeight / 2); }
+  details.forEach(([label, value]) => { ctx.fillStyle = frameTextColor; ctx.font = `500 ${Math.max(8, Math.round(fontSize * .72))}px Arial`; const prefix = `${label} ·`; ctx.fillText(prefix, detailX, footerY + barHeight / 2); detailX += ctx.measureText(prefix).width + 5; ctx.fillStyle = frameTextColor; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; const text = value.trim().toUpperCase().slice(0, 30); ctx.fillText(text, detailX, footerY + barHeight / 2); detailX += ctx.measureText(text).width + 18; });
+  if (project.showPageNumber) { ctx.fillStyle = frameTextColor; ctx.font = `600 ${Math.max(9, Math.round(fontSize * .82))}px Arial`; ctx.textAlign = 'right'; ctx.fillText(String(pageNumber).padStart(2, '0'), width - inset - 22, footerY + barHeight / 2); }
   ctx.restore();
 }
 
@@ -1391,7 +1401,8 @@ function printAllPages() {
       const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
       const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
       const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
-      const infoMarkup = project.showDescriptions ? `<div class="description-box ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description ? '' : 'is-empty'}" style="height:${overlayInfo ? PHOTO_INFO_OVERLAY_HEIGHT : captionHeight}%"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : '';
+      const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
+      const infoMarkup = project.showDescriptions ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description ? '' : 'is-empty'}" style="height:${overlayInfo ? PHOTO_INFO_OVERLAY_HEIGHT : captionHeight}%;--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : '';
       const node = document.createElement('div');
       node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}`;
       node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`;
@@ -1534,7 +1545,7 @@ $('#backgroundImageInput').addEventListener('change', event => { const file = ev
 $('#removeBackgroundImageBtn').addEventListener('click', () => { if (!project.backgroundImage) return; project.backgroundImage = ''; project.backgroundImageName = ''; render(); saveProject(); });
 $('#backgroundPattern').addEventListener('change', event => { const pattern = BACKGROUND_PATTERNS.has(event.target.value) ? event.target.value : 'none'; project.backgroundPattern = pattern; if (pattern !== 'none') { project.backgroundImage = ''; project.backgroundImageName = ''; } render(); saveProject(); });
 $('#layoutEngine').addEventListener('change', event => { project.layoutEngine = event.target.value === 'adaptive' ? 'adaptive' : 'grid'; project.layoutEngineVersion = 1; render(); saveProject(); });
-$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = event.target.value === 'overlay' ? 'overlay' : 'below'; render(); saveProject(); }); $('#infoStyle').addEventListener('change', event => { project.infoStyle = event.target.value === 'light' ? 'light' : 'dark'; render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
+$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = event.target.value === 'overlay' ? 'overlay' : 'below'; render(); saveProject(); }); $('#infoStyle').addEventListener('change', event => { project.infoStyle = event.target.value === 'light' ? 'light' : 'dark'; render(); saveProject(); }); $('#frameTextColor').addEventListener('input', event => { project.frameTextColor = validHexColor(event.target.value, '#111111'); $('#frameTextColorValue').textContent = project.frameTextColor.toUpperCase(); render(); saveProject(); }); $('#descriptionTextColor').addEventListener('input', event => { project.descriptionTextColor = validHexColor(event.target.value, '#ffffff'); $('#descriptionTextColorValue').textContent = project.descriptionTextColor.toUpperCase(); render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
 $('#showProducerBranding').addEventListener('change', event => { project.showProducerBranding = event.target.checked; render(); saveProject(); });
 $('#showProjectFrame').addEventListener('change', event => { project.showProjectFrame = event.target.checked; render(); saveProject(); });
 $('#showClientMeta').addEventListener('change', event => { project.showClientMeta = event.target.checked; render(); saveProject(); });
