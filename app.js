@@ -1599,13 +1599,85 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
   ctx.restore();
 }
 
-async function renderPageCanvas(page, pageIndex = currentPageIndex, totalPages = project.pages.length) {
+function inlineComputedStyles(source, clone) {
+  if (!(source instanceof Element) || !(clone instanceof Element)) return;
+  const cloneChildren = [...clone.children];
+  const computed = getComputedStyle(source);
+  for (let index = 0; index < computed.length; index += 1) {
+    const property = computed[index];
+    clone.style.setProperty(property, computed.getPropertyValue(property));
+  }
+  ['::before', '::after'].forEach(pseudo => {
+    const pseudoStyle = getComputedStyle(source, pseudo);
+    let content = pseudoStyle.content;
+    if (!content || content === 'none' || content === 'normal' || content === '""' || content === "''") return;
+    if (content.startsWith('attr(') && source.dataset.placeholder) content = source.dataset.placeholder;
+    if ((content.startsWith('"') && content.endsWith('"')) || (content.startsWith("'") && content.endsWith("'"))) content = content.slice(1, -1);
+    const generated = document.createElement('span');
+    generated.textContent = content;
+    for (let index = 0; index < pseudoStyle.length; index += 1) {
+      const property = pseudoStyle[index];
+      if (property !== 'content') generated.style.setProperty(property, pseudoStyle.getPropertyValue(property));
+    }
+    if (pseudo === '::before') clone.prepend(generated); else clone.append(generated);
+  });
+  [...source.children].forEach((child, index) => inlineComputedStyles(child, cloneChildren[index]));
+}
+
+async function renderPageCanvasFromArtboard(page, pageIndex, totalPages) {
+  await document.fonts.ready;
+  const width = project.ratio === 'portrait' ? 900 : 1600;
+  const height = Math.round(width / getPageAspect());
+  const liveBoard = $('#canvasPage');
+  const logicalWidth = Math.max(1, liveBoard?.clientWidth || width);
+  const logicalHeight = logicalWidth / getPageAspect();
+  const board = document.createElement('div');
+  board.className = `canvas-page ${pageFormatClass()}`;
+  board.style.cssText = `position:fixed;left:-100000px;top:0;width:${logicalWidth}px;height:${logicalHeight}px;max-width:none;max-height:none;box-shadow:none;transform:none;transition:none;`;
+  applyArtboardBackground(board);
+  const content = page.items.map(item => itemMarkup(item, page)).join('');
+  board.innerHTML = `${content || '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>'}${storyboardMetaMarkup(pageIndex + 1, totalPages)}`;
+  board.querySelectorAll('.is-selected,.is-editing').forEach(element => element.classList.remove('is-selected', 'is-editing'));
+  board.querySelectorAll('[contenteditable]').forEach(element => element.removeAttribute('contenteditable'));
+  document.body.appendChild(board);
+  try {
+    await Promise.all([...board.querySelectorAll('img')].map(image => image.decode?.().catch(() => {}) || Promise.resolve()));
+    const clone = board.cloneNode(true);
+    inlineComputedStyles(board, clone);
+    clone.style.setProperty('position', 'relative', 'important');
+    clone.style.setProperty('left', '0', 'important');
+    clone.style.setProperty('top', '0', 'important');
+    clone.style.setProperty('width', `${logicalWidth}px`, 'important');
+    clone.style.setProperty('height', `${logicalHeight}px`, 'important');
+    clone.style.setProperty('box-shadow', 'none', 'important');
+    clone.style.setProperty('transform', 'none', 'important');
+    const markup = new XMLSerializer().serializeToString(clone);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${logicalWidth} ${logicalHeight}"><foreignObject width="${logicalWidth}" height="${logicalHeight}"><div xmlns="http://www.w3.org/1999/xhtml">${markup}</div></foreignObject></svg>`;
+    const svgUrl = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+    try {
+      const image = await loadImageSource(svgUrl);
+      if (!image) throw new Error('No se pudo rasterizar el artboard');
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(image, 0, 0, width, height);
+      return canvas;
+    } finally { URL.revokeObjectURL(svgUrl); }
+  } finally { board.remove(); }
+}
+
+async function renderPageCanvasLegacy(page, pageIndex = currentPageIndex, totalPages = project.pages.length) {
   await document.fonts.ready;
   const width = project.ratio === 'portrait' ? 900 : 1600; const height = Math.round(width / getPageAspect()); const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); await drawArtboardBackground(ctx, width, height);
   await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const layout = itemLayout(item, page); image.onload = () => { const box = itemImageBox(item, layout); const x = box.x / 100 * width; const y = box.y / 100 * height; const w = box.width / 100 * width; const h = box.height / 100 * height; if (item.fit === 'contain') { ctx.fillStyle = '#eee'; ctx.fillRect(x, y, w, h); } drawImageInBox(ctx, image, x, y, w, h, item.fit, item.focusX, item.focusY); ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 1; ctx.strokeRect(x + .5, y + .5, Math.max(0, w - 1), Math.max(0, h - 1)); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
   page.items.forEach(item => { const layout = itemLayout(item, page); drawCameraMoveOverlayCanvas(ctx, item, layout, width, height); drawPhotoAnnotationsCanvas(ctx, item, layout, width, height); const asset = findAsset(item.assetId); if (asset) drawItemMetadata(ctx, item, asset, layout, width, height); });
   await drawProjectMetaFrame(ctx, width, height, pageIndex + 1, totalPages);
   return canvas;
+}
+
+async function renderPageCanvas(page, pageIndex = currentPageIndex, totalPages = project.pages.length) {
+  try { return await renderPageCanvasFromArtboard(page, pageIndex, totalPages); }
+  catch (error) { console.warn('Se usará el render de respaldo para exportar esta página.', error); return renderPageCanvasLegacy(page, pageIndex, totalPages); }
 }
 
 async function exportPageAsPng(pageIndex = currentPageIndex) {
