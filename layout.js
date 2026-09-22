@@ -41,7 +41,7 @@
     const gridHeight = cellHeight * rows + gap * (rows - 1);
     const startX = insetX + (width - gridWidth) / 2;
     const startY = insetY + (height - gridHeight) / 2;
-    const captionRatio = options.captions ? .24 : 0;
+    const captionRatio = options.captions ? (options.captionRatios?.length ? Math.max(...options.captionRatios) : options.captionRatio ?? .15) : 0;
     const percent = rect => ({ x: rect.x / pageWidth * 100, y: rect.y, width: rect.width / pageWidth * 100, height: rect.height });
     return ratios.map((ratio, index) => {
       const row = Math.floor(index / columns);
@@ -51,7 +51,8 @@
       const rowStartX = insetX + (width - rowWidth) / 2;
       const cardX = rowStartX + column * (cellWidth + gap);
       const cardY = startY + row * (cellHeight + gap);
-      const captionHeight = cellHeight * captionRatio;
+      const itemCaptionRatio = options.captions ? (options.captionRatios?.[index] ?? options.captionRatio ?? captionRatio) : 0;
+      const captionHeight = cellHeight * itemCaptionRatio;
       const imageBoxHeight = cellHeight - captionHeight;
       const imageWidth = Math.min(cellWidth, imageBoxHeight * ratio);
       const imageHeight = imageWidth / ratio;
@@ -80,7 +81,7 @@
     const count = ratios.length;
     const gap = Math.min((1.6 + bounded(options.gap, 16, 0, 48) / 10) * Math.min(pageWidth, pageHeight) / 100,
       Math.min(width, height) / (4 * Math.ceil(Math.sqrt(count))));
-    const captionRatio = options.captions ? .24 : 0;
+    const captionRatio = options.captions ? (options.captionRatios?.length ? Math.max(...options.captionRatios) : options.captionRatio ?? .15) : 0;
     const sums = [0];
     ratios.forEach(ratio => sums.push(sums[sums.length - 1] + ratio));
     let best = null;
