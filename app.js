@@ -129,7 +129,6 @@ let saveTimer;
 let pendingDeleteProjectId = null;
 let pendingDeleteVersionId = null;
 let pendingDeletePageIndex = null;
-let pendingDeleteAssetId = null;
 let lastUndoState = null;
 let pendingNewProject = false;
 let projectSort = localStorage.getItem(PROJECT_SORT_KEY) || 'updated';
@@ -430,24 +429,15 @@ function closeDeletePageConfirm() {
 }
 function closeClearPageConfirm() { $('#clearPageConfirmModal').hidden = true; }
 function closeClearLibraryConfirm() { $('#clearLibraryConfirmModal').hidden = true; }
-function openDeleteAssetModal(id) {
+function deleteAsset(id) {
   const asset = project?.assets.find(entry => entry.id === id);
   if (!asset) return;
-  pendingDeleteAssetId = id;
-  $('#deleteAssetName').textContent = asset.name || 'esta foto';
-  $('#deleteAssetConfirmModal').hidden = false;
-}
-function closeDeleteAssetModal() { pendingDeleteAssetId = null; $('#deleteAssetConfirmModal').hidden = true; }
-function confirmDeleteAsset() {
-  const asset = project?.assets.find(entry => entry.id === pendingDeleteAssetId);
-  if (!asset) { closeDeleteAssetModal(); return; }
   captureUndoState();
   const deletingSelected = selectedItems().some(item => item.assetId === asset.id);
   project.assets = project.assets.filter(entry => entry.id !== asset.id);
   project.pages.forEach(page => { page.items = page.items.filter(item => item.assetId !== asset.id); renumberItems(page); });
   if (deletingSelected) clearItemSelection();
   activeInspector = 'page';
-  closeDeleteAssetModal();
   render();
   saveProject();
   showToast(`“${asset.name || 'Foto'}” quitada · Ctrl + Z para recuperar`);
@@ -825,7 +815,7 @@ function renderLibrary() {
     thumb.addEventListener('dragend', () => { draggedAssetId = null; slotMode = false; hoverSlotIndex = null; thumb.classList.remove('is-dragging'); renderPage(); });
     thumb.addEventListener('dblclick', () => addAssetToPage(thumb.dataset.assetId));
     thumb.querySelector('[data-add-asset]')?.addEventListener('click', event => { event.stopPropagation(); addAssetToPage(thumb.dataset.assetId); });
-    thumb.querySelector('[data-delete-asset]')?.addEventListener('click', event => { event.stopPropagation(); openDeleteAssetModal(thumb.dataset.assetId); });
+    thumb.querySelector('[data-delete-asset]')?.addEventListener('click', event => { event.stopPropagation(); deleteAsset(thumb.dataset.assetId); });
   });
 }
 
@@ -1831,13 +1821,57 @@ $('#undoDrawingBtn').addEventListener('click', () => { const item = findItem(sel
 $('#clearDrawingBtn').addEventListener('click', () => { const item = findItem(selectedItemId); if (!item?.drawingStrokes?.length) return; item.drawingStrokes = []; renderPage(); renderInspector(); saveProject(); });
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (project?.assets.length) $('#clearLibraryConfirmModal').hidden = false; });
 
-$('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#manageVersionsBtn').addEventListener('click', openVersionsModal); $('#createVersionBtn').addEventListener('click', openVersionModal); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $$('[data-version-format]').forEach(button => button.addEventListener('click', () => createProjectVersion(button.dataset.versionFormat))); $('#cancelVersionBtn').addEventListener('click', closeVersionModal); $('#versionModal').addEventListener('click', event => { if (event.target === $('#versionModal')) closeVersionModal(); }); $('#cancelVersionsBtn').addEventListener('click', closeVersionsModal); $('#versionsModal').addEventListener('click', event => { if (event.target === $('#versionsModal')) closeVersionsModal(); }); $('#cancelDeleteVersionBtn').addEventListener('click', closeDeleteVersionModal); $('#cancelDeleteVersionBtnSecondary').addEventListener('click', closeDeleteVersionModal); $('#confirmDeleteVersionBtn').addEventListener('click', confirmDeleteVersion); $('#deleteVersionModal').addEventListener('click', event => { if (event.target === $('#deleteVersionModal')) closeDeleteVersionModal(); }); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelClearPageBtn').addEventListener('click', closeClearPageConfirm); $('#cancelClearPageBtnSecondary').addEventListener('click', closeClearPageConfirm); $('#confirmClearPageBtn').addEventListener('click', confirmClearPage); $('#clearPageConfirmModal').addEventListener('click', event => { if (event.target === $('#clearPageConfirmModal')) closeClearPageConfirm(); }); $('#cancelClearLibraryBtn').addEventListener('click', closeClearLibraryConfirm); $('#cancelClearLibraryBtnSecondary').addEventListener('click', closeClearLibraryConfirm); $('#confirmClearLibraryBtn').addEventListener('click', confirmClearLibrary); $('#clearLibraryConfirmModal').addEventListener('click', event => { if (event.target === $('#clearLibraryConfirmModal')) closeClearLibraryConfirm(); }); $('#cancelDeleteAssetBtn').addEventListener('click', closeDeleteAssetModal); $('#cancelDeleteAssetBtnSecondary').addEventListener('click', closeDeleteAssetModal); $('#confirmDeleteAssetBtn').addEventListener('click', confirmDeleteAsset); $('#deleteAssetConfirmModal').addEventListener('click', event => { if (event.target === $('#deleteAssetConfirmModal')) closeDeleteAssetModal(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
+$('#dashboardCreateBtn').addEventListener('click', resetProject);
+$('#dashboardEmptyCreateBtn').addEventListener('click', resetProject);
+$('#backToDashboardBtn').addEventListener('click', showDashboard);
+$('#manageVersionsBtn').addEventListener('click', openVersionsModal);
+$('#createVersionBtn').addEventListener('click', openVersionModal);
+$('#exportBtn').addEventListener('click', openExport);
+$$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport));
+$('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); });
+$$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat)));
+$$('[data-version-format]').forEach(button => button.addEventListener('click', () => createProjectVersion(button.dataset.versionFormat)));
+$('#cancelVersionBtn').addEventListener('click', closeVersionModal);
+$('#versionModal').addEventListener('click', event => { if (event.target === $('#versionModal')) closeVersionModal(); });
+$('#cancelVersionsBtn').addEventListener('click', closeVersionsModal);
+$('#versionsModal').addEventListener('click', event => { if (event.target === $('#versionsModal')) closeVersionsModal(); });
+$('#cancelDeleteVersionBtn').addEventListener('click', closeDeleteVersionModal);
+$('#cancelDeleteVersionBtnSecondary').addEventListener('click', closeDeleteVersionModal);
+$('#confirmDeleteVersionBtn').addEventListener('click', confirmDeleteVersion);
+$('#deleteVersionModal').addEventListener('click', event => { if (event.target === $('#deleteVersionModal')) closeDeleteVersionModal(); });
+$('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm);
+$('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm);
+$('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); });
+$('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); });
+$('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm);
+$('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm);
+$('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage);
+$('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); });
+$('#cancelClearPageBtn').addEventListener('click', closeClearPageConfirm);
+$('#cancelClearPageBtnSecondary').addEventListener('click', closeClearPageConfirm);
+$('#confirmClearPageBtn').addEventListener('click', confirmClearPage);
+$('#clearPageConfirmModal').addEventListener('click', event => { if (event.target === $('#clearPageConfirmModal')) closeClearPageConfirm(); });
+$('#cancelClearLibraryBtn').addEventListener('click', closeClearLibraryConfirm);
+$('#cancelClearLibraryBtnSecondary').addEventListener('click', closeClearLibraryConfirm);
+$('#confirmClearLibraryBtn').addEventListener('click', confirmClearLibrary);
+$('#clearLibraryConfirmModal').addEventListener('click', event => { if (event.target === $('#clearLibraryConfirmModal')) closeClearLibraryConfirm(); });
+$('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal);
+$('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal);
+$('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject);
+$('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
 $('#projectSort').addEventListener('change', event => { projectSort = ['updated', 'title', 'client'].includes(event.target.value) ? event.target.value : 'updated'; localStorage.setItem(PROJECT_SORT_KEY, projectSort); renderDashboard(); }); $('#cancelFormatBtn').addEventListener('click', () => pendingNewProject ? closeNewProjectFormat() : closeFormatModal()); $('#formatModal').addEventListener('click', event => { if (event.target === $('#formatModal')) pendingNewProject ? closeNewProjectFormat() : closeFormatModal(); });
 $$('[data-export]').forEach(button => button.addEventListener('click', async () => { const type = button.dataset.export; closeExport(); if (type === 'png-all') await exportAllPagesPng(); else if (type === 'print') printAllPages(); else await exportImage(type); }));
 
 document.addEventListener('click', event => { if (!event.target.closest('.page-thumb-wrap')) closePageMenus(); });
 window.addEventListener('resize', () => requestAnimationFrame(fitCanvasPage));
-document.addEventListener('keydown', event => { const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && !editing && project && !$('#editorView').hidden) { event.preventDefault(); selectAllCurrentPage(); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editing) { event.preventDefault(); restoreLastUndo(); } if (event.key === 'Delete' && !editing) { if (selectedItems().length) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); } if (event.key === 'Escape') { closeExport(); closeVersionModal(); closeNewProjectConfirm(); closeDeletePageConfirm(); closeClearPageConfirm(); closeClearLibraryConfirm(); closeDeleteAssetModal(); closeDeleteProjectModal(); closePageMenus(); } });
+document.addEventListener('keydown', event => {
+  const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable;
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && !editing && project && !$('#editorView').hidden) { event.preventDefault(); selectAllCurrentPage(); }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editing) { event.preventDefault(); restoreLastUndo(); }
+  if (event.key === 'Delete' && !editing) { if (selectedItems().length) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); }
+  if (event.key === 'Escape') { closeExport(); closeVersionModal(); closeNewProjectConfirm(); closeDeletePageConfirm(); closeClearPageConfirm(); closeClearLibraryConfirm(); closeDeleteProjectModal(); closePageMenus(); }
+});
 
 showDashboard();
 hydrateProjectsFromIndexedDb();

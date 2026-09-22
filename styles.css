@@ -551,11 +551,10 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .asset-thumb-delete { font-size:19px; }
 
 /* Custom library dialogs replace the browser's native confirmation alert. */
-.clear-library-confirm-backdrop,.delete-asset-confirm-backdrop { background:rgba(0,0,0,.72); }
-.clear-library-confirm-modal,.delete-asset-confirm-modal { width:min(500px,100%); border:1px solid #111; box-shadow:12px 12px 0 rgba(0,0,0,.22),0 25px 80px rgba(0,0,0,.38); }
-.clear-library-confirm-modal h2,.delete-asset-confirm-modal h2 { max-width:420px; margin-top:10px; }
-.clear-library-confirm-modal .modal-copy,.delete-asset-confirm-modal .modal-copy { max-width:430px; }
-.delete-asset-confirm-modal .modal-copy strong { color:#000; }
+.clear-library-confirm-backdrop { background:rgba(0,0,0,.72); }
+.clear-library-confirm-modal { width:min(500px,100%); border:1px solid #111; box-shadow:12px 12px 0 rgba(0,0,0,.22),0 25px 80px rgba(0,0,0,.38); }
+.clear-library-confirm-modal h2 { max-width:420px; margin-top:10px; }
+.clear-library-confirm-modal .modal-copy { max-width:430px; }
 
 /* The artboard gets its size from its height, so its declared aspect ratio is never overridden by a short viewport. */
 .canvas-stage .canvas-page { width:auto; height:100%; max-width:100%; max-height:100%; flex:0 0 auto; aspect-ratio:16 / 9; }
