@@ -18,6 +18,9 @@ Un espacio de trabajo visual de GB Films para organizar storyboards y, progresiv
 - Las páginas adicionales se crean cuando el usuario quiere separar la secuencia; no hay un cupo de fotos por hoja.
 - La información debajo de la foto puede mostrarse con recuadro blanco y texto negro o con recuadro negro y texto blanco. La información superpuesta conserva su estilo negro translúcido.
 - Páginas múltiples, guardado local e importación/exportación del proyecto.
+- Alta de proyectos con título y cliente obligatorios, más agencia, productora y director opcionales.
+- Archivo de proyectos ordenable por última modificación, título o cliente.
+- Versiones agrupadas dentro de cada proyecto para crear alternativas horizontales, verticales o cuadradas.
 - Exportar la hoja como PNG/JPG o imprimir todas las páginas a PDF.
 
 ## Uso local

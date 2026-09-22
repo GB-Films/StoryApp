@@ -341,6 +341,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .dashboard-create-arrow { font-size:20px; }
 .projects-section { max-width:1240px; margin:0 auto; }
 .projects-section-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; padding-bottom:14px; border-bottom:1px solid #aaa; }
+.projects-toolbar { display:flex; align-items:center; gap:10px; }
+.project-sort-label { color:#777; font:9px 'DM Mono',monospace; letter-spacing:.5px; }
+.project-sort-select { height:30px; padding:0 9px; border:1px solid #aaa; border-radius:2px; color:#222; background:#fff; font:11px 'DM Sans',sans-serif; }
 .projects-section-heading h2 { margin:7px 0 0; color:#000; font:600 23px 'Space Grotesk',sans-serif; letter-spacing:-.7px; }
 .project-count { color:#777; font:10px 'DM Mono',monospace; text-transform:uppercase; }
 .project-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:18px; padding-top:22px; }
@@ -365,6 +368,12 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .project-card-details strong { overflow:hidden; max-width:150px; color:#222; font:500 10px 'Space Grotesk',sans-serif; text-overflow:ellipsis; white-space:nowrap; }
 .project-card-meta { display:flex; flex-wrap:wrap; gap:7px 12px; margin-top:16px; color:#777; font:9px 'DM Mono',monospace; }
 .project-card-meta span:not(:last-child)::after { content:'·'; margin-left:12px; color:#aaa; }
+.project-card-versions { margin-top:13px; padding-top:10px; border-top:1px solid #ddd; }
+.project-card-versions > small { display:block; margin-bottom:6px; color:#888; font:500 8px 'DM Mono',monospace; letter-spacing:.55px; }
+.project-card-versions > div { display:flex; flex-wrap:wrap; gap:5px; }
+.project-version-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 7px; border:1px solid #ccc; color:#444; background:#f7f7f7; font:500 9px 'DM Sans',sans-serif; cursor:pointer; }
+.project-version-chip span { color:#888; font:8px 'DM Mono',monospace; }
+.project-version-chip:hover,.project-version-chip.is-active { border-color:#111; color:#111; background:#fff; }
 .project-card-actions { position:absolute; z-index:4; right:12px; bottom:12px; display:flex; gap:5px; }
 .project-card-action { display:grid; place-items:center; width:29px; height:29px; padding:6px; border:1px solid rgba(255,255,255,.65); color:#fff; background:rgba(0,0,0,.72); cursor:pointer; transition:.2s; }
 .project-card-action svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.7; }
@@ -388,10 +397,24 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
   .dashboard-hero { align-items:stretch; flex-direction:column; margin-bottom:48px; }
   .dashboard-create-card { width:100%; }
   .projects-section-heading { align-items:flex-start; flex-direction:column; gap:8px; }
+  .projects-toolbar { width:100%; justify-content:space-between; }
   .project-grid { grid-template-columns:1fr; }
   .modal-actions { flex-direction:column-reverse; }
   .modal-actions .button { width:100%; }
 }
+
+.new-project-fields { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:22px 0 25px; }
+.new-project-field { display:grid; gap:6px; }
+.new-project-field:first-child { grid-column:1 / -1; }
+.new-project-field label { color:#777; font:500 9px 'DM Mono',monospace; letter-spacing:.6px; }
+.new-project-field.required label { color:#111; }
+.new-project-field .text-field { height:36px; }
+.new-project-field .text-field.is-invalid { border-color:#d9533f; box-shadow:0 0 0 2px rgba(217,83,63,.12); }
+.new-project-error { min-height:16px; grid-column:1 / -1; margin:0; color:#c84432; font-size:11px; }
+.format-choice-heading { margin:0 0 12px; color:#111; font:600 14px 'Space Grotesk',sans-serif; }
+.new-project-fields[hidden] + .format-choice-heading { display:none; }
+.format-modal { max-height:min(90vh,760px); overflow-y:auto; }
+@media (max-width:520px) { .new-project-fields { grid-template-columns:1fr; } .new-project-field:first-child { grid-column:auto; } .projects-toolbar { align-items:flex-start; flex-direction:column; } }
 
 /* Keep the editor viewport stable while long side panels scroll independently. */
 .workspace-app { height:calc(100vh - 54px); height:calc(100dvh - 54px); min-height:0; overflow:hidden; contain:layout; }
