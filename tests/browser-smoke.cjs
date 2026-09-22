@@ -136,6 +136,12 @@ const fixture = () => {
 
     await page.locator('[data-inspector="page"]').click();
     assert.equal(await page.locator('[data-inspector="info"]').count(), 1);
+    await page.locator('#backgroundPattern').selectOption('dots');
+    assert.match(await page.locator('#canvasPage').evaluate(node => getComputedStyle(node).backgroundImage), /radial-gradient/);
+    await page.locator('#backgroundImageInput').setInputFiles({ name: 'fondo.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><rect width="80" height="40" fill="#d8d8d8"/></svg>') });
+    await page.waitForFunction(() => Boolean(project.backgroundImage));
+    assert.match(await page.locator('#canvasPage').evaluate(node => getComputedStyle(node).backgroundImage), /url\(/);
+    assert.equal(await page.locator('#removeBackgroundImageBtn').isDisabled(), false);
     const inspectorWidth = () => page.evaluate(() => {
       const panel = document.querySelector('.inspector-panel').getBoundingClientRect();
       const editor = document.querySelector('.editor-area').getBoundingClientRect();

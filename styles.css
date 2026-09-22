@@ -454,3 +454,9 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .auth-gate-button { width:100%; margin-top:28px; justify-content:space-between; }
 .auth-gate-status { min-height:16px; margin:15px 0 0; color:#f39a7e; font-size:11px; line-height:1.4; }
 @media (max-width:520px) { .auth-gate-card { padding:30px 24px; } }
+
+.background-actions { display:flex; gap:7px; margin-top:10px; }
+.background-actions .button { min-width:0; flex:1; padding:0 8px; font-size:10px; }
+.background-preview { height:64px; margin-top:9px; border:1px solid #c9c9c9; background-color:#eee; background-position:center; background-repeat:no-repeat; background-size:cover; }
+.background-preview[hidden] { display:none; }
+.background-section .text-field { margin-top:4px; }

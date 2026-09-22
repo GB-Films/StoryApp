@@ -35,6 +35,80 @@ const CAMERA_MOVES = [
   { value: 'track-right', label: 'Travelling a derecha', tag: 'TRACK →' }
 ];
 
+const BACKGROUND_PATTERNS = new Set(['none', 'grid', 'dots', 'diagonal', 'blueprint']);
+
+function backgroundPatternCss(pattern) {
+  const patterns = {
+    grid: {
+      image: 'linear-gradient(rgba(0,0,0,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.09) 1px, transparent 1px)',
+      size: '24px 24px'
+    },
+    dots: {
+      image: 'radial-gradient(rgba(0,0,0,.18) 1px, transparent 1.5px)',
+      size: '18px 18px'
+    },
+    diagonal: {
+      image: 'repeating-linear-gradient(135deg, rgba(0,0,0,.06) 0 1px, transparent 1px 13px)',
+      size: 'auto'
+    },
+    blueprint: {
+      image: 'linear-gradient(rgba(0,0,0,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.12) 1px, transparent 1px), linear-gradient(rgba(0,0,0,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.06) 1px, transparent 1px)',
+      size: '72px 72px, 72px 72px, 18px 18px, 18px 18px'
+    }
+  };
+  return patterns[pattern] || { image: 'none', size: 'auto' };
+}
+
+function applyArtboardBackground(element) {
+  if (!element) return;
+  const image = project?.backgroundImage || '';
+  const pattern = image ? { image: `url("${image.replaceAll('"', '%22')}")`, size: 'cover' } : backgroundPatternCss(project?.backgroundPattern);
+  element.style.backgroundColor = project?.background || '#ffffff';
+  element.style.backgroundImage = pattern.image;
+  element.style.backgroundSize = pattern.size;
+  element.style.backgroundPosition = 'center';
+  element.style.backgroundRepeat = image ? 'no-repeat' : 'repeat';
+}
+
+function drawBackgroundPattern(ctx, width, height, pattern) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0,0,0,.09)';
+  ctx.fillStyle = 'rgba(0,0,0,.17)';
+  ctx.lineWidth = Math.max(1, width / 1600);
+  if (pattern === 'grid' || pattern === 'blueprint') {
+    const step = pattern === 'blueprint' ? 72 : 24;
+    for (let x = 0; x <= width; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
+    for (let y = 0; y <= height; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
+    if (pattern === 'blueprint') {
+      ctx.strokeStyle = 'rgba(0,0,0,.055)';
+      for (let x = 0; x <= width; x += 18) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
+      for (let y = 0; y <= height; y += 18) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
+    }
+  } else if (pattern === 'dots') {
+    for (let x = 9; x <= width; x += 18) for (let y = 9; y <= height; y += 18) ctx.fillRect(x, y, Math.max(1, width / 1600), Math.max(1, width / 1600));
+  } else if (pattern === 'diagonal') {
+    const step = 13;
+    for (let offset = -height; offset < width + height; offset += step) { ctx.beginPath(); ctx.moveTo(offset, 0); ctx.lineTo(offset + height, height); ctx.stroke(); }
+  }
+  ctx.restore();
+}
+
+async function drawArtboardBackground(ctx, width, height) {
+  ctx.fillStyle = project?.background || '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  if (project?.backgroundImage) {
+    const image = await loadImageSource(project.backgroundImage);
+    if (image) {
+      const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+      const drawWidth = image.naturalWidth * scale;
+      const drawHeight = image.naturalHeight * scale;
+      ctx.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+    }
+    return;
+  }
+  drawBackgroundPattern(ctx, width, height, project?.backgroundPattern);
+}
+
 let currentPageIndex = 0;
 let selectedItemId = null;
 let activeInspector = 'page';
@@ -67,7 +141,7 @@ let projects = [];
 let currentProjectId = null;
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', background: '#ffffff', backgroundImage: '', backgroundImageName: '', backgroundPattern: 'none', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
 
 const FRAME_ASPECTS = Object.freeze({ horizontal: 16 / 9, vertical: 9 / 16, square: 1 });
 const FRAME_MODES = new Set(['original', 'horizontal', 'vertical', 'square']);
@@ -153,6 +227,10 @@ function normalizeProject(data) {
   normalized.showPageNumber = typeof data.showPageNumber === 'boolean' ? data.showPageNumber : true;
   normalized.producerLogo = typeof data.producerLogo === 'string' ? data.producerLogo : '';
   normalized.producerLogoName = typeof data.producerLogoName === 'string' ? data.producerLogoName : '';
+  normalized.background = typeof data.background === 'string' && data.background ? data.background : '#ffffff';
+  normalized.backgroundImage = typeof data.backgroundImage === 'string' ? data.backgroundImage : '';
+  normalized.backgroundImageName = typeof data.backgroundImageName === 'string' ? data.backgroundImageName : '';
+  normalized.backgroundPattern = BACKGROUND_PATTERNS.has(data.backgroundPattern) ? data.backgroundPattern : 'none';
   normalized.showDescriptions = typeof data.showDescriptions === 'boolean' ? data.showDescriptions : true;
   normalized.infoPlacement = data.infoPlacement === 'overlay' ? 'overlay' : 'below';
   normalized.infoStyle = data.infoStyle === 'light' ? 'light' : 'dark';
@@ -639,7 +717,7 @@ function renderLibrary() {
 function renderPage() {
   const page = currentPage();
   $('#canvasPage').className = `canvas-page ${pageFormatClass()} ${slotMode ? 'is-slot-mode' : ''}`;
-  $('#canvasPage').style.background = page ? project.background : '#ffffff';
+  applyArtboardBackground($('#canvasPage'));
   const guides = slotMode ? pageLayout(page).map(({ card: rect }, index) => `<div class="slot-guide" data-slot-index="${index}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%"><span>${String(index + 1).padStart(2, '0')}</span></div>`).join('') : '';
   const content = page?.items.length ? page.items.map(item => itemMarkup(item, page)).join('') : '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>';
   const cameraConnectors = page ? cameraMoveConnectorMarkup(page) : '';
@@ -772,7 +850,8 @@ function renderPageCarousel() {
   const track = $('#pageCarouselTrack');
   if (!track) return;
   $('#carouselCount').textContent = `${project.pages.length} página${project.pages.length === 1 ? '' : 's'}`;
-  track.innerHTML = `${project.pages.map((page, index) => `<div class="page-thumb-wrap"><button class="page-thumb ${index === currentPageIndex ? 'is-active' : ''}" data-page-index="${index}" type="button"><span class="page-thumb-canvas ${pageFormatClass()}" style="background:${project.background}">${pageThumbnailMarkup(page)}</span><span class="page-thumb-label">${String(index + 1).padStart(2, '0')} · ${escapeHtml(page.title || `Página ${index + 1}`)}</span></button><button class="page-thumb-menu-button" data-page-menu type="button" aria-label="Opciones de ${escapeHtml(page.title || `Página ${index + 1}`)}" title="Opciones">⋯</button><div class="page-thumb-menu" role="menu"><button data-copy-page="${index}" type="button" role="menuitem">Copiar</button><button data-delete-page-menu="${index}" type="button" role="menuitem" ${project.pages.length <= 1 ? 'disabled' : ''}>Eliminar</button></div></div>`).join('')}<button class="page-thumb page-thumb-add" data-add-page type="button" aria-label="Agregar nueva página"><span class="page-thumb-canvas page-thumb-add-canvas ${pageFormatClass()}"><span class="page-thumb-add-symbol">＋</span></span><span class="page-thumb-label">＋ Nueva página</span></button>`;
+  track.innerHTML = `${project.pages.map((page, index) => `<div class="page-thumb-wrap"><button class="page-thumb ${index === currentPageIndex ? 'is-active' : ''}" data-page-index="${index}" type="button"><span class="page-thumb-canvas ${pageFormatClass()}">${pageThumbnailMarkup(page)}</span><span class="page-thumb-label">${String(index + 1).padStart(2, '0')} · ${escapeHtml(page.title || `Página ${index + 1}`)}</span></button><button class="page-thumb-menu-button" data-page-menu type="button" aria-label="Opciones de ${escapeHtml(page.title || `Página ${index + 1}`)}" title="Opciones">⋯</button><div class="page-thumb-menu" role="menu"><button data-copy-page="${index}" type="button" role="menuitem">Copiar</button><button data-delete-page-menu="${index}" type="button" role="menuitem" ${project.pages.length <= 1 ? 'disabled' : ''}>Eliminar</button></div></div>`).join('')}<button class="page-thumb page-thumb-add" data-add-page type="button" aria-label="Agregar nueva página"><span class="page-thumb-canvas page-thumb-add-canvas ${pageFormatClass()}"><span class="page-thumb-add-symbol">＋</span></span><span class="page-thumb-label">＋ Nueva página</span></button>`;
+  $$('.page-thumb-canvas:not(.page-thumb-add-canvas)', track).forEach(applyArtboardBackground);
   $$('[data-page-index]', track).forEach(button => {
     button.addEventListener('pointerdown', event => { if (event.altKey) startPageDuplicateDrag(Number(button.dataset.pageIndex), event, track); });
     button.addEventListener('click', () => { if (document.body.classList.contains('is-page-dragging')) return; currentPageIndex = Number(button.dataset.pageIndex); selectedItemId = null; activeInspector = 'page'; render(); });
@@ -795,6 +874,16 @@ function renderControls() {
   $('#breadcrumbTitle').textContent = project.title || 'Sin título';
   $('#backgroundColor').value = project.background;
   $('#backgroundValue').textContent = project.background.toUpperCase();
+  $('#backgroundPattern').value = project.backgroundPattern || 'none';
+  $('#removeBackgroundImageBtn').disabled = !project.backgroundImage;
+  $('#backgroundPreview').hidden = !project.backgroundImage;
+  if (project.backgroundImage) {
+    $('#backgroundPreview').style.backgroundImage = `url("${project.backgroundImage.replaceAll('"', '%22')}")`;
+    $('#backgroundPreview').title = project.backgroundImageName || 'Foto de fondo cargada';
+  } else {
+    $('#backgroundPreview').style.backgroundImage = 'none';
+    $('#backgroundPreview').title = '';
+  }
   $('#pageGap').value = project.gap;
   $('#pageGapValue').textContent = `${project.gap} px`;
   $('#pagePadding').value = project.padding;
@@ -1136,7 +1225,7 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
 }
 
 async function renderPageCanvas(page) {
-  const width = project.ratio === 'portrait' ? 900 : 1600; const height = Math.round(width / getPageAspect()); const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); ctx.fillStyle = project.background; ctx.fillRect(0, 0, width, height);
+  const width = project.ratio === 'portrait' ? 900 : 1600; const height = Math.round(width / getPageAspect()); const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d'); await drawArtboardBackground(ctx, width, height);
   await Promise.all(page.items.map(item => new Promise(resolve => { const asset = findAsset(item.assetId); if (!asset) return resolve(); const image = new Image(); const layout = itemLayout(item, page); image.onload = () => { drawImageInBox(ctx, image, layout.image.x / 100 * width, layout.image.y / 100 * height, layout.image.width / 100 * width, layout.image.height / 100 * height, item.fit, item.focusX, item.focusY); drawItemMetadata(ctx, item, asset, layout, width, height); resolve(); }; image.onerror = resolve; image.src = asset.image; })));
   page.items.forEach(item => drawCameraMoveOverlayCanvas(ctx, item, itemLayout(item, page), width, height));
   drawCameraMoveConnectorsCanvas(ctx, page, width, height);
@@ -1151,7 +1240,7 @@ function printAllPages() {
   project.pages.forEach((page, pageIndex) => {
     const sheet = document.createElement('div');
     sheet.className = `canvas-page print-page ${pageFormatClass()}`;
-    sheet.style.background = project.background;
+    applyArtboardBackground(sheet);
     page.items.forEach(item => {
       const asset = findAsset(item.assetId); if (!asset) return;
       const layout = itemLayout(item, page);
@@ -1299,6 +1388,10 @@ $('#prevPageBtn').addEventListener('click', () => { if (currentPageIndex > 0) { 
 
 ['projectTitle', 'projectProducer', 'projectClient', 'projectAgency', 'projectDirector'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer', projectClient: 'client', projectAgency: 'agency', projectDirector: 'director' }[id]; project[key] = event.target.value; if (id === 'projectProducer') { project.author = project.producer; $('#projectProducerDisplay').textContent = project.producer; $('#projectProducerLabel').hidden = !project.producer.trim(); } if (id === 'projectTitle') $('#projectTitleDisplay').textContent = project.title || 'Sin título'; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; renderPage(); saveProject(); }));
 $('#backgroundColor').addEventListener('input', event => { project.background = event.target.value; render(); saveProject(); });
+$('#backgroundImageBtn').addEventListener('click', () => $('#backgroundImageInput').click());
+$('#backgroundImageInput').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith('image/')) { showToast('Elegí un archivo de imagen'); event.target.value = ''; return; } const reader = new FileReader(); reader.onload = () => { project.backgroundImage = reader.result; project.backgroundImageName = file.name; project.backgroundPattern = 'none'; render(); saveProject(); showToast('Foto de fondo cargada'); }; reader.readAsDataURL(file); event.target.value = ''; });
+$('#removeBackgroundImageBtn').addEventListener('click', () => { if (!project.backgroundImage) return; project.backgroundImage = ''; project.backgroundImageName = ''; render(); saveProject(); });
+$('#backgroundPattern').addEventListener('change', event => { const pattern = BACKGROUND_PATTERNS.has(event.target.value) ? event.target.value : 'none'; project.backgroundPattern = pattern; if (pattern !== 'none') { project.backgroundImage = ''; project.backgroundImageName = ''; } render(); saveProject(); });
 $('#layoutEngine').addEventListener('change', event => { project.layoutEngine = event.target.value === 'adaptive' ? 'adaptive' : 'grid'; project.layoutEngineVersion = 1; render(); saveProject(); });
 $('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = event.target.value === 'overlay' ? 'overlay' : 'below'; render(); saveProject(); }); $('#infoStyle').addEventListener('change', event => { project.infoStyle = event.target.value === 'light' ? 'light' : 'dark'; render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
 $('#showProducerBranding').addEventListener('change', event => { project.showProducerBranding = event.target.checked; render(); saveProject(); });
