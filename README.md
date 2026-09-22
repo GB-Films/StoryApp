@@ -30,7 +30,7 @@ Abrí `index.html` en el navegador. No requiere instalación ni servidor.
 
 ## Acceso con Google
 
-La app está conectada al proyecto Firebase `GB Studio` (`gb-studio-260bc`) mediante `firebase-config.js`. La configuración web de Firebase contiene identificadores públicos; la seguridad del acceso depende de Authentication y sus reglas.
+La app está conectada al proyecto Firebase `GB Studio` (`gb-studio-260bc`) mediante `firebase-config.js`. La configuración web de Firebase contiene identificadores públicos; la seguridad del acceso depende de Authentication y sus reglas. El acceso es obligatorio: la interfaz y los proyectos quedan bloqueados hasta completar el inicio de sesión con Google.
 
 Para completar la activación en Firebase:
 

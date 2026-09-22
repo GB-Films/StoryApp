@@ -30,6 +30,11 @@ const fixture = () => {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
+    // The production app requires Google authentication before exposing the
+    // workspace. The smoke test supplies its own fixture, so unlock that
+    // workspace after Firebase's signed-out state has settled.
+    await page.waitForTimeout(250);
+    await page.evaluate(() => { document.body.classList.remove('auth-locked'); document.querySelector('#authGate').hidden = true; });
     const original = fixture();
     await page.evaluate(data => { project = normalizeProject(data); currentProjectId = project.id; currentPageIndex = 0; selectedItemId = null; activeInspector = 'page'; showEditor(); render(); saveProject(); }, original);
     await page.waitForFunction(() => document.querySelectorAll('#canvasPage .design-item').length === 6);
@@ -193,6 +198,8 @@ const fixture = () => {
     await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
     await page.waitForFunction(() => document.querySelector('#saveState').textContent.includes('Guardado local'));
     await page.reload();
+    await page.waitForTimeout(250);
+    await page.evaluate(() => { document.body.classList.remove('auth-locked'); document.querySelector('#authGate').hidden = true; });
     assert.equal(await page.locator('.project-card-arrow').count(), 0);
     assert.equal(await page.locator('[data-edit-project]').count(), 1);
     assert.equal(await page.locator('[data-delete-project]').count(), 1);

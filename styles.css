@@ -416,3 +416,17 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .account-button.is-authenticated .account-avatar { background-color:#fff; color:#000; }
 .account-label { max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 @media (max-width:800px) { .account-label { display:none; } .account-button { padding-right:4px; } }
+
+/* Authentication is required before any project data or workspace is visible. */
+.auth-gate { position:fixed; z-index:100; inset:0; display:grid; place-items:center; padding:24px; background:#080808; background-image:linear-gradient(135deg,rgba(255,255,255,.06) 0 25%,transparent 25% 75%,rgba(255,255,255,.06) 75%),linear-gradient(45deg,transparent 0 25%,rgba(255,255,255,.035) 25% 75%,transparent 75%); background-size:420px 420px; }
+.auth-gate[hidden] { display:none; }
+.auth-locked .app-shell { visibility:hidden; }
+.auth-gate-card { width:min(440px,100%); padding:42px; border:1px solid #3a3a3a; color:#fff; background:#111; box-shadow:14px 14px 0 rgba(255,255,255,.08); }
+.auth-gate-mark { display:grid; place-items:center; width:48px; height:48px; margin-bottom:28px; border:1px solid #fff; color:#fff; font:600 14px 'DM Mono',monospace; letter-spacing:-1px; }
+.auth-gate-card .eyebrow { color:#aaa; }
+.auth-gate-card .eyebrow-line { background:#fff; }
+.auth-gate-card h1 { margin:17px 0 12px; color:#fff; font:600 clamp(30px,5vw,42px)/.98 'Space Grotesk',sans-serif; letter-spacing:-1.8px; }
+.auth-gate-card > p:not(.auth-gate-status) { margin:0; color:#aaa; font-size:13px; line-height:1.55; }
+.auth-gate-button { width:100%; margin-top:28px; justify-content:space-between; }
+.auth-gate-status { min-height:16px; margin:15px 0 0; color:#f39a7e; font-size:11px; line-height:1.4; }
+@media (max-width:520px) { .auth-gate-card { padding:30px 24px; } }

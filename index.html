@@ -8,6 +8,16 @@
     <link rel="stylesheet" href="styles.css?v=15" />
   </head>
   <body>
+    <div class="auth-gate" id="authGate" role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
+      <div class="auth-gate-card">
+        <div class="auth-gate-mark">GB</div>
+        <div class="eyebrow"><span class="eyebrow-line"></span> GB STUDIO</div>
+        <h1 id="authGateTitle">Iniciá sesión para entrar.</h1>
+        <p id="authGateCopy">Tu espacio de preproducción está protegido. Continuá con tu cuenta de Google para ver tus proyectos.</p>
+        <button class="button button-primary auth-gate-button" id="authGateButton" type="button">Continuar con Google <span>→</span></button>
+        <p class="auth-gate-status" id="authGateStatus" role="status" aria-live="polite"></p>
+      </div>
+    </div>
     <div class="app-shell">
       <header class="topbar">
         <a class="brand" href="#" aria-label="GB Studio"><img class="brand-logo" src="assets/gb-films-logo-white.png" alt="GB Films" /><span class="brand-divider"></span><span class="brand-product">GB<br /><em>STUDIO</em></span></a>
@@ -108,7 +118,17 @@
     <div class="toast" id="toast" role="status"></div>
     <script src="layout.js?v=2"></script>
     <script src="app.js?v=21"></script>
-    <script src="firebase-config.js?v=1"></script>
-    <script type="module" src="auth.js?v=2"></script>
+    <script src="firebase-config.js?v=2"></script>
+    <script>
+      window.STORYBOARD_FIREBASE_CONFIG = window.STORYBOARD_FIREBASE_CONFIG || {
+        apiKey: 'AIzaSyA3P9BED7L2tGgHvcx3mseopDYXG4INkFE',
+        authDomain: 'gb-studio-260bc.firebaseapp.com',
+        projectId: 'gb-studio-260bc',
+        storageBucket: 'gb-studio-260bc.firebasestorage.app',
+        messagingSenderId: '475470109485',
+        appId: '1:475470109485:web:c4400a214f973223aa91a4',
+      };
+    </script>
+    <script type="module" src="auth.js?v=3"></script>
   </body>
 </html>
