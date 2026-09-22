@@ -225,6 +225,7 @@ const fixture = () => {
     await page.waitForTimeout(250);
     await page.evaluate(() => { document.body.classList.remove('auth-locked'); document.querySelector('#authGate').hidden = true; });
     assert.equal(await page.locator('.project-card-arrow').count(), 0);
+    assert.equal(await page.locator('.project-version-chip').count(), 0);
     assert.equal(await page.locator('[data-edit-project]').count(), 1);
     assert.equal(await page.locator('[data-delete-project]').count(), 1);
     assert.equal(await page.locator('.project-card-edit-row').count(), 0);
@@ -288,6 +289,18 @@ const fixture = () => {
     const portraitWorkspace = await page.evaluate(() => { const carousel = document.querySelector('#pageCarousel').getBoundingClientRect(); const canvas = document.querySelector('#canvasPage').getBoundingClientRect(); const stage = document.querySelector('#canvasStage').getBoundingClientRect(); return { carouselRight: carousel.right, canvasLeft: canvas.left, canvasHeight: canvas.height, stageHeight: stage.height }; });
     assert.ok(portraitWorkspace.carouselRight <= portraitWorkspace.canvasLeft + 1, 'portrait pages stay to the left of the canvas');
     assert.ok(portraitWorkspace.canvasHeight <= portraitWorkspace.stageHeight + 1, 'portrait canvas fits its workspace');
+    await page.locator('#manageVersionsBtn').click();
+    assert.equal(await page.locator('#versionsModal').isVisible(), true);
+    assert.equal(await page.locator('[data-version-row]').count(), 2);
+    await page.locator('[data-version-name]').nth(1).fill('Vertical Stories');
+    await page.locator('[data-version-name]').nth(1).press('Tab');
+    await page.waitForFunction(() => document.querySelector('#versionSwitcher').textContent.includes('Vertical Stories'));
+    await page.locator('[data-delete-version]').nth(1).click();
+    assert.equal(await page.locator('#deleteVersionModal').isVisible(), true);
+    await page.locator('#confirmDeleteVersionBtn').click();
+    await page.waitForFunction(() => project.ratio === 'landscape');
+    await page.evaluate(() => createProjectVersion('portrait'));
+    await page.waitForFunction(() => project.ratio === 'portrait' && document.querySelectorAll('#versionSwitcher option').length === 2);
     // Check real-browser layout for mixed orientations on vertical and square pages too.
     for (const ratio of ['portrait', 'square']) {
       await page.evaluate(ratio => {

@@ -122,6 +122,7 @@ let zoom = 1;
 let toastTimer;
 let saveTimer;
 let pendingDeleteProjectId = null;
+let pendingDeleteVersionId = null;
 let pendingDeletePageIndex = null;
 let lastUndoState = null;
 let pendingNewProject = false;
@@ -474,8 +475,7 @@ function renderDashboard() {
     const projectDetailsMarkup = projectDetails.length ? `<div class="project-card-details">${projectDetails.map(([label, value]) => `<span><small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('')}</div>` : '';
     const editIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 16.5-.7 3.7 3.7-.7L18.5 8a2.5 2.5 0 0 0-3.5-3.5L4 16.5Zm9.5-9.5 4 4" /></svg>';
     const deleteIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h8l1-13M10 11v6m4-6v6" /></svg>';
-    const versionsMarkup = group.entries.length > 1 ? `<div class="project-card-versions"><small>VERSIONES</small><div>${group.entries.map(version => `<button class="project-version-chip ${version.id === entry.id ? 'is-active' : ''}" data-open-project="${version.id}" type="button">${escapeHtml(version.versionName || projectFormatLabel(version.ratio))}<span>${projectFormatLabel(version.ratio).split(' · ')[0]}</span></button>`).join('')}</div></div>` : '';
-    return `<article class="project-card" style="--card-index:${index}"><div class="project-card-open" data-open-project="${entry.id}" role="button" tabindex="0"><span class="project-card-preview ${asset ? '' : 'is-empty'}">${preview}<span class="project-card-format">${projectFormatLabel(entry.ratio)}</span></span><span class="project-card-body"><span class="project-card-title-slot"><strong class="project-card-name">${escapeHtml(entry.title || 'Sin título')}</strong><input id="dashboard-title-${entry.id}" class="project-card-title-input" data-project-title="${entry.id}" value="${escapeHtml(entry.title || '')}" placeholder="Título del proyecto" autocomplete="off" hidden /></span>${projectDetailsMarkup}${versionsMarkup}<span class="project-card-meta"><span>${pageCount} página${pageCount === 1 ? '' : 's'}</span><span>${photoCount} foto${photoCount === 1 ? '' : 's'}</span><span>${projectDateLabel(entry.updatedAt)}</span></span></span></div><div class="project-card-actions"><button class="project-card-action project-card-edit" data-edit-project="${entry.id}" type="button" aria-label="Editar nombre del proyecto" title="Editar nombre">${editIcon}</button><button class="project-card-action project-card-delete" data-delete-project="${entry.id}" type="button" aria-label="Eliminar proyecto y sus versiones" title="Eliminar proyecto y sus versiones">${deleteIcon}</button></div></article>`;
+    return `<article class="project-card" style="--card-index:${index}"><div class="project-card-open" data-open-project="${entry.id}" role="button" tabindex="0"><span class="project-card-preview ${asset ? '' : 'is-empty'}">${preview}<span class="project-card-format">${projectFormatLabel(entry.ratio)}</span></span><span class="project-card-body"><span class="project-card-title-slot"><strong class="project-card-name">${escapeHtml(entry.title || 'Sin título')}</strong><input id="dashboard-title-${entry.id}" class="project-card-title-input" data-project-title="${entry.id}" value="${escapeHtml(entry.title || '')}" placeholder="Título del proyecto" autocomplete="off" hidden /></span>${projectDetailsMarkup}<span class="project-card-meta"><span>${pageCount} página${pageCount === 1 ? '' : 's'}</span><span>${photoCount} foto${photoCount === 1 ? '' : 's'}</span><span>${projectDateLabel(entry.updatedAt)}</span></span></span></div><div class="project-card-actions"><button class="project-card-action project-card-edit" data-edit-project="${entry.id}" type="button" aria-label="Editar nombre del proyecto" title="Editar nombre">${editIcon}</button><button class="project-card-action project-card-delete" data-delete-project="${entry.id}" type="button" aria-label="Eliminar proyecto y sus versiones" title="Eliminar proyecto y sus versiones">${deleteIcon}</button></div></article>`;
   }).join('');
   $$('[data-open-project]', grid).forEach(card => {
     const open = () => { if (!card.classList.contains('is-editing')) openProject(card.dataset.openProject); };
@@ -533,8 +533,7 @@ function renderVersionSwitcher() {
   const switcher = $('#versionSwitcher');
   if (!switcher) return;
   if (!project) { switcher.hidden = true; switcher.innerHTML = ''; return; }
-  const groupId = project.versionGroupId || project.id;
-  const versions = projects.filter(entry => (entry.versionGroupId || entry.id) === groupId).sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+  const versions = projectVersions();
   switcher.hidden = false;
   switcher.disabled = versions.length < 2;
   switcher.title = versions.length < 2 ? 'Todavía no hay otras versiones' : 'Cambiar versión del proyecto';
@@ -542,16 +541,75 @@ function renderVersionSwitcher() {
   switcher.value = project.id;
 }
 
+function projectVersions(groupId = project?.versionGroupId || project?.id) {
+  return projects.filter(entry => (entry.versionGroupId || entry.id) === groupId).sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+}
+
+function renderVersionManager() {
+  const list = $('#versionManagerList');
+  if (!list || !project) return;
+  const versions = projectVersions();
+  list.innerHTML = versions.map((version, index) => `<div class="version-manager-row${version.id === project.id ? ' is-current' : ''}" data-version-row="${version.id}"><div class="version-manager-mark">${String(index + 1).padStart(2, '0')}</div><div class="version-manager-copy"><input class="version-manager-name" data-version-name="${version.id}" value="${escapeHtml(version.versionName || 'Base')}" aria-label="Nombre de la versión" /><small>${projectFormatLabel(version.ratio)} · ${version.pages.length} página${version.pages.length === 1 ? '' : 's'} · ${version.assets.length} foto${version.assets.length === 1 ? '' : 's'}</small></div><button class="button button-ghost button-small" data-open-version="${version.id}" type="button">Abrir</button><button class="button button-danger button-small" data-delete-version="${version.id}" type="button"${versions.length === 1 ? ' disabled' : ''}>Eliminar</button></div>`).join('');
+  $$('[data-version-name]', list).forEach(input => input.addEventListener('change', event => {
+    const entry = projects.find(candidate => candidate.id === event.target.dataset.versionName);
+    if (!entry) return;
+    const value = event.target.value.trim();
+    entry.versionName = value || (entry.id === entry.versionGroupId ? 'Base' : projectFormatLabel(entry.ratio).split(' · ')[0]);
+    entry.updatedAt = new Date().toISOString();
+    if (project.id === entry.id) project.versionName = entry.versionName;
+    persistProjects();
+    renderVersionSwitcher();
+    renderVersionManager();
+    showToast('Nombre de versión actualizado');
+  }));
+  $$('[data-open-version]', list).forEach(button => button.addEventListener('click', () => { closeVersionsModal(); openProject(button.dataset.openVersion); }));
+  $$('[data-delete-version]', list).forEach(button => button.addEventListener('click', () => openDeleteVersionModal(button.dataset.deleteVersion)));
+}
+
+function openVersionsModal() { if (!project) return; renderVersionManager(); $('#versionsModal').hidden = false; }
+function closeVersionsModal() { $('#versionsModal').hidden = true; }
+function openDeleteVersionModal(id) {
+  const versions = projectVersions();
+  const entry = versions.find(candidate => candidate.id === id);
+  if (!entry || versions.length === 1) return;
+  pendingDeleteVersionId = id;
+  $('#deleteVersionName').textContent = entry.versionName || projectFormatLabel(entry.ratio);
+  $('#deleteVersionModal').hidden = false;
+}
+function closeDeleteVersionModal() { pendingDeleteVersionId = null; $('#deleteVersionModal').hidden = true; }
+function confirmDeleteVersion() {
+  if (!pendingDeleteVersionId) return;
+  const entry = projects.find(candidate => candidate.id === pendingDeleteVersionId);
+  const groupId = entry?.versionGroupId || pendingDeleteVersionId;
+  const versions = projectVersions(groupId);
+  if (!entry || versions.length <= 1) { closeDeleteVersionModal(); return; }
+  const fallback = versions.find(candidate => candidate.id !== entry.id);
+  projects = projects.filter(candidate => candidate.id !== entry.id);
+  persistProjects();
+  closeDeleteVersionModal();
+  if (project?.id === entry.id) {
+    closeVersionsModal();
+    openProject(fallback.id);
+  } else {
+    renderVersionSwitcher();
+    renderVersionManager();
+  }
+  showToast(`Versión ${entry.versionName || projectFormatLabel(entry.ratio)} eliminada`);
+}
+
 function showDashboard() {
   if (project) saveProject();
   project = null;
   lastUndoState = null;
   closeDeletePageConfirm();
+  closeVersionsModal();
+  closeDeleteVersionModal();
   currentProjectId = null;
   $('#dashboardView').hidden = false;
   $('#editorView').hidden = true;
   $('#backToDashboardBtn').hidden = true;
   $('#versionSwitcher').hidden = true;
+  $('#manageVersionsBtn').hidden = true;
   $('#createVersionBtn').hidden = true;
   $('#exportBtn').hidden = true;
   $('#saveState').innerHTML = '<span class="status-dot"></span>Guardado local';
@@ -564,6 +622,7 @@ function showEditor() {
   $('#editorView').hidden = false;
   $('#backToDashboardBtn').hidden = false;
   $('#versionSwitcher').hidden = false;
+  $('#manageVersionsBtn').hidden = false;
   $('#createVersionBtn').hidden = false;
   $('#exportBtn').hidden = false;
   $('#breadcrumbTitle').textContent = project?.title || 'Sin título';
@@ -1497,7 +1556,7 @@ $$('.fit-btn').forEach(button => button.addEventListener('click', () => { const 
 $('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoShotType').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.shotType = event.target.value; renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); }); $('#photoCameraMove').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMove = event.target.value; if (item.cameraMove === 'none') item.cameraMoveMode = 'overlay'; render(); saveProject(); }); $('#photoCameraMoveMode').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveMode = event.target.value === 'between' ? 'between' : 'overlay'; render(); saveProject(); });
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
 
-$('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#createVersionBtn').addEventListener('click', openVersionModal); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $$('[data-version-format]').forEach(button => button.addEventListener('click', () => createProjectVersion(button.dataset.versionFormat))); $('#cancelVersionBtn').addEventListener('click', closeVersionModal); $('#versionModal').addEventListener('click', event => { if (event.target === $('#versionModal')) closeVersionModal(); }); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelClearPageBtn').addEventListener('click', closeClearPageConfirm); $('#cancelClearPageBtnSecondary').addEventListener('click', closeClearPageConfirm); $('#confirmClearPageBtn').addEventListener('click', confirmClearPage); $('#clearPageConfirmModal').addEventListener('click', event => { if (event.target === $('#clearPageConfirmModal')) closeClearPageConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
+$('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#manageVersionsBtn').addEventListener('click', openVersionsModal); $('#createVersionBtn').addEventListener('click', openVersionModal); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $$('[data-version-format]').forEach(button => button.addEventListener('click', () => createProjectVersion(button.dataset.versionFormat))); $('#cancelVersionBtn').addEventListener('click', closeVersionModal); $('#versionModal').addEventListener('click', event => { if (event.target === $('#versionModal')) closeVersionModal(); }); $('#cancelVersionsBtn').addEventListener('click', closeVersionsModal); $('#versionsModal').addEventListener('click', event => { if (event.target === $('#versionsModal')) closeVersionsModal(); }); $('#cancelDeleteVersionBtn').addEventListener('click', closeDeleteVersionModal); $('#cancelDeleteVersionBtnSecondary').addEventListener('click', closeDeleteVersionModal); $('#confirmDeleteVersionBtn').addEventListener('click', confirmDeleteVersion); $('#deleteVersionModal').addEventListener('click', event => { if (event.target === $('#deleteVersionModal')) closeDeleteVersionModal(); }); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelClearPageBtn').addEventListener('click', closeClearPageConfirm); $('#cancelClearPageBtnSecondary').addEventListener('click', closeClearPageConfirm); $('#confirmClearPageBtn').addEventListener('click', confirmClearPage); $('#clearPageConfirmModal').addEventListener('click', event => { if (event.target === $('#clearPageConfirmModal')) closeClearPageConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
 $('#versionSwitcher').addEventListener('change', event => { if (event.target.value && event.target.value !== project?.id) openProject(event.target.value); });
 $('#projectSort').addEventListener('change', event => { projectSort = ['updated', 'title', 'client'].includes(event.target.value) ? event.target.value : 'updated'; localStorage.setItem(PROJECT_SORT_KEY, projectSort); renderDashboard(); }); $('#cancelFormatBtn').addEventListener('click', () => pendingNewProject ? closeNewProjectFormat() : closeFormatModal()); $('#formatModal').addEventListener('click', event => { if (event.target === $('#formatModal')) pendingNewProject ? closeNewProjectFormat() : closeFormatModal(); });
 $$('[data-export]').forEach(button => button.addEventListener('click', async () => { const type = button.dataset.export; closeExport(); if (type === 'json') downloadProject(); else if (type === 'print') printAllPages(); else await exportImage(type); }));

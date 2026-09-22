@@ -468,6 +468,22 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .batch-frame-options { grid-template-columns:1fr 1fr; gap:3px; }
 .version-switcher { max-width:190px; height:36px; padding:0 26px 0 9px; border:1px solid #4b4b4b; border-radius:2px; color:#fff; background:#050505; font:500 10px 'DM Mono',monospace; }
 .version-switcher:disabled { opacity:.7; cursor:default; }
+.versions-modal { width:min(700px,100%); max-height:min(90vh,760px); overflow-y:auto; }
+.version-manager-list { display:grid; gap:8px; margin-top:22px; }
+.version-manager-row { display:grid; grid-template-columns:38px minmax(0,1fr) auto auto; align-items:center; gap:10px; padding:11px; border:1px solid #d1d1d1; background:#fafafa; }
+.version-manager-row.is-current { border-color:#111; background:#fff; box-shadow:4px 4px 0 rgba(0,0,0,.12); }
+.version-manager-mark { display:grid; place-items:center; width:30px; height:30px; color:#fff; background:#000; font:10px 'DM Mono',monospace; }
+.version-manager-copy { min-width:0; }
+.version-manager-name { width:min(100%,250px); height:29px; padding:3px 6px; border:1px solid transparent; color:#111; background:transparent; font:600 14px 'Space Grotesk',sans-serif; }
+.version-manager-name:hover,.version-manager-name:focus { border-color:#999; outline:0; background:#fff; }
+.version-manager-copy small { display:block; margin-top:4px; color:#777; font:9px 'DM Mono',monospace; }
+.delete-version-backdrop { background:rgba(0,0,0,.74); }
+@media (max-width:600px) {
+  .version-manager-row { grid-template-columns:32px minmax(0,1fr); }
+  .version-manager-row .button { width:100%; }
+  .version-manager-row .button:nth-last-child(2) { grid-column:2; }
+  .version-manager-row .button:last-child { grid-column:2; }
+}
 
 /* Vertical versions use the available height instead of stacking a tall artboard over the page strip. */
 .workspace-app.is-portrait-layout .canvas-workspace { display:grid; grid-template-columns:minmax(132px,190px) minmax(0,1fr); grid-template-rows:minmax(0,1fr); grid-template-areas:'carousel stage'; align-items:stretch; gap:22px; min-height:0; padding:24px; overflow:hidden; }
