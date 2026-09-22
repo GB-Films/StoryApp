@@ -40,6 +40,8 @@ const fixture = () => {
     await page.waitForFunction(() => document.querySelectorAll('#canvasPage .design-item').length === 6);
     const squarePhoto = await page.locator('#canvasPage .design-item').first().locator('.design-photo').boundingBox();
     assert.ok(Math.abs(squarePhoto.width / squarePhoto.height - 1) < .03, 'original square photos stay inside square frames');
+    const titleAlignment = await page.evaluate(() => { const frame = document.querySelector('#canvasPage .storyboard-meta-frame').getBoundingClientRect(); const title = document.querySelector('#canvasPage .storyboard-meta-title').getBoundingClientRect(); return { frameRight: frame.right, titleRight: title.right }; });
+    assert.ok(titleAlignment.titleRight > titleAlignment.frameRight - 80, 'project title defaults to the top-right of the artboard');
     assert.equal(await page.locator('#canvasPage .storyboard-meta-page').textContent(), '01');
     await page.locator('#showProjectFrame').uncheck({ force: true });
     const viewportLayout = await page.evaluate(() => {

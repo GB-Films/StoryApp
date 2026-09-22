@@ -265,7 +265,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .storyboard-meta-producer { display:flex; align-items:center; gap:6px; max-width:48%; overflow:hidden; }
 .storyboard-meta-producer img { width:18px; height:18px; flex:0 0 auto; object-fit:contain; }
 .storyboard-meta-producer strong,.storyboard-meta-title,.storyboard-meta-page { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.storyboard-meta-title { max-width:48%; text-align:right; }
+.storyboard-meta-title { max-width:48%; margin-left:auto; text-align:right; }
 .storyboard-meta-details { display:flex; align-items:center; gap:12px; min-width:0; overflow:hidden; }
 .storyboard-meta-details span { display:flex; align-items:baseline; gap:4px; min-width:0; }
 .storyboard-meta-details small { color:#777; font-size:.75em; }
