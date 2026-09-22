@@ -1343,7 +1343,7 @@ function confirmDeletePage() {
   showToast('Página eliminada · Ctrl + Z para recuperar');
 }
 
-function downloadBlob(blob, filename) { const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
+function downloadBlob(blob, filename) { const link = document.createElement('a'); const url = URL.createObjectURL(blob); link.href = url; link.download = filename; link.style.display = 'none'; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); }
 function downloadProject() { downloadBlob(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }), `${project.title || 'storyboard'}.json`); showToast('Proyecto editable exportado'); }
 
 function crc32(bytes) {
@@ -1683,11 +1683,16 @@ async function renderPageCanvas(page, pageIndex = currentPageIndex, totalPages =
 async function exportPageAsPng(pageIndex = currentPageIndex) {
   const page = project.pages[pageIndex];
   if (!page) return;
-  const canvas = await renderPageCanvas(page, pageIndex, project.pages.length);
-  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', .92));
-  if (!blob) return;
-  downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${pageIndex + 1}.png`);
-  showToast(`Página ${pageIndex + 1} exportada como PNG`);
+  showToast(`Preparando el PNG de la página ${pageIndex + 1}…`);
+  try {
+    const canvas = await renderPageCanvas(page, pageIndex, project.pages.length);
+    const blob = await new Promise((resolve, reject) => { try { canvas.toBlob(result => result ? resolve(result) : reject(new Error('El navegador no pudo crear el archivo PNG')), 'image/png'); } catch (error) { reject(error); } });
+    downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${pageIndex + 1}.png`);
+    showToast(`Página ${pageIndex + 1} exportada como PNG`);
+  } catch (error) {
+    console.error('No se pudo exportar la página como PNG.', error);
+    showToast('No se pudo exportar el PNG. Probá de nuevo en unos segundos.');
+  }
 }
 
 async function exportImage(type) { const canvas = await renderPageCanvas(currentPage()); canvas.toBlob(blob => { downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${currentPageIndex + 1}.${type}`); showToast(`Página exportada como ${type.toUpperCase()}`); }, type === 'jpg' ? 'image/jpeg' : 'image/png', .92); }
