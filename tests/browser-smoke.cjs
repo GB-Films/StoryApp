@@ -240,6 +240,12 @@ const fixture = () => {
     assert.equal(await page.locator('#infoStyle').isDisabled(), false);
     assert.equal(await page.locator('#canvasPage .description-overlay.description-style-light').count(), 16);
     assert.deepEqual(await page.locator('#canvasPage .description-overlay.description-style-light').first().evaluate(node => [getComputedStyle(node).backgroundColor, getComputedStyle(node).color]), ['rgba(255, 255, 255, 0.92)', 'rgb(0, 0, 0)']);
+    const descriptionLayering = await page.locator('#canvasPage .description-overlay').first().evaluate(node => {
+      const arrow = node.closest('.design-photo')?.querySelector('.camera-move-overlay');
+      return { descriptionZIndex: getComputedStyle(node).zIndex, arrowZIndex: arrow ? getComputedStyle(arrow).zIndex : null };
+    });
+    assert.equal(descriptionLayering.descriptionZIndex, '20', 'descriptions stay above camera arrows');
+    assert.equal(descriptionLayering.arrowZIndex, '12');
     await page.locator('#infoPlacement').selectOption('below');
     assert.equal(await page.locator('#canvasPage .description-overlay').count(), 0);
     await page.locator('#showProducerBranding').check({ force: true });
