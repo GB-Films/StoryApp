@@ -328,12 +328,16 @@ const fixture = () => {
     }
     assert.equal(await page.locator('[data-export="json"]').count(), 0);
     const totalPagesForPng = await page.evaluate(() => project.pages.length);
-    const allPngDownloads = Array.from({ length: totalPagesForPng }, () => page.waitForEvent('download'));
     await page.locator('#exportBtn').click();
+    const allPngDownload = page.waitForEvent('download');
     await page.locator('[data-export="png-all"]').click();
-    const downloadedPages = await Promise.all(allPngDownloads);
-    assert.equal(downloadedPages.length, totalPagesForPng);
-    for (const download of downloadedPages) assert.ok((await fs.promises.stat(await download.path())).size > 100);
+    const allPngDownloadResult = await allPngDownload;
+    assert.match(allPngDownloadResult.suggestedFilename(), /-todas-las-paginas-png\.zip$/);
+    const zipBytes = await fs.promises.readFile(await allPngDownloadResult.path());
+    assert.ok(zipBytes.length > totalPagesForPng * 100);
+    let zipEntryCount = 0;
+    for (let offset = 0; offset < zipBytes.length - 3; offset += 1) if (zipBytes.readUInt32LE(offset) === 0x04034b50) zipEntryCount += 1;
+    assert.equal(zipEntryCount, totalPagesForPng);
     await page.evaluate(() => { window.print = () => {}; });
     await page.locator('#exportBtn').click();
     await page.locator('[data-export="print"]').click();

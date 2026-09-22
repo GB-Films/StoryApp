@@ -497,7 +497,9 @@ function getPageAspect() { return project.ratio === 'portrait' ? 9 / 16 : projec
 function renumberItems(page) { page.items.forEach((item, index) => { item.slot = index; }); }
 const layoutCache = new WeakMap();
 function pageLayout(page = currentPage()) {
-  const aspects = page.items.map(item => item.fit === 'cover' ? (item.cropAspect || getPageAspect()) : assetAspect(findAsset(item.assetId)));
+  // The editor treats every non-contain frame as a crop. Keep export geometry
+  // on the same rule so legacy items without an explicit `fit` cannot diverge.
+  const aspects = page.items.map(item => item.fit === 'contain' ? assetAspect(findAsset(item.assetId)) : (item.cropAspect || getPageAspect()));
   const options = { engine: project.layoutEngine, aspect: getPageAspect(), padding: project.padding, gap: project.gap, captions: project.showDescriptions && project.infoPlacement !== 'overlay' };
   const key = JSON.stringify([aspects, options]);
   const cached = layoutCache.get(page);
@@ -1352,6 +1354,43 @@ function confirmDeletePage() {
 function downloadBlob(blob, filename) { const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
 function downloadProject() { downloadBlob(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }), `${project.title || 'storyboard'}.json`); showToast('Proyecto editable exportado'); }
 
+function crc32(bytes) {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function zipUint16(view, offset, value) { view.setUint16(offset, value, true); }
+function zipUint32(view, offset, value) { view.setUint32(offset, value >>> 0, true); }
+function createZipBlob(entries) {
+  const encoder = new TextEncoder();
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  entries.forEach(entry => {
+    const name = encoder.encode(entry.name);
+    const data = entry.data;
+    const crc = crc32(data);
+    const localHeader = new Uint8Array(30);
+    const localView = new DataView(localHeader.buffer);
+    zipUint32(localView, 0, 0x04034b50); zipUint16(localView, 4, 20); zipUint16(localView, 6, 0x800); zipUint16(localView, 8, 0); zipUint16(localView, 10, 0); zipUint16(localView, 12, 0); zipUint32(localView, 14, crc); zipUint32(localView, 18, data.length); zipUint32(localView, 22, data.length); zipUint16(localView, 26, name.length); zipUint16(localView, 28, 0);
+    localParts.push(localHeader, name, data);
+    const centralHeader = new Uint8Array(46);
+    const centralView = new DataView(centralHeader.buffer);
+    zipUint32(centralView, 0, 0x02014b50); zipUint16(centralView, 4, 20); zipUint16(centralView, 6, 20); zipUint16(centralView, 8, 0x800); zipUint16(centralView, 10, 0); zipUint16(centralView, 12, 0); zipUint16(centralView, 14, 0); zipUint32(centralView, 16, crc); zipUint32(centralView, 20, data.length); zipUint32(centralView, 24, data.length); zipUint16(centralView, 28, name.length); zipUint16(centralView, 30, 0); zipUint16(centralView, 32, 0); zipUint16(centralView, 34, 0); zipUint16(centralView, 36, 0); zipUint32(centralView, 38, 0); zipUint32(centralView, 42, offset);
+    centralParts.push(centralHeader, name);
+    offset += localHeader.length + name.length + data.length;
+  });
+  const centralSize = centralParts.reduce((total, part) => total + part.length, 0);
+  const end = new Uint8Array(22);
+  const endView = new DataView(end.buffer);
+  zipUint32(endView, 0, 0x06054b50); zipUint16(endView, 4, 0); zipUint16(endView, 6, 0); zipUint16(endView, 8, entries.length); zipUint16(endView, 10, entries.length); zipUint32(endView, 12, centralSize); zipUint32(endView, 16, offset); zipUint16(endView, 20, 0);
+  return new Blob([...localParts, ...centralParts, end], { type: 'application/zip' });
+}
+
 function drawImageInBox(ctx, image, x, y, width, height, fit, focusX = 50, focusY = 50) {
   if (fit === 'contain') { const scale = Math.min(width / image.width, height / image.height); const drawW = image.width * scale; const drawH = image.height * scale; ctx.drawImage(image, x + (width - drawW) / 2, y + (height - drawH) / 2, drawW, drawH); return; }
   const scale = Math.max(width / image.width, height / image.height); const drawW = image.width * scale; const drawH = image.height * scale; const freeX = width - drawW; const freeY = height - drawH; ctx.save(); ctx.beginPath(); ctx.rect(x, y, width, height); ctx.clip(); ctx.drawImage(image, x + freeX * (focusX / 100), y + freeY * (focusY / 100), drawW, drawH); ctx.restore();
@@ -1557,11 +1596,14 @@ async function renderPageCanvas(page, pageIndex = currentPageIndex, totalPages =
 async function exportImage(type) { const canvas = await renderPageCanvas(currentPage()); canvas.toBlob(blob => { downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${currentPageIndex + 1}.${type}`); showToast(`Página exportada como ${type.toUpperCase()}`); }, type === 'jpg' ? 'image/jpeg' : 'image/png', .92); }
 async function exportAllPagesPng() {
   const totalPages = project.pages.length;
+  const entries = [];
   for (let pageIndex = 0; pageIndex < totalPages; pageIndex += 1) {
     const canvas = await renderPageCanvas(project.pages[pageIndex], pageIndex, totalPages);
-    await new Promise(resolve => canvas.toBlob(blob => { downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${pageIndex + 1}.png`); resolve(); }, 'image/png', .92));
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', .92));
+    if (blob) entries.push({ name: `pagina-${String(pageIndex + 1).padStart(2, '0')}.png`, data: new Uint8Array(await blob.arrayBuffer()) });
   }
-  showToast(`${totalPages} página${totalPages === 1 ? '' : 's'} exportada${totalPages === 1 ? '' : 's'} como PNG`);
+  downloadBlob(createZipBlob(entries), `${project.title || 'storyboard'}-todas-las-paginas-png.zip`);
+  showToast(`${entries.length} página${entries.length === 1 ? '' : 's'} exportada${entries.length === 1 ? '' : 's'} como PNG`);
 }
 
 function printAllPages() {
