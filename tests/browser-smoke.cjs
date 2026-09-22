@@ -41,6 +41,13 @@ const fixture = () => {
       const inspector = document.querySelector('.inspector-panel');
       return { workspaceScrolls: document.querySelector('#canvasWorkspace').scrollHeight > document.querySelector('#canvasWorkspace').clientHeight + 1, carouselInside: carousel.bottom <= workspace.bottom + 1, inspectorCanScroll: inspector.scrollHeight >= inspector.clientHeight };
     });
+    await page.locator('#showDescriptions').uncheck({ force: true });
+    const noInfoLayout = await page.evaluate(() => { const workspace = document.querySelector('#canvasWorkspace').getBoundingClientRect(); const canvas = document.querySelector('#canvasPage').getBoundingClientRect(); const carousel = document.querySelector('#pageCarousel').getBoundingClientRect(); return { workspace, canvas, carousel }; });
+    await page.locator('#showDescriptions').check({ force: true });
+    const withInfoLayout = await page.evaluate(() => { const workspace = document.querySelector('#canvasWorkspace').getBoundingClientRect(); const canvas = document.querySelector('#canvasPage').getBoundingClientRect(); const carousel = document.querySelector('#pageCarousel').getBoundingClientRect(); return { workspace, canvas, carousel }; });
+    assert.ok(Math.abs(noInfoLayout.workspace.top - withInfoLayout.workspace.top) < 1);
+    assert.ok(Math.abs(noInfoLayout.carousel.bottom - withInfoLayout.carousel.bottom) < 1, 'page thumbnails stay fixed when photo information changes');
+    assert.ok(withInfoLayout.carousel.bottom <= withInfoLayout.workspace.bottom + 1);
     assert.equal(viewportLayout.workspaceScrolls, false, 'canvas workspace does not need page scrolling');
     assert.equal(viewportLayout.carouselInside, true, 'page thumbnails stay inside the fixed canvas area');
     assert.equal(viewportLayout.inspectorCanScroll, true, 'long inspector content scrolls independently');
@@ -205,6 +212,16 @@ const fixture = () => {
     await page.keyboard.press('Control+Z');
     assert.equal(await page.locator('#pageTotal').textContent(), '3');
     assert.equal(await page.locator('#deletePageConfirmModal').isVisible(), false);
+    assert.equal(await page.locator('#deletePageBtn').count(), 0);
+    await page.locator('#clearPageBtn').click();
+    assert.equal(await page.locator('#clearPageConfirmModal').isVisible(), true);
+    await page.locator('#cancelClearPageBtn').click();
+    assert.equal(await page.locator('#clearPageConfirmModal').isVisible(), false);
+    await page.locator('#clearPageBtn').click();
+    await page.locator('#confirmClearPageBtn').click();
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 0);
+    await page.keyboard.press('Control+Z');
+    assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
     // Check real-browser layout for mixed orientations on vertical and square pages too.
     for (const ratio of ['portrait', 'square']) {
       await page.evaluate(ratio => {
