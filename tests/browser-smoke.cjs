@@ -275,6 +275,19 @@ const fixture = () => {
     assert.equal(await page.locator('#canvasPage .design-item').count(), 0);
     await page.keyboard.press('Control+Z');
     assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
+    await page.evaluate(() => { project.ratio = 'landscape'; render(); createProjectVersion('portrait'); });
+    await page.waitForFunction(() => document.querySelectorAll('#versionSwitcher option').length === 2);
+    assert.equal(await page.locator('#versionSwitcher').isVisible(), true);
+    assert.equal(await page.locator('#versionSwitcher').isDisabled(), false);
+    const landscapeVersionId = await page.evaluate(() => projects.find(entry => entry.versionGroupId === project.versionGroupId && entry.ratio === 'landscape').id);
+    await page.locator('#versionSwitcher').selectOption(landscapeVersionId);
+    await page.waitForFunction(() => project.ratio === 'landscape');
+    const portraitVersionId = await page.evaluate(() => projects.find(entry => entry.versionGroupId === project.versionGroupId && entry.ratio === 'portrait').id);
+    await page.locator('#versionSwitcher').selectOption(portraitVersionId);
+    await page.waitForFunction(() => project.ratio === 'portrait');
+    const portraitWorkspace = await page.evaluate(() => { const carousel = document.querySelector('#pageCarousel').getBoundingClientRect(); const canvas = document.querySelector('#canvasPage').getBoundingClientRect(); const stage = document.querySelector('#canvasStage').getBoundingClientRect(); return { carouselRight: carousel.right, canvasLeft: canvas.left, canvasHeight: canvas.height, stageHeight: stage.height }; });
+    assert.ok(portraitWorkspace.carouselRight <= portraitWorkspace.canvasLeft + 1, 'portrait pages stay to the left of the canvas');
+    assert.ok(portraitWorkspace.canvasHeight <= portraitWorkspace.stageHeight + 1, 'portrait canvas fits its workspace');
     // Check real-browser layout for mixed orientations on vertical and square pages too.
     for (const ratio of ['portrait', 'square']) {
       await page.evaluate(ratio => {

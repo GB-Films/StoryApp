@@ -529,6 +529,19 @@ function renderDashboard() {
   $$('[data-delete-project]', grid).forEach(button => button.addEventListener('click', event => { event.stopPropagation(); openDeleteProjectModal(button.dataset.deleteProject); }));
 }
 
+function renderVersionSwitcher() {
+  const switcher = $('#versionSwitcher');
+  if (!switcher) return;
+  if (!project) { switcher.hidden = true; switcher.innerHTML = ''; return; }
+  const groupId = project.versionGroupId || project.id;
+  const versions = projects.filter(entry => (entry.versionGroupId || entry.id) === groupId).sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+  switcher.hidden = false;
+  switcher.disabled = versions.length < 2;
+  switcher.title = versions.length < 2 ? 'Todavía no hay otras versiones' : 'Cambiar versión del proyecto';
+  switcher.innerHTML = versions.map(version => `<option value="${version.id}">${escapeHtml(version.versionName || 'Base')} · ${projectFormatLabel(version.ratio)}</option>`).join('');
+  switcher.value = project.id;
+}
+
 function showDashboard() {
   if (project) saveProject();
   project = null;
@@ -538,6 +551,7 @@ function showDashboard() {
   $('#dashboardView').hidden = false;
   $('#editorView').hidden = true;
   $('#backToDashboardBtn').hidden = true;
+  $('#versionSwitcher').hidden = true;
   $('#createVersionBtn').hidden = true;
   $('#exportBtn').hidden = true;
   $('#saveState').innerHTML = '<span class="status-dot"></span>Guardado local';
@@ -549,6 +563,7 @@ function showEditor() {
   $('#dashboardView').hidden = true;
   $('#editorView').hidden = false;
   $('#backToDashboardBtn').hidden = false;
+  $('#versionSwitcher').hidden = false;
   $('#createVersionBtn').hidden = false;
   $('#exportBtn').hidden = false;
   $('#breadcrumbTitle').textContent = project?.title || 'Sin título';
@@ -881,6 +896,8 @@ function renderControls() {
   $('#projectAgency').value = project.agency || '';
   $('#projectDirector').value = project.director || '';
   $('#breadcrumbTitle').textContent = project.title || 'Sin título';
+  renderVersionSwitcher();
+  $('#editorView').classList.toggle('is-portrait-layout', project.ratio === 'portrait');
   $('#backgroundColor').value = project.background;
   $('#backgroundValue').textContent = project.background.toUpperCase();
   $('#backgroundPattern').value = project.backgroundPattern || 'none';
@@ -1481,6 +1498,7 @@ $('#photoFocusX').addEventListener('input', event => { const item = findItem(sel
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
 
 $('#dashboardCreateBtn').addEventListener('click', resetProject); $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject); $('#backToDashboardBtn').addEventListener('click', showDashboard); $('#createVersionBtn').addEventListener('click', openVersionModal); $('#exportBtn').addEventListener('click', openExport); $$('[data-close-modal]').forEach(button => button.addEventListener('click', closeExport)); $('#exportModal').addEventListener('click', event => { if (event.target === $('#exportModal')) closeExport(); }); $$('[data-project-format]').forEach(button => button.addEventListener('click', () => selectProjectFormat(button.dataset.projectFormat))); $$('[data-version-format]').forEach(button => button.addEventListener('click', () => createProjectVersion(button.dataset.versionFormat))); $('#cancelVersionBtn').addEventListener('click', closeVersionModal); $('#versionModal').addEventListener('click', event => { if (event.target === $('#versionModal')) closeVersionModal(); }); $('#cancelNewProjectBtn').addEventListener('click', closeNewProjectConfirm); $('#cancelNewProjectBtnSecondary').addEventListener('click', closeNewProjectConfirm); $('#confirmNewProjectBtn').addEventListener('click', () => { closeNewProjectConfirm(); createProjectDraft(); }); $('#newProjectConfirmModal').addEventListener('click', event => { if (event.target === $('#newProjectConfirmModal')) closeNewProjectConfirm(); }); $('#cancelDeletePageBtn').addEventListener('click', closeDeletePageConfirm); $('#cancelDeletePageBtnSecondary').addEventListener('click', closeDeletePageConfirm); $('#confirmDeletePageBtn').addEventListener('click', confirmDeletePage); $('#deletePageConfirmModal').addEventListener('click', event => { if (event.target === $('#deletePageConfirmModal')) closeDeletePageConfirm(); }); $('#cancelClearPageBtn').addEventListener('click', closeClearPageConfirm); $('#cancelClearPageBtnSecondary').addEventListener('click', closeClearPageConfirm); $('#confirmClearPageBtn').addEventListener('click', confirmClearPage); $('#clearPageConfirmModal').addEventListener('click', event => { if (event.target === $('#clearPageConfirmModal')) closeClearPageConfirm(); }); $('#cancelDeleteProjectBtn').addEventListener('click', closeDeleteProjectModal); $('#cancelDeleteProjectBtnSecondary').addEventListener('click', closeDeleteProjectModal); $('#confirmDeleteProjectBtn').addEventListener('click', confirmDeleteProject); $('#deleteProjectModal').addEventListener('click', event => { if (event.target === $('#deleteProjectModal')) closeDeleteProjectModal(); });
+$('#versionSwitcher').addEventListener('change', event => { if (event.target.value && event.target.value !== project?.id) openProject(event.target.value); });
 $('#projectSort').addEventListener('change', event => { projectSort = ['updated', 'title', 'client'].includes(event.target.value) ? event.target.value : 'updated'; localStorage.setItem(PROJECT_SORT_KEY, projectSort); renderDashboard(); }); $('#cancelFormatBtn').addEventListener('click', () => pendingNewProject ? closeNewProjectFormat() : closeFormatModal()); $('#formatModal').addEventListener('click', event => { if (event.target === $('#formatModal')) pendingNewProject ? closeNewProjectFormat() : closeFormatModal(); });
 $$('[data-export]').forEach(button => button.addEventListener('click', async () => { const type = button.dataset.export; closeExport(); if (type === 'json') downloadProject(); else if (type === 'print') printAllPages(); else await exportImage(type); }));
 
