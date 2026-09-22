@@ -30,17 +30,12 @@ Abrí `index.html` en el navegador. No requiere instalación ni servidor.
 
 ## Acceso con Google
 
-La cabecera ya incluye el punto de entrada para la cuenta de Google. Para activarlo en una instalación, definí antes de cargar `auth.js` la configuración pública de la app web de Firebase:
+La app está conectada al proyecto Firebase `GB Studio` (`gb-studio-260bc`) mediante `firebase-config.js`. La configuración web de Firebase contiene identificadores públicos; la seguridad del acceso depende de Authentication y sus reglas.
 
-```html
-<script>
-  window.STORYBOARD_FIREBASE_CONFIG = {
-    apiKey: '...',
-    authDomain: 'tu-proyecto.firebaseapp.com',
-    projectId: 'tu-proyecto',
-    appId: '...'
-  };
-</script>
-```
+Para completar la activación en Firebase:
 
-En Firebase Authentication hay que habilitar el proveedor Google y agregar `gb-films.github.io` a los dominios autorizados. Sin esa configuración, la app mantiene el modo local y muestra un aviso al intentar iniciar sesión.
+1. Abrí `Authentication` → `Sign-in method`.
+2. Habilitá el proveedor `Google` y elegí el correo de asistencia del proyecto.
+3. En los dominios autorizados, verificá que figure `gb-films.github.io`.
+
+Después, el botón `Iniciar sesión` de la cabecera abre el acceso con Google y muestra el perfil autenticado. Si el proveedor todavía no está habilitado, la app conserva el modo local y muestra un aviso.
