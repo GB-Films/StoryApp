@@ -461,8 +461,7 @@ function renderDashboard() {
   const grid = $('#projectGrid');
   if (!grid) return;
   const groups = projectGroups();
-  const versionCount = groups.reduce((total, group) => total + Math.max(0, group.entries.length - 1), 0);
-  $('#projectCount').textContent = `${groups.length} proyecto${groups.length === 1 ? '' : 's'}${versionCount ? ` · ${versionCount} versión${versionCount === 1 ? '' : 'es'}` : ''}`;
+  $('#projectCount').textContent = `${groups.length} proyecto${groups.length === 1 ? '' : 's'}`;
   $('#dashboardEmpty').hidden = groups.length > 0;
   $('#projectSort').value = projectSort;
   grid.innerHTML = groups.map((group, index) => {

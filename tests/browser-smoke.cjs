@@ -233,8 +233,10 @@ const fixture = () => {
     assert.ok(dashboardHero.heroHeight < 360, 'dashboard welcome block stays compact');
     assert.ok(dashboardHero.copyWidth > 600, 'dashboard welcome copy uses the horizontal space');
     const dashboardCard = await page.locator('.project-card').first().boundingBox();
+    const dashboardCardOpen = await page.locator('.project-card-open').first().boundingBox();
     const dashboardEdit = await page.locator('[data-edit-project]').first().boundingBox();
     assert.ok(dashboardEdit.y > dashboardCard.y + dashboardCard.height - 60, 'dashboard actions stay in the bottom area');
+    assert.ok(dashboardEdit.y + dashboardEdit.height <= dashboardCardOpen.y + dashboardCardOpen.height, 'dashboard actions stay inside the card');
     await page.locator('[data-edit-project]').click();
     assert.equal(await page.locator('[data-project-title]').isVisible(), true);
     assert.equal(await page.locator('.project-card-edit-row').count(), 0);
@@ -301,6 +303,21 @@ const fixture = () => {
     await page.waitForFunction(() => project.ratio === 'landscape');
     await page.evaluate(() => createProjectVersion('portrait'));
     await page.waitForFunction(() => project.ratio === 'portrait' && document.querySelectorAll('#versionSwitcher option').length === 2);
+    await page.evaluate(() => showDashboard());
+    assert.equal(await page.locator('.project-version-chip').count(), 0);
+    assert.doesNotMatch(await page.locator('#projectCount').textContent(), /versi[oó]n/i);
+    const groupedCardLayout = await page.locator('.project-card').first().evaluate(card => {
+      const outer = card.getBoundingClientRect();
+      const open = card.querySelector('.project-card-open').getBoundingClientRect();
+      const actions = card.querySelector('.project-card-actions').getBoundingClientRect();
+      return { outerBottom: outer.bottom, openBottom: open.bottom, actionsBottom: actions.bottom };
+    });
+    assert.ok(Math.abs(groupedCardLayout.outerBottom - groupedCardLayout.openBottom) <= 1, 'dashboard card fills its grid row');
+    assert.ok(groupedCardLayout.actionsBottom <= groupedCardLayout.openBottom, 'dashboard actions remain inside grouped project cards');
+    await page.locator('[data-open-project]').first().click();
+    const recreatedPortraitId = await page.evaluate(() => projects.find(entry => entry.versionGroupId === project.versionGroupId && entry.ratio === 'portrait').id);
+    await page.locator('#versionSwitcher').selectOption(recreatedPortraitId);
+    await page.waitForFunction(() => project.ratio === 'portrait');
     // Check real-browser layout for mixed orientations on vertical and square pages too.
     for (const ratio of ['portrait', 'square']) {
       await page.evaluate(ratio => {
