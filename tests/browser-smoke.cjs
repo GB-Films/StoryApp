@@ -84,12 +84,15 @@ const fixture = () => {
     assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
     const first = await page.locator('#canvasPage .design-item').first().boundingBox();
     const last = await page.locator('#canvasPage .design-item').last().boundingBox();
+    const firstItemId = await page.locator('#canvasPage .design-item').first().getAttribute('data-item-id');
+    const firstItemText = await page.locator('#canvasPage .design-item').first().locator('.description-box').textContent();
     await page.mouse.move(first.x + first.width / 2, first.y + first.height / 3);
     await page.mouse.down();
     await page.mouse.move(last.x + last.width / 2, last.y + last.height / 3, { steps: 10 });
     await page.mouse.up();
-    assert.equal(await page.locator('#canvasPage .design-item').last().getAttribute('data-item-id'), 'item-0');
-    assert.match(await page.locator('#canvasPage .design-item').last().textContent(), /PD · Título que debe conservarse/);
+    assert.equal(await page.locator('#canvasPage .design-item').last().getAttribute('data-item-id'), firstItemId);
+    assert.equal(await page.locator('#canvasPage .design-item').last().locator('.description-box').textContent(), firstItemText);
+    const expectedLastTitle = await page.evaluate(() => currentPage().items.at(-1).title);
 
     await page.locator('[data-inspector="page"]').click();
     await page.locator('#infoStyle').selectOption('light');
@@ -131,7 +134,7 @@ const fixture = () => {
         const saved = JSON.parse(await fs.promises.readFile(await download.path(), 'utf8'));
         assert.equal(saved.pages.length, 1);
         assert.equal(saved.pages[0].items.length, 16);
-        assert.equal(saved.pages[0].items.at(-1).title, 'Título que debe conservarse');
+        assert.equal(saved.pages[0].items.at(-1).title, expectedLastTitle);
       }
     }
     await page.evaluate(() => { window.print = () => {}; });
@@ -141,9 +144,15 @@ const fixture = () => {
     await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
     await page.waitForFunction(() => document.querySelector('#saveState').textContent.includes('Guardado local'));
     await page.reload();
+    assert.equal(await page.locator('.project-card-arrow').count(), 0);
+    assert.equal(await page.locator('[data-edit-project]').count(), 1);
+    assert.equal(await page.locator('[data-delete-project]').count(), 1);
+    const dashboardCard = await page.locator('.project-card').first().boundingBox();
+    const dashboardEdit = await page.locator('[data-edit-project]').first().boundingBox();
+    assert.ok(dashboardEdit.y > dashboardCard.y + dashboardCard.height - 60, 'dashboard actions stay in the bottom area');
     await page.locator('[data-open-project]').first().click();
     assert.equal(await page.locator('#canvasPage .design-item').count(), 16);
-    assert.match(await page.locator('#canvasPage .design-item').last().textContent(), /Título que debe conservarse/);
+    assert.match(await page.locator('#canvasPage .design-item').last().textContent(), new RegExp(expectedLastTitle));
     await page.locator('[data-add-page]').click();
     assert.equal(await page.locator('#pageTotal').textContent(), '2');
     assert.equal(await page.locator('#canvasPage .design-item').count(), 0);
