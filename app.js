@@ -59,11 +59,52 @@ function itemDisplayTitle(item, asset) {
   return base.startsWith(`${type.value} ·`) ? base : `${type.value} · ${base}`;
 }
 let project = null;
-let projects = loadProjects();
+let projects = [];
 let currentProjectId = null;
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', background: '#ffffff', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
+
+const FRAME_ASPECTS = Object.freeze({ horizontal: 16 / 9, vertical: 9 / 16, square: 1 });
+const FRAME_MODES = new Set(['original', 'horizontal', 'vertical', 'square']);
+const FRAME_LABELS = Object.freeze({ original: 'Original', horizontal: 'Horizontal', vertical: 'Vertical', square: 'Cuadrada' });
+function validFrameMode(value) { return FRAME_MODES.has(value) ? value : null; }
+function frameAspect(mode) { return FRAME_ASPECTS[mode] || null; }
+function formatAspect(ratio) { return ratio === 'portrait' ? 9 / 16 : ratio === 'square' ? 1 : 16 / 9; }
+function frameModeFromAspect(aspect, fallback = 'horizontal') {
+  const target = Number(aspect);
+  if (!Number.isFinite(target) || target <= 0) return fallback;
+  return Object.entries(FRAME_ASPECTS).reduce((closest, [mode, value]) => {
+    const distance = Math.abs(Math.log(target / value));
+    return distance < closest.distance ? { mode, distance } : closest;
+  }, { mode: fallback, distance: Infinity }).mode;
+}
+function projectDefaultFrame() {
+  if (validFrameMode(project?.defaultFrame)) return project.defaultFrame;
+  return project?.defaultFit === 'cover' ? frameModeFromAspect(project.defaultCropAspect || getPageAspect()) : 'original';
+}
+function frameFields(mode) {
+  return mode === 'original' ? { frame: 'original', fit: 'contain', cropAspect: null } : { frame: mode, fit: 'cover', cropAspect: frameAspect(mode) };
+}
+function frameModesForAsset(asset) {
+  const nativeMode = frameModeFromAspect(assetAspect(asset));
+  return ['original', ...Object.keys(FRAME_ASPECTS).filter(mode => mode !== nativeMode)];
+}
+function renderFrameButtons(selector, modes, activeMode) {
+  $$(selector).forEach((button, index) => {
+    const mode = modes[index];
+    button.hidden = !mode;
+    button.dataset.frame = mode || '';
+    button.textContent = mode ? FRAME_LABELS[mode] : '';
+    button.classList.toggle('is-active', mode === activeMode);
+  });
+}
+function itemFrameMode(item) {
+  if (validFrameMode(item?.frame)) return item.frame;
+  return item?.fit === 'cover' ? frameModeFromAspect(item.cropAspect || getPageAspect()) : 'original';
+}
+
+projects = loadProjects();
 
 function legacyCropAspect(page, data) {
   const count = Number(page.photosPerPage || data.photosPerPage) || 4;
@@ -111,9 +152,16 @@ function normalizeProject(data) {
   normalized.infoStyle = data.infoStyle === 'light' ? 'light' : 'dark';
   normalized.padding = Math.max(MIN_CANVAS_PADDING, Number(normalized.padding) || MIN_CANVAS_PADDING);
   if (migrateOldCropDefault) normalized.defaultFit = 'contain';
+  normalized.defaultFrame = validFrameMode(data.defaultFrame) ? data.defaultFrame : (normalized.defaultFit === 'cover' ? frameModeFromAspect(data.defaultCropAspect || formatAspect(normalized.ratio)) : 'original');
+  normalized.defaultCropAspect = frameAspect(normalized.defaultFrame);
+  normalized.defaultFit = normalized.defaultFrame === 'original' ? 'contain' : 'cover';
   normalized.assets = Array.isArray(data.assets) ? data.assets : [];
   normalized.pages = Array.isArray(data.pages) && data.pages.length ? data.pages.map((page, index) => {
-    const migratedPage = { ...blankPage(`Página ${index + 1}`), ...page, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => ({ ...item, shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', cameraMove: item.cameraMove || 'none', cameraMoveMode: item.cameraMoveMode === 'between' ? 'between' : 'overlay', slot: Number.isFinite(item.slot) ? item.slot : itemIndex, fit: migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit) })) : [] };
+    const migratedPage = { ...blankPage(`Página ${index + 1}`), ...page, items: Array.isArray(page.items) ? page.items.map((item, itemIndex) => {
+      const legacyFit = migrateOldCropDefault ? 'contain' : (item.fit || normalized.defaultFit);
+      const mode = validFrameMode(item.frame) ? item.frame : (legacyFit === 'cover' ? frameModeFromAspect(item.cropAspect || normalized.defaultCropAspect || formatAspect(normalized.ratio)) : 'original');
+      return { ...item, ...frameFields(mode), shotType: item.shotType || 'PG', title: item.title || '', description: item.description || '', cameraMove: item.cameraMove || 'none', cameraMoveMode: item.cameraMoveMode === 'between' ? 'between' : 'overlay', slot: Number.isFinite(item.slot) ? item.slot : itemIndex };
+    }) : [] };
     if (data.layoutEngine !== 'adaptive') migratedPage.items.forEach(item => {
       if (item.fit === 'cover' && !item.cropAspect) item.cropAspect = legacyCropAspect(page, data);
     });
@@ -535,7 +583,8 @@ function pageThumbnailMarkup(page) {
     const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
     const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
     const caption = project.showDescriptions ? `<div class="page-thumb-caption ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="height:${overlayInfo ? PHOTO_INFO_OVERLAY_HEIGHT : captionHeight}%">${escapeHtml(label)}</div>` : '';
-    return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%"><div class="page-thumb-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${overlayInfo ? '' : caption}</div>`;
+    const objectFit = item.fit === 'cover' ? 'cover' : 'contain';
+    return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%"><div class="page-thumb-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-fit:${objectFit};object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${overlayInfo ? '' : caption}</div>`;
   }).join('');
 }
 
@@ -675,7 +724,7 @@ function renderControls() {
   $('#removeProducerLogoBtn').disabled = !project.producerLogo;
   $('#deletePageBtn').disabled = project.pages.length <= 1;
   $$('.format-btn').forEach(button => { button.classList.toggle('is-active', button.dataset.format === project.ratio); button.disabled = project.formatLocked; button.title = project.formatLocked ? 'El formato queda fijo durante este proyecto' : 'Elegí el formato del proyecto'; });
-  $$('.fit-default-btn').forEach(button => button.classList.toggle('is-active', button.dataset.fit === project.defaultFit));
+  renderFrameButtons('.fit-default-btn', ['original', ...Object.keys(FRAME_ASPECTS)], projectDefaultFrame());
   document.documentElement.style.setProperty('--zoom', zoom);
 }
 
@@ -702,7 +751,9 @@ function renderInspector() {
   $('#photoCameraMoveMode').value = item.cameraMoveMode || 'overlay';
   $('#photoCameraMoveMode').disabled = item.slot >= currentPage().items.length - 1;
   $('#photoCameraMoveMode').title = item.slot >= currentPage().items.length - 1 ? 'El último plano no tiene un siguiente plano para conectar' : '';
-  $$('.fit-btn').forEach(button => button.classList.toggle('is-active', button.dataset.fit === item.fit));
+  const frameModes = asset ? frameModesForAsset(asset) : ['original', ...Object.keys(FRAME_ASPECTS)];
+  const currentFrame = itemFrameMode(item);
+  renderFrameButtons('.fit-btn', frameModes, frameModes.includes(currentFrame) ? currentFrame : 'original');
 }
 
 function render() { renderControls(); renderLibrary(); renderPage(); renderInspector(); }
@@ -780,7 +831,7 @@ function addAssetToPage(assetId, targetSlot = null) {
 }
 
 function createAutoItems(assets) {
-  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, fit: project.defaultFit, focusX: 50, focusY: 50, shotType: 'PG', title: '', description: '', cameraMove: 'none', cameraMoveMode: 'overlay' }));
+  return assets.map((asset, index) => ({ id: createId('item'), assetId: asset.id, slot: index, ...frameFields(projectDefaultFrame()), focusX: 50, focusY: 50, shotType: 'PG', title: '', description: '', cameraMove: 'none', cameraMoveMode: 'overlay' }));
 }
 
 function autoArrange() {
@@ -1135,12 +1186,12 @@ $('#showPageNumber').addEventListener('change', event => { project.showPageNumbe
 $('#producerLogoBtn').addEventListener('click', () => $('#producerLogoInput').click());
 $('#producerLogoInput').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith('image/')) { showToast('Elegí un archivo de imagen'); event.target.value = ''; return; } const reader = new FileReader(); reader.onload = () => { project.producerLogo = reader.result; project.producerLogoName = file.name; project.showProducerBranding = true; render(); saveProject(); showToast('Logo de productora cargado'); }; reader.readAsDataURL(file); event.target.value = ''; });
 $('#removeProducerLogoBtn').addEventListener('click', () => { project.producerLogo = ''; project.producerLogoName = ''; render(); saveProject(); });
-$$('.fit-default-btn').forEach(button => button.addEventListener('click', () => { project.defaultFit = button.dataset.fit; renderControls(); saveProject(); }));
+$$('.fit-default-btn').forEach(button => button.addEventListener('click', () => { const mode = validFrameMode(button.dataset.frame) ? button.dataset.frame : 'original'; project.defaultFrame = mode; project.defaultCropAspect = frameAspect(mode); project.defaultFit = mode === 'original' ? 'contain' : 'cover'; renderControls(); saveProject(); }));
 $('#clearPageBtn').addEventListener('click', () => { if (!currentPage().items.length || window.confirm('¿Limpiar todas las fotos de esta página?')) { currentPage().items = []; selectedItemId = null; render(); saveProject(); } });
 $('#deletePageBtn').addEventListener('click', deleteCurrentPage);
 
 $$('.inspector-tab').forEach(tab => tab.addEventListener('click', () => { activeInspector = tab.dataset.inspector; renderInspector(); }));
-$$('.fit-btn').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; item.fit = button.dataset.fit; renderPage(); renderInspector(); saveProject(); }));
+$$('.fit-btn').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; Object.assign(item, frameFields(validFrameMode(button.dataset.frame) ? button.dataset.frame : 'original')); renderPage(); renderInspector(); saveProject(); }));
 $('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoShotType').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.shotType = event.target.value; renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); }); $('#photoCameraMove').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMove = event.target.value; if (item.cameraMove === 'none') item.cameraMoveMode = 'overlay'; render(); saveProject(); }); $('#photoCameraMoveMode').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveMode = event.target.value === 'between' ? 'between' : 'overlay'; render(); saveProject(); });
 $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePhotoBtn').addEventListener('click', duplicateSelected); $('#clearLibraryBtn').addEventListener('click', () => { if (window.confirm('¿Quitar todas las fotos de la biblioteca?')) { project.assets = []; project.pages.forEach(page => { page.items = []; }); selectedItemId = null; render(); saveProject(); } });
 

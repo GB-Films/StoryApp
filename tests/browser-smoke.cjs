@@ -47,6 +47,8 @@ const fixture = () => {
     assert.equal(await page.locator('#photosPerPage').count(), 0);
     assert.equal(await page.locator('#layoutDirection').count(), 0);
     assert.equal(await page.locator('#addPageBtn').count(), 0);
+    assert.equal(await page.locator('.fit-btn').count(), 4);
+    assert.equal(await page.locator('.fit-default-btn').count(), 4);
     assert.equal(await page.locator('#pageTotal').textContent(), '1');
     const screenshot = path.join(os.tmpdir(), 'storyapp-adaptive-six.png');
     await page.screenshot({ path: screenshot, fullPage: true });
@@ -68,6 +70,16 @@ const fixture = () => {
     assert.ok(migration.roundtrip);
 
     await page.locator('#canvasPage .design-item').first().click();
+    assert.equal(await page.locator('.fit-btn:visible').count(), 3);
+    assert.equal(await page.locator('.fit-btn[data-frame="square"]').isHidden(), true);
+    for (const mode of ['horizontal', 'vertical', 'original']) {
+      await page.locator(`.fit-btn[data-frame="${mode}"]`).click();
+      const frame = await page.evaluate(() => { const item = findItem(selectedItemId); return { frame: item.frame, fit: item.fit, cropAspect: item.cropAspect }; });
+      assert.equal(frame.frame, mode);
+      assert.equal(frame.fit, mode === 'original' ? 'contain' : 'cover');
+      if (mode === 'original') assert.equal(frame.cropAspect, null);
+      else assert.ok(frame.cropAspect > 0);
+    }
     await page.locator('#photoTitle').fill('Título que debe conservarse');
     await page.locator('#photoShotType').selectOption('PD');
     await page.locator('#autoArrangeBtn').click();

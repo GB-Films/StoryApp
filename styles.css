@@ -91,6 +91,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .project-subtitle { color:#888; }
 .editor-toolbar { background:#fff; border-bottom-color:var(--line); }
 .format-switcher,.segmented-control { background:#e8e8e8; border-radius:2px; }
+.frame-options { grid-template-columns:repeat(2,1fr); gap:3px; }
 .format-btn,.segmented-control button { color:#666; border-radius:1px; }
 .format-btn.is-active,.segmented-control button.is-active { color:#fff; background:#000; box-shadow:none; }
 .toolbar-select,.round-button,.zoom-btn { border-color:#c9c9c9; border-radius:2px; }
