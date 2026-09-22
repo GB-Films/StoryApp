@@ -3,6 +3,7 @@ const LEGACY_KEY = 'storyboard-studio-project-v1';
 const PROJECTS_KEY = 'storyboard-studio-projects-v1';
 const CURRENT_PROJECT_KEY = 'storyboard-studio-current-project-v1';
 const PROJECT_SORT_KEY = 'storyboard-studio-project-sort-v1';
+const INDEXED_DB_NAME = 'gb-studio-workspace-v1';
 const MIN_CANVAS_PADDING = 6;
 const PHOTO_INFO_OVERLAY_HEIGHT = 18;
 
@@ -257,16 +258,56 @@ function saveProject() {
       localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(candidate));
       localStorage.setItem(CURRENT_PROJECT_KEY, candidate.id);
+      writeIndexedDbSnapshot();
       $('#saveState').innerHTML = '<span class="status-dot"></span>Guardado local';
     } catch {
-      $('#saveState').innerHTML = '<span class="status-dot"></span>En memoria';
-      showToast('El proyecto es muy pesado para guardarlo completo en este navegador');
+      writeIndexedDbSnapshot();
+      $('#saveState').innerHTML = '<span class="status-dot"></span>Guardado en navegador';
     }
   }, 320);
 }
 
 function persistProjects() {
-  try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects)); } catch { showToast('No se pudo actualizar el archivo de proyectos'); }
+  try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects)); writeIndexedDbSnapshot(); } catch { writeIndexedDbSnapshot(); }
+}
+
+function openIndexedDb(callback) {
+  if (!('indexedDB' in window)) return;
+  try {
+    const request = window.indexedDB.open(INDEXED_DB_NAME, 1);
+    request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains('workspace')) request.result.createObjectStore('workspace'); };
+    request.onsuccess = () => callback(request.result);
+  } catch { /* LocalStorage remains the fallback. */ }
+}
+
+function writeIndexedDbSnapshot() {
+  openIndexedDb(db => {
+    try {
+      const transaction = db.transaction('workspace', 'readwrite');
+      transaction.objectStore('workspace').put({ projects, updatedAt: new Date().toISOString() }, 'projects');
+      transaction.oncomplete = () => db.close();
+      transaction.onerror = () => db.close();
+    } catch { db.close(); }
+  });
+}
+
+function hydrateProjectsFromIndexedDb() {
+  openIndexedDb(db => {
+    try {
+      const request = db.transaction('workspace', 'readonly').objectStore('workspace').get('projects');
+      request.onsuccess = () => {
+        const saved = request.result;
+        const localUpdatedAt = projects.reduce((latest, entry) => Math.max(latest, new Date(entry.updatedAt || 0).getTime()), 0);
+        const databaseUpdatedAt = new Date(saved?.updatedAt || 0).getTime();
+        if (Array.isArray(saved?.projects) && saved.projects.length && databaseUpdatedAt >= localUpdatedAt) {
+          projects = saved.projects.map(normalizeProject);
+          renderDashboard();
+        }
+        db.close();
+      };
+      request.onerror = () => db.close();
+    } catch { db.close(); }
+  });
 }
 
 function showToast(message) {
@@ -537,19 +578,32 @@ function cameraMoveConnectorMarkup(page) {
   return `<svg class="camera-move-connectors" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>${labels}`;
 }
 
+function itemImageBox(item, layout) {
+  if (item.fit === 'contain') return layout.image;
+  const card = layout.card;
+  const imageBottom = layout.caption ? layout.caption.y : card.y + card.height;
+  return { x: card.x, y: card.y, width: card.width, height: imageBottom - card.y };
+}
+
+function boxStyleWithinCard(box, card) {
+  return `position:absolute;left:${(box.x - card.x) / card.width * 100}%;top:${(box.y - card.y) / card.height * 100}%;width:${box.width / card.width * 100}%;height:${box.height / card.height * 100}%;`;
+}
+
 function itemMarkup(item, page = currentPage()) {
   const asset = findAsset(item.assetId); if (!asset) return '';
   const label = itemDisplayTitle(item, asset);
   const number = String((item.slot ?? 0) + 1).padStart(2, '0');
   const layout = itemLayout(item, page);
-  const imageHeight = layout.image.height / layout.card.height * 100;
+  const imageBox = itemImageBox(item, layout);
+  const imageStyle = boxStyleWithinCard(imageBox, layout.card);
+  const captionStyle = layout.caption ? boxStyleWithinCard(layout.caption, layout.card) : '';
   const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
   const description = item.description?.trim() || '';
   const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
   const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
-  const infoMarkup = project.showDescriptions ? `<div class="description-box ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="height:${overlayInfo ? PHOTO_INFO_OVERLAY_HEIGHT : captionHeight}%"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : '';
-  return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${item.id === selectedItemId ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%" draggable="false">
-    <div class="design-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${overlayInfo ? infoMarkup : ''}</div>
+  const infoMarkup = project.showDescriptions ? `<div class="description-box ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${PHOTO_INFO_OVERLAY_HEIGHT}%` : `${captionStyle}width:100%;`}"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : '';
+  return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'} ${item.id === selectedItemId ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
+    <div class="design-photo" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${overlayInfo ? infoMarkup : ''}</div>
     ${overlayInfo ? '' : infoMarkup}
   </div>`;
 }
@@ -615,12 +669,14 @@ function pageThumbnailMarkup(page) {
     const layout = itemLayout(item, page);
     const label = itemDisplayTitle(item, asset);
     const number = String((item.slot ?? 0) + 1).padStart(2, '0');
-    const imageHeight = layout.image.height / layout.card.height * 100;
+    const imageBox = itemImageBox(item, layout);
+    const imageStyle = boxStyleWithinCard(imageBox, layout.card);
+    const captionStyle = layout.caption ? boxStyleWithinCard(layout.caption, layout.card) : '';
     const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
     const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
-    const caption = project.showDescriptions ? `<div class="page-thumb-caption ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="height:${overlayInfo ? PHOTO_INFO_OVERLAY_HEIGHT : captionHeight}%">${escapeHtml(label)}</div>` : '';
+    const caption = project.showDescriptions ? `<div class="page-thumb-caption ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${PHOTO_INFO_OVERLAY_HEIGHT}%` : `${captionStyle}width:100%;`}">${escapeHtml(label)}</div>` : '';
     const objectFit = item.fit === 'cover' ? 'cover' : 'contain';
-    return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%"><div class="page-thumb-photo" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-fit:${objectFit};object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${overlayInfo ? '' : caption}</div>`;
+    return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block"><div class="page-thumb-photo" style="${imageStyle}"><img src="${asset.image}" alt="" style="object-fit:${objectFit};object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${overlayInfo ? '' : caption}</div>`;
   }).join('');
 }
 
@@ -935,7 +991,7 @@ function drawImageInBox(ctx, image, x, y, width, height, fit, focusX = 50, focus
 }
 
 function drawItemMetadata(ctx, item, asset, layout, width, height) {
-  const image = layout.image;
+  const image = itemImageBox(item, layout);
   const x = image.x / 100 * width;
   const y = image.y / 100 * height;
   const number = String((item.slot ?? 0) + 1).padStart(2, '0');
@@ -1270,3 +1326,4 @@ document.addEventListener('click', event => { if (!event.target.closest('.page-t
 document.addEventListener('keydown', event => { const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) || document.activeElement.isContentEditable; if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveProject(); showToast('Proyecto guardado'); } if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !editing) { event.preventDefault(); restoreLastUndo(); } if (event.key === 'Delete' && !editing) { if (selectedItemId) deleteSelected(); else if (project && !$('#editorView').hidden) deleteCurrentPage(); } if (event.key === 'Escape') { closeExport(); closeVersionModal(); closeNewProjectConfirm(); closeDeletePageConfirm(); closeClearPageConfirm(); closeDeleteProjectModal(); closePageMenus(); } });
 
 showDashboard();
+hydrateProjectsFromIndexedDb();

@@ -38,6 +38,8 @@ const fixture = () => {
     const original = fixture();
     await page.evaluate(data => { project = normalizeProject(data); currentProjectId = project.id; currentPageIndex = 0; selectedItemId = null; activeInspector = 'page'; showEditor(); render(); saveProject(); }, original);
     await page.waitForFunction(() => document.querySelectorAll('#canvasPage .design-item').length === 6);
+    const squarePhoto = await page.locator('#canvasPage .design-item').first().locator('.design-photo').boundingBox();
+    assert.ok(Math.abs(squarePhoto.width / squarePhoto.height - 1) < .03, 'original square photos stay inside square frames');
     assert.equal(await page.locator('#canvasPage .storyboard-meta-page').textContent(), '01');
     await page.locator('#showProjectFrame').uncheck({ force: true });
     const viewportLayout = await page.evaluate(() => {
