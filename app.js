@@ -39,6 +39,10 @@ const CAMERA_MOVE_VALUES = new Set(CAMERA_MOVES.map(move => move.value));
 const BACKGROUND_PATTERNS = new Set(['none', 'grid', 'dots', 'diagonal', 'blueprint']);
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/i;
 function validHexColor(value, fallback) { return HEX_COLOR_PATTERN.test(value || '') ? value : fallback; }
+function colorWithAlpha(value, alpha) {
+  const hex = validHexColor(value, '#000000').slice(1);
+  return `rgba(${parseInt(hex.slice(0, 2), 16)},${parseInt(hex.slice(2, 4), 16)},${parseInt(hex.slice(4, 6), 16)},${alpha})`;
+}
 
 function backgroundPatternCss(pattern) {
   const patterns = {
@@ -168,7 +172,7 @@ let projects = [];
 let currentProjectId = null;
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: DEFAULT_PRODUCER_NAME, producerBrandingConfigured: false, client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: true, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: DEFAULT_PRODUCER_LOGO, producerLogoName: 'Logo GRAN BERTA FILMS', clientLogo: '', clientLogoName: '', background: '#ffffff', backgroundImage: '', backgroundImageName: '', backgroundPattern: 'none', frameTextColor: '#111111', descriptionTextColor: '', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: DEFAULT_PRODUCER_NAME, producerBrandingConfigured: false, client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: true, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: DEFAULT_PRODUCER_LOGO, producerLogoName: 'Logo GRAN BERTA FILMS', clientLogo: '', clientLogoName: '', background: '#ffffff', backgroundImage: '', backgroundImageName: '', backgroundPattern: 'none', frameTextColor: '#111111', descriptionTextColor: '', descriptionBoxColor: '#000000', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
 
 const FRAME_ASPECTS = Object.freeze({ horizontal: 16 / 9, vertical: 9 / 16, square: 1 });
 const FRAME_MODES = new Set(['original', 'horizontal', 'vertical', 'square']);
@@ -222,7 +226,7 @@ function legacyCropAspect(page, data) {
   const w = (100 - pad * 2 - gap * (cols - 1)) / cols;
   const h = (100 - pad * 2 - gap * (rows - 1)) / rows;
   const safe = Math.min(1.6, w * .12, h * .12);
-  const imageHeight = h - safe * 2 - (data.showDescriptions !== false && data.infoPlacement !== 'overlay' ? Math.min((h - safe * 2) * .18, 11) : 0);
+  const imageHeight = h - safe * 2 - (data.infoPlacement !== 'overlay' ? Math.min((h - safe * 2) * .18, 11) : 0);
   return (data.ratio === 'portrait' ? 9 / 16 : data.ratio === 'square' ? 1 : 16 / 9) * (w - safe * 2) / imageHeight;
 }
 
@@ -263,6 +267,7 @@ function normalizeProject(data) {
   normalized.backgroundPattern = BACKGROUND_PATTERNS.has(data.backgroundPattern) ? data.backgroundPattern : 'none';
   normalized.frameTextColor = validHexColor(data.frameTextColor, '#111111');
   normalized.descriptionTextColor = validHexColor(data.descriptionTextColor, '');
+  normalized.descriptionBoxColor = validHexColor(data.descriptionBoxColor, '#000000');
   normalized.showDescriptions = typeof data.showDescriptions === 'boolean' ? data.showDescriptions : true;
   normalized.infoPlacement = data.infoPlacement === 'overlay' ? 'overlay' : 'below';
   normalized.infoStyle = data.infoStyle === 'light' ? 'light' : 'dark';
@@ -800,10 +805,11 @@ function itemMarkup(item, page = currentPage()) {
   const captionStyle = layout.caption ? boxStyleWithinCard(layout.caption, layout.card) : '';
   const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
   const description = item.description?.trim() || '';
-  const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
+  const overlayInfo = project.infoPlacement === 'overlay';
   const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
   const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-  const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description || !project.showDescriptions ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small class="description-editor" contenteditable="true" spellcheck="false">${escapeHtml(description)}</small>` : ''}</div>`;
+  const boxAlpha = project.showDescriptions && !description ? .48 : .72;
+  const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description || !project.showDescriptions ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, boxAlpha)};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small class="description-editor" contenteditable="true" spellcheck="false">${escapeHtml(description)}</small>` : ''}</div>`;
   return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''} ${itemIsSelected(item) ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
     <div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>
     ${overlayInfo ? '' : infoMarkup}
@@ -866,7 +872,7 @@ function renderPage() {
     editor.addEventListener('pointerdown', event => event.stopPropagation());
     editor.addEventListener('click', event => event.stopPropagation());
     editor.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); editor.blur(); } });
-    editor.addEventListener('input', event => { const item = findItem(editor.closest('.design-item')?.dataset.itemId); if (!item) return; item.description = event.currentTarget.textContent.trim(); $('#photoDescription').value = item.description; if (project.infoPlacement === 'overlay') editor.closest('.description-box').style.height = `${photoInfoHeight(item)}%`; saveProject(); });
+    editor.addEventListener('input', event => { const item = findItem(editor.closest('.design-item')?.dataset.itemId); if (!item) return; item.description = event.currentTarget.textContent.trim(); $('#photoDescription').value = item.description; const box = editor.closest('.description-box'); box.classList.toggle('is-empty', !item.description); box.style.setProperty('--description-box-color', colorWithAlpha(project.descriptionBoxColor, item.description ? .72 : .48)); if (project.infoPlacement === 'overlay') box.style.height = `${photoInfoHeight(item)}%`; saveProject(); });
     editor.addEventListener('blur', () => { if (project.infoPlacement !== 'overlay') renderPage(); });
   });
   $('#pageNumber').textContent = currentPageIndex + 1;
@@ -893,9 +899,9 @@ function pageThumbnailMarkup(page) {
     const imageStyle = boxStyleWithinCard(imageBox, layout.card);
     const captionStyle = layout.caption ? boxStyleWithinCard(layout.caption, layout.card) : '';
     const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
-    const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
+    const overlayInfo = project.infoPlacement === 'overlay';
     const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-    const caption = `<div class="page-thumb-caption has-description-color ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};">${escapeHtml(label)}</div>`;
+    const caption = `<div class="page-thumb-caption has-description-color ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, .72)};">${escapeHtml(label)}</div>`;
     const objectFit = item.fit === 'cover' ? 'cover' : 'contain';
     return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block"><div class="page-thumb-photo" style="${imageStyle}"><img src="${asset.image}" alt="" style="object-fit:${objectFit};object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${overlayInfo ? '' : caption}</div>`;
   }).join('');
@@ -1043,9 +1049,8 @@ function renderControls() {
   $('#autoLayoutStatus').title = project.layoutEngine === 'adaptive' ? 'Las fotos se distribuyen según sus proporciones' : 'La grilla equitativa elige la mejor cantidad de filas y columnas para aprovechar el canvas';
   $('#showDescriptions').checked = project.showDescriptions;
   $('#infoPlacement').value = project.infoPlacement || 'below';
-  $('#infoPlacement').disabled = !project.showDescriptions;
-  $('#infoStyle').value = project.infoStyle || 'dark';
-  $('#infoStyle').disabled = !project.showDescriptions;
+  $('#descriptionBoxColor').value = project.descriptionBoxColor || '#000000';
+  $('#descriptionBoxColorValue').textContent = (project.descriptionBoxColor || '#000000').toUpperCase();
   $('#frameTextColor').value = project.frameTextColor || '#111111';
   $('#frameTextColorValue').textContent = (project.frameTextColor || '#111111').toUpperCase();
   const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
@@ -1451,7 +1456,7 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.clip();
   const lightInfo = project.infoStyle === 'light';
   const descriptionTextColor = project.descriptionTextColor || (lightInfo ? '#000000' : '#ffffff');
-  ctx.fillStyle = description ? (lightInfo ? 'rgba(255,255,255,.76)' : 'rgba(0,0,0,.72)') : (lightInfo ? 'rgba(255,255,255,.6)' : 'rgba(0,0,0,.48)');
+  ctx.fillStyle = colorWithAlpha(project.descriptionBoxColor, project.showDescriptions && !description ? .48 : .72);
   ctx.fillRect(captionX, captionY, captionWidth, captionHeight);
   ctx.strokeStyle = 'rgba(0,0,0,.35)';
   ctx.lineWidth = 1;
@@ -1801,10 +1806,11 @@ function printAllPages() {
       const number = String((item.slot ?? 0) + 1).padStart(2, '0');
       const imageHeight = layout.image.height / layout.card.height * 100;
       const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
-      const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
+      const overlayInfo = project.infoPlacement === 'overlay';
       const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
       const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-      const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description || !project.showDescriptions ? '' : 'is-empty'}" style="height:${overlayInfo ? photoInfoHeight(item) : captionHeight}%;--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small>${escapeHtml(item.description || '')}</small>` : ''}</div>`;
+      const boxAlpha = project.showDescriptions && !item.description ? .48 : .72;
+      const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description || !project.showDescriptions ? '' : 'is-empty'}" style="height:${overlayInfo ? photoInfoHeight(item) : captionHeight}%;--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, boxAlpha)};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small>${escapeHtml(item.description || '')}</small>` : ''}</div>`;
       const node = document.createElement('div');
       node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''}`;
       node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`;
@@ -1945,7 +1951,7 @@ $('#backgroundImageInput').addEventListener('change', event => { const file = ev
 $('#removeBackgroundImageBtn').addEventListener('click', () => { if (!project.backgroundImage) return; project.backgroundImage = ''; project.backgroundImageName = ''; render(); saveProject(); });
 $('#backgroundPattern').addEventListener('change', event => { const pattern = BACKGROUND_PATTERNS.has(event.target.value) ? event.target.value : 'none'; project.backgroundPattern = pattern; if (pattern !== 'none') { project.backgroundImage = ''; project.backgroundImageName = ''; } render(); saveProject(); });
 $('#layoutEngine').addEventListener('change', event => { project.layoutEngine = event.target.value === 'adaptive' ? 'adaptive' : 'grid'; project.layoutEngineVersion = 1; render(); saveProject(); });
-$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = event.target.value === 'overlay' ? 'overlay' : 'below'; render(); saveProject(); }); $('#infoStyle').addEventListener('change', event => { project.infoStyle = event.target.value === 'light' ? 'light' : 'dark'; render(); saveProject(); }); $('#frameTextColor').addEventListener('input', event => { project.frameTextColor = validHexColor(event.target.value, '#111111'); $('#frameTextColorValue').textContent = project.frameTextColor.toUpperCase(); render(); saveProject(); }); $('#descriptionTextColor').addEventListener('input', event => { project.descriptionTextColor = validHexColor(event.target.value, '#ffffff'); $('#descriptionTextColorValue').textContent = project.descriptionTextColor.toUpperCase(); render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
+$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = event.target.value === 'overlay' ? 'overlay' : 'below'; render(); saveProject(); }); $('#frameTextColor').addEventListener('input', event => { project.frameTextColor = validHexColor(event.target.value, '#111111'); $('#frameTextColorValue').textContent = project.frameTextColor.toUpperCase(); render(); saveProject(); }); $('#descriptionBoxColor').addEventListener('input', event => { project.descriptionBoxColor = validHexColor(event.target.value, '#000000'); $('#descriptionBoxColorValue').textContent = project.descriptionBoxColor.toUpperCase(); render(); saveProject(); }); $('#descriptionTextColor').addEventListener('input', event => { project.descriptionTextColor = validHexColor(event.target.value, '#ffffff'); $('#descriptionTextColorValue').textContent = project.descriptionTextColor.toUpperCase(); render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
 $('#showProducerBranding').addEventListener('change', event => { project.showProducerBranding = event.target.checked; project.producerBrandingConfigured = true; render(); saveProject(); });
 $('#showProjectFrame').addEventListener('change', event => { project.showProjectFrame = event.target.checked; render(); saveProject(); });
 $('#showClientMeta').addEventListener('change', event => { project.showClientMeta = event.target.checked; render(); saveProject(); });
