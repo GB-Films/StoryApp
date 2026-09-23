@@ -137,6 +137,12 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const createId = (prefix = 'id') => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' }[char]));
+const DEFAULT_PRODUCER_NAME = 'GRAN BERTA FILMS';
+const DEFAULT_PRODUCER_LOGO = 'assets/gb-films-logo-white.png';
+function resolveMediaSource(source) {
+  if (!source || /^(data:|blob:|https?:|\/)/i.test(source)) return source;
+  try { return new URL(source, document.baseURI).href; } catch { return source; }
+}
 function shotTypeInfo(value) { return SHOT_TYPES.find(type => type.value === value) || SHOT_TYPES[0]; }
 function cameraMoveInfo(value) { return CAMERA_MOVES.find(move => move.value === value) || CAMERA_MOVES[0]; }
 function normalizeDrawingStrokes(value) {
@@ -162,7 +168,7 @@ let projects = [];
 let currentProjectId = null;
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: '', client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: false, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: '', producerLogoName: '', clientLogo: '', clientLogoName: '', background: '#ffffff', backgroundImage: '', backgroundImageName: '', backgroundPattern: 'none', frameTextColor: '#111111', descriptionTextColor: '', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: DEFAULT_PRODUCER_NAME, producerBrandingConfigured: false, client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: true, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: DEFAULT_PRODUCER_LOGO, producerLogoName: 'Logo GRAN BERTA FILMS', clientLogo: '', clientLogoName: '', background: '#ffffff', backgroundImage: '', backgroundImageName: '', backgroundPattern: 'none', frameTextColor: '#111111', descriptionTextColor: '', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
 
 const FRAME_ASPECTS = Object.freeze({ horizontal: 16 / 9, vertical: 9 / 16, square: 1 });
 const FRAME_MODES = new Set(['original', 'horizontal', 'vertical', 'square']);
@@ -228,7 +234,8 @@ function normalizeProject(data) {
   normalized.versionName = typeof data.versionName === 'string' && data.versionName.trim() ? data.versionName : 'Base';
   normalized.createdAt = data.createdAt || new Date().toISOString();
   normalized.updatedAt = data.updatedAt || normalized.createdAt;
-  normalized.producer = typeof data.producer === 'string' ? data.producer : (data.author && data.author !== 'Tu nombre' ? data.author : '');
+  normalized.producer = DEFAULT_PRODUCER_NAME;
+  normalized.producerBrandingConfigured = data.producerBrandingConfigured === true;
   normalized.author = normalized.producer;
   normalized.client = typeof data.client === 'string' ? data.client : '';
   normalized.agency = typeof data.agency === 'string' ? data.agency : '';
@@ -240,14 +247,14 @@ function normalizeProject(data) {
   normalized.layoutEngine = data.layoutEngineVersion === 1 && data.layoutEngine === 'adaptive' ? 'adaptive' : 'grid';
   normalized.formatLocked = typeof data.formatLocked === 'boolean' ? data.formatLocked : true;
   normalized.showProjectTitle = typeof data.showProjectTitle === 'boolean' ? data.showProjectTitle : true;
-  normalized.showProducerBranding = typeof data.showProducerBranding === 'boolean' ? data.showProducerBranding : false;
+  normalized.showProducerBranding = normalized.producerBrandingConfigured ? data.showProducerBranding === true : true;
   normalized.showClientMeta = typeof data.showClientMeta === 'boolean' ? data.showClientMeta : false;
   normalized.showAgencyMeta = typeof data.showAgencyMeta === 'boolean' ? data.showAgencyMeta : false;
   normalized.showDirectorMeta = typeof data.showDirectorMeta === 'boolean' ? data.showDirectorMeta : false;
   normalized.showProjectFrame = typeof data.showProjectFrame === 'boolean' ? data.showProjectFrame : false;
   normalized.showPageNumber = typeof data.showPageNumber === 'boolean' ? data.showPageNumber : true;
-  normalized.producerLogo = typeof data.producerLogo === 'string' ? data.producerLogo : '';
-  normalized.producerLogoName = typeof data.producerLogoName === 'string' ? data.producerLogoName : '';
+  normalized.producerLogo = DEFAULT_PRODUCER_LOGO;
+  normalized.producerLogoName = 'Logo GRAN BERTA FILMS';
   normalized.clientLogo = typeof data.clientLogo === 'string' ? data.clientLogo : '';
   normalized.clientLogoName = typeof data.clientLogoName === 'string' ? data.clientLogoName : '';
   normalized.background = typeof data.background === 'string' && data.background ? data.background : '#ffffff';
@@ -491,13 +498,21 @@ function descriptionLineCount(item) {
   return Math.min(5, Math.max(1, description.split('\n').reduce((lines, line) => lines + Math.max(1, Math.ceil(line.length / 48)), 0)));
 }
 function photoInfoHeight(item) { return Math.min(32, PHOTO_INFO_OVERLAY_HEIGHT + (descriptionLineCount(item) - 1) * 4); }
-function captionRatioForItem(item) { return Math.min(.32, .18 + (descriptionLineCount(item) - 1) * .045); }
+// The shot title and its description are two separate pieces of information.
+// Keep enough room for both in every layout; the previous .18 ratio made the
+// caption collapse to a single visible line on small cards.
+function captionRatioForItem(item) {
+  if (!project.showDescriptions) return .16;
+  return Math.min(.42, .28 + (descriptionLineCount(item) - 1) * .045);
+}
 const layoutCache = new WeakMap();
 function pageLayout(page = currentPage()) {
   // The editor treats every non-contain frame as a crop. Keep export geometry
   // on the same rule so legacy items without an explicit `fit` cannot diverge.
   const aspects = page.items.map(item => item.fit === 'contain' ? assetAspect(findAsset(item.assetId)) : (item.cropAspect || getPageAspect()));
-  const captions = project.showDescriptions && project.infoPlacement !== 'overlay';
+  // Titles are always part of a shot card. The description toggle only
+  // controls the second line, never whether the shot title is rendered.
+  const captions = project.infoPlacement !== 'overlay';
   const options = { engine: project.layoutEngine, aspect: getPageAspect(), padding: project.padding, gap: project.gap, captions, captionRatios: captions ? page.items.map(captionRatioForItem) : undefined };
   const key = JSON.stringify([aspects, options]);
   const cached = layoutCache.get(page);
@@ -788,7 +803,7 @@ function itemMarkup(item, page = currentPage()) {
   const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
   const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
   const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-  const infoMarkup = project.showDescriptions ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : '';
+  const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description || !project.showDescriptions ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small class="description-editor" contenteditable="true" spellcheck="false">${escapeHtml(description)}</small>` : ''}</div>`;
   return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''} ${itemIsSelected(item) ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
     <div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>
     ${overlayInfo ? '' : infoMarkup}
@@ -802,7 +817,7 @@ function storyboardMetaMarkup(pageNumber = currentPageIndex + 1, totalPages = pr
     project.showAgencyMeta && project.agency?.trim() ? ['AGENCIA', project.agency] : null,
     project.showDirectorMeta && project.director?.trim() ? ['DIRECTOR', project.director] : null
   ].filter(Boolean);
-  const producerMarkup = producer ? `<span class="storyboard-meta-producer">${project.producerLogo ? `<img src="${project.producerLogo}" alt="" />` : ''}${project.producer?.trim() ? `<strong>${escapeHtml(project.producer)}</strong>` : ''}</span>` : '';
+  const producerMarkup = producer ? `<span class="storyboard-meta-producer">${project.producerLogo ? `<img src="${escapeHtml(resolveMediaSource(project.producerLogo))}" alt="" />` : ''}${project.producer?.trim() ? `<strong>${escapeHtml(DEFAULT_PRODUCER_NAME)}</strong>` : ''}</span>` : '';
   const titleMarkup = project.showProjectTitle && project.title.trim() ? `<strong class="storyboard-meta-title">${escapeHtml(project.title)}</strong>` : '';
   const detailsMarkup = details.map(([label, value]) => `<span>${label === 'CLIENTE' && project.clientLogo ? `<img class="storyboard-meta-client-logo" src="${project.clientLogo}" alt="" />` : ''}<small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('');
   const pageMarkup = project.showPageNumber ? `<strong class="storyboard-meta-page">${String(pageNumber).padStart(2, '0')}</strong>` : '';
@@ -880,7 +895,7 @@ function pageThumbnailMarkup(page) {
     const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
     const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
     const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-    const caption = project.showDescriptions ? `<div class="page-thumb-caption has-description-color ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};">${escapeHtml(label)}</div>` : '';
+    const caption = `<div class="page-thumb-caption has-description-color ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};">${escapeHtml(label)}</div>`;
     const objectFit = item.fit === 'cover' ? 'cover' : 'contain';
     return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block"><div class="page-thumb-photo" style="${imageStyle}"><img src="${asset.image}" alt="" style="object-fit:${objectFit};object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${overlayInfo ? '' : caption}</div>`;
   }).join('');
@@ -997,10 +1012,11 @@ function renderPageCarousel() {
 
 function renderControls() {
   $('#projectTitle').value = project.title;
-  $('#projectProducer').value = project.producer || '';
+  $('#projectProducer').value = DEFAULT_PRODUCER_NAME;
+  $('#projectProducer').readOnly = true;
   $('#projectTitleDisplay').textContent = project.title || 'Sin título';
-  $('#projectProducerDisplay').textContent = project.producer || '';
-  $('#projectProducerLabel').hidden = !project.producer?.trim();
+  $('#projectProducerDisplay').textContent = DEFAULT_PRODUCER_NAME;
+  $('#projectProducerLabel').hidden = false;
   $('#projectClient').value = project.client || '';
   $('#projectAgency').value = project.agency || '';
   $('#projectDirector').value = project.director || '';
@@ -1042,9 +1058,10 @@ function renderControls() {
   $('#showAgencyMeta').checked = project.showAgencyMeta;
   $('#showDirectorMeta').checked = project.showDirectorMeta;
   $('#showPageNumber').checked = project.showPageNumber;
-  $('#producerLogoPreview').hidden = !project.producerLogo;
-  $('#producerLogoPreview').innerHTML = project.producerLogo ? `<img src="${project.producerLogo}" alt="" /><span>${escapeHtml(project.producerLogoName || 'Logo cargado')}</span>` : '';
-  $('#removeProducerLogoBtn').disabled = !project.producerLogo;
+  $('#producerLogoPreview').hidden = false;
+  $('#producerLogoPreview').innerHTML = `<img src="${DEFAULT_PRODUCER_LOGO}" alt="" /><span>Logo fijo · GRAN BERTA FILMS</span>`;
+  $('#producerLogoBtn').hidden = true;
+  $('#removeProducerLogoBtn').hidden = true;
   $('#clientLogoPreview').hidden = !project.clientLogo;
   $('#clientLogoPreview').innerHTML = project.clientLogo ? `<img src="${project.clientLogo}" alt="" /><span>${escapeHtml(project.clientLogoName || 'Logo cargado')}</span>` : '';
   $('#removeClientLogoBtn').disabled = !project.clientLogo;
@@ -1420,7 +1437,8 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.textAlign = 'left';
   const title = itemDisplayTitle(item, asset);
   const description = item.description || '';
-  if (!project.showDescriptions) return;
+  // The title is always rendered. The description toggle only hides the
+  // optional second line below it.
   const overlayHeight = photoInfoHeight(item);
   const caption = layout.caption || { x: image.x, y: image.y + image.height * (1 - overlayHeight / 100), width: image.width, height: image.height * overlayHeight / 100 };
   const captionX = caption.x / 100 * width;
@@ -1451,10 +1469,10 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.font = `600 ${titleSize}px "Space Grotesk", sans-serif`;
   const titleY = captionY + Math.max(verticalPadding, (captionHeight - titleSize * 1.2 - descriptionSize * 1.3 - textGap - verticalPadding * 2) / 2 + verticalPadding);
   ctx.fillText(title, captionX + inset, titleY, Math.max(0, captionWidth - inset * 2));
-  if (captionHeight > titleSize + 8) {
+  if (project.showDescriptions && description && captionHeight > titleSize + 8) {
     ctx.font = `400 ${descriptionSize}px "DM Sans", sans-serif`;
     ctx.fillStyle = description ? descriptionTextColor : (lightInfo ? '#555' : '#d0d0d0');
-    const text = description || 'Agregar descripción…';
+    const text = description;
     const maxWidth = Math.max(0, captionWidth - inset * 2);
     const words = text.split(/\s+/);
     const lines = [];
@@ -1590,7 +1608,7 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
   const producerStart = insetX + 30;
   let leftX = producerStart;
   let producerEnd = insetX;
-  if (logo) { const logoSize = 18; ctx.drawImage(logo, leftX, barY + (barHeight - logoSize) / 2, logoSize, logoSize); leftX += logoSize + 6; producerEnd = leftX - 6; }
+  if (logo) { const logoSize = 18; ctx.save(); ctx.filter = 'invert(1)'; ctx.drawImage(logo, leftX, barY + (barHeight - logoSize) / 2, logoSize, logoSize); ctx.restore(); leftX += logoSize + 6; producerEnd = leftX - 6; }
   if (project.showProducerBranding && project.producer?.trim()) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'left'; const producerText = project.producer.trim().toUpperCase().slice(0, 44); ctx.fillText(producerText, leftX, barY + barHeight / 2); producerEnd = leftX + ctx.measureText(producerText).width; }
   const titleText = project.showProjectTitle && project.title.trim() ? project.title.trim().toUpperCase().slice(0, 54) : '';
   const titleEnd = frameRight - 30;
@@ -1786,7 +1804,7 @@ function printAllPages() {
       const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
       const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
       const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-      const infoMarkup = project.showDescriptions ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description ? '' : 'is-empty'}" style="height:${overlayInfo ? photoInfoHeight(item) : captionHeight}%;--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : '';
+      const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description || !project.showDescriptions ? '' : 'is-empty'}" style="height:${overlayInfo ? photoInfoHeight(item) : captionHeight}%;--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small>${escapeHtml(item.description || '')}</small>` : ''}</div>`;
       const node = document.createElement('div');
       node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''}`;
       node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`;
@@ -1863,7 +1881,7 @@ function selectProjectFormat(format) {
       (!title ? fields.title : fields.client).focus();
       return;
     }
-    project = normalizeProject({ ...defaultProject(), title, client, agency: fields.agency.value.trim(), producer: fields.producer.value.trim(), author: fields.producer.value.trim(), director: fields.director.value.trim(), ratio: format, formatLocked: true, versionName: 'Base' });
+    project = normalizeProject({ ...defaultProject(), title, client, agency: fields.agency.value.trim(), producer: DEFAULT_PRODUCER_NAME, author: DEFAULT_PRODUCER_NAME, director: fields.director.value.trim(), ratio: format, formatLocked: true, versionName: 'Base' });
     project.versionGroupId = project.id;
     pendingNewProject = false;
     currentProjectId = project.id;
@@ -1920,7 +1938,7 @@ $$('.format-btn').forEach(button => button.addEventListener('click', () => { if 
 $('#zoomOutBtn').addEventListener('click', () => { zoom = clamp(zoom - .1, .6, 1.4); renderControls(); }); $('#zoomInBtn').addEventListener('click', () => { zoom = clamp(zoom + .1, .6, 1.4); renderControls(); });
 $('#prevPageBtn').addEventListener('click', () => { if (currentPageIndex > 0) { currentPageIndex--; selectedItemId = null; render(); } }); $('#nextPageBtn').addEventListener('click', () => { if (currentPageIndex < project.pages.length - 1) { currentPageIndex++; selectedItemId = null; render(); } });
 
-['projectTitle', 'projectProducer', 'projectClient', 'projectAgency', 'projectDirector'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer', projectClient: 'client', projectAgency: 'agency', projectDirector: 'director' }[id]; project[key] = event.target.value; if (id === 'projectProducer') { project.author = project.producer; $('#projectProducerDisplay').textContent = project.producer; $('#projectProducerLabel').hidden = !project.producer.trim(); } if (id === 'projectTitle') $('#projectTitleDisplay').textContent = project.title || 'Sin título'; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; renderPage(); saveProject(); }));
+['projectTitle', 'projectProducer', 'projectClient', 'projectAgency', 'projectDirector'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer', projectClient: 'client', projectAgency: 'agency', projectDirector: 'director' }[id]; project[key] = id === 'projectProducer' ? DEFAULT_PRODUCER_NAME : event.target.value; if (id === 'projectProducer') { project.author = DEFAULT_PRODUCER_NAME; project.producerBrandingConfigured = true; $('#projectProducerDisplay').textContent = DEFAULT_PRODUCER_NAME; $('#projectProducerLabel').hidden = false; } if (id === 'projectTitle') $('#projectTitleDisplay').textContent = project.title || 'Sin título'; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; renderPage(); saveProject(); }));
 $('#backgroundColor').addEventListener('input', event => { project.background = event.target.value; render(); saveProject(); });
 $('#backgroundImageBtn').addEventListener('click', () => $('#backgroundImageInput').click());
 $('#backgroundImageInput').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith('image/')) { showToast('Elegí un archivo de imagen'); event.target.value = ''; return; } const reader = new FileReader(); reader.onload = () => { project.backgroundImage = reader.result; project.backgroundImageName = file.name; project.backgroundPattern = 'none'; render(); saveProject(); showToast('Foto de fondo cargada'); }; reader.readAsDataURL(file); event.target.value = ''; });
@@ -1928,7 +1946,7 @@ $('#removeBackgroundImageBtn').addEventListener('click', () => { if (!project.ba
 $('#backgroundPattern').addEventListener('change', event => { const pattern = BACKGROUND_PATTERNS.has(event.target.value) ? event.target.value : 'none'; project.backgroundPattern = pattern; if (pattern !== 'none') { project.backgroundImage = ''; project.backgroundImageName = ''; } render(); saveProject(); });
 $('#layoutEngine').addEventListener('change', event => { project.layoutEngine = event.target.value === 'adaptive' ? 'adaptive' : 'grid'; project.layoutEngineVersion = 1; render(); saveProject(); });
 $('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = event.target.value === 'overlay' ? 'overlay' : 'below'; render(); saveProject(); }); $('#infoStyle').addEventListener('change', event => { project.infoStyle = event.target.value === 'light' ? 'light' : 'dark'; render(); saveProject(); }); $('#frameTextColor').addEventListener('input', event => { project.frameTextColor = validHexColor(event.target.value, '#111111'); $('#frameTextColorValue').textContent = project.frameTextColor.toUpperCase(); render(); saveProject(); }); $('#descriptionTextColor').addEventListener('input', event => { project.descriptionTextColor = validHexColor(event.target.value, '#ffffff'); $('#descriptionTextColorValue').textContent = project.descriptionTextColor.toUpperCase(); render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
-$('#showProducerBranding').addEventListener('change', event => { project.showProducerBranding = event.target.checked; render(); saveProject(); });
+$('#showProducerBranding').addEventListener('change', event => { project.showProducerBranding = event.target.checked; project.producerBrandingConfigured = true; render(); saveProject(); });
 $('#showProjectFrame').addEventListener('change', event => { project.showProjectFrame = event.target.checked; render(); saveProject(); });
 $('#showClientMeta').addEventListener('change', event => { project.showClientMeta = event.target.checked; render(); saveProject(); });
 $('#showAgencyMeta').addEventListener('change', event => { project.showAgencyMeta = event.target.checked; render(); saveProject(); });
