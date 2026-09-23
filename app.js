@@ -195,10 +195,6 @@ function projectDefaultFrame() {
 function frameFields(mode) {
   return mode === 'original' ? { frame: 'original', fit: 'contain', cropAspect: null } : { frame: mode, fit: 'cover', cropAspect: frameAspect(mode) };
 }
-function frameModesForAsset(asset) {
-  const nativeMode = frameModeFromAspect(assetAspect(asset));
-  return ['original', ...Object.keys(FRAME_ASPECTS).filter(mode => mode !== nativeMode)];
-}
 function renderFrameButtons(selector, modes, activeMode) {
   $$(selector).forEach((button, index) => {
     const mode = modes[index];
@@ -513,19 +509,19 @@ function pageLayout(page = currentPage()) {
   // The editor treats every non-contain frame as a crop. Keep export geometry
   // on the same rule so legacy items without an explicit `fit` cannot diverge.
   const aspects = page.items.map(item => item.fit === 'contain' ? assetAspect(findAsset(item.assetId)) : (item.cropAspect || getPageAspect()));
-  // Titles are always part of a shot card. The description toggle only
-  // controls the second line, never whether the shot title is rendered.
+  // Only captions placed below photos reserve space in the page layout.
   const captions = project.infoPlacement === 'below';
   const options = { engine: project.layoutEngine, aspect: getPageAspect(), padding: project.padding, gap: project.gap, captions, captionRatios: captions ? page.items.map(captionRatioForItem) : undefined };
   const key = JSON.stringify([aspects, options]);
   const cached = layoutCache.get(page);
   if (cached?.key === key) return cached.rects;
   const rects = StoryboardLayout.arrange(aspects, options);
-  if (captions) rects.forEach((rect, index) => {
-    const item = page.items[index];
-    const captionRatio = captionRatioForItem(item);
-    const photoBox = item.fit === 'contain' ? rect.image : { x: rect.card.x, y: rect.card.y, width: rect.card.width, height: rect.caption.y - rect.card.y };
-    rect.caption = { x: photoBox.x, y: photoBox.y + photoBox.height, width: photoBox.width, height: photoBox.height * captionRatio };
+  rects.forEach((rect, index) => {
+    // The grid cell may be shared, but each photo frame keeps its own aspect.
+    const photoBox = rect.image;
+    const captionHeight = captions ? photoBox.height * captionRatioForItem(page.items[index]) : 0;
+    rect.caption = captions ? { x: photoBox.x, y: photoBox.y + photoBox.height, width: photoBox.width, height: captionHeight } : null;
+    rect.card = { x: photoBox.x, y: photoBox.y, width: photoBox.width, height: photoBox.height + captionHeight };
   });
   layoutCache.set(page, { key, rects });
   return rects;
@@ -789,10 +785,7 @@ function drawingMarkup(item) {
 }
 
 function itemImageBox(item, layout) {
-  if (item.fit === 'contain') return layout.image;
-  const card = layout.card;
-  const imageBottom = layout.caption ? layout.caption.y : card.y + card.height;
-  return { x: card.x, y: card.y, width: card.width, height: imageBottom - card.y };
+  return layout.image;
 }
 
 function boxStyleWithinCard(box, card) {
@@ -1122,9 +1115,8 @@ function renderInspector() {
   $('#undoDrawingBtn').disabled = !item.drawingStrokes?.length;
   $('#clearDrawingBtn').disabled = !item.drawingStrokes?.length;
   $('#cameraToolHelp').textContent = annotationToolMode === 'move' ? 'Arrastrá las flechas directamente sobre la foto.' : annotationToolMode === 'draw' ? 'Dibujá sobre la foto. Desactivá el lápiz cuando termines.' : 'Elegí un movimiento. Después podés mover las flechas o dibujar directamente sobre la foto.';
-  const frameModes = asset ? frameModesForAsset(asset) : ['original', ...Object.keys(FRAME_ASPECTS)];
   const currentFrame = itemFrameMode(item);
-  renderFrameButtons('.fit-btn', frameModes, frameModes.includes(currentFrame) ? currentFrame : 'original');
+  renderFrameButtons('.fit-btn', ['original', ...Object.keys(FRAME_ASPECTS)], currentFrame);
 }
 
 function render() { renderControls(); renderLibrary(); renderPage(); renderInspector(); }
@@ -1975,7 +1967,15 @@ $('#removeClientLogoBtn').addEventListener('click', () => { project.clientLogo =
 $$('.fit-default-btn').forEach(button => button.addEventListener('click', () => { const mode = validFrameMode(button.dataset.frame) ? button.dataset.frame : 'original'; project.defaultFrame = mode; project.defaultCropAspect = frameAspect(mode); project.defaultFit = mode === 'original' ? 'contain' : 'cover'; renderControls(); saveProject(); }));
 $('#clearPageBtn').addEventListener('click', () => { if (currentPage().items.length) $('#clearPageConfirmModal').hidden = false; });
 
-$$('.inspector-tab').forEach(tab => tab.addEventListener('click', () => { activeInspector = tab.dataset.inspector; renderInspector(); }));
+$$('.inspector-tab').forEach(tab => tab.addEventListener('click', () => {
+  activeInspector = tab.dataset.inspector;
+  if (activeInspector === 'photo' && selectedItems().length > 1) {
+    const item = findItem(selectedItemId) || selectedItems()[0];
+    setItemSelection([item], item.id);
+    renderPage();
+  }
+  renderInspector();
+}));
 $('#selectAllPhotosBtn').addEventListener('click', selectAllCurrentPage);
 $('#clearPhotoSelectionBtn').addEventListener('click', () => { clearItemSelection(); activeInspector = 'page'; render(); });
 $$('.batch-fit-btn').forEach(button => button.addEventListener('click', () => applyFrameToSelection(button.dataset.frame)));
