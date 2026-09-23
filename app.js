@@ -1446,6 +1446,10 @@ function confirmDeletePage() {
 }
 
 function downloadBlob(blob, filename) { const link = document.createElement('a'); const url = URL.createObjectURL(blob); link.href = url; link.download = filename; link.style.display = 'none'; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); }
+function exportProjectSlug() {
+  return (project.title || 'Storyboard').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Storyboard';
+}
+function exportedPageFilename(pageIndex, extension = 'png') { return `${exportProjectSlug()}_pag${pageIndex + 1}.${extension}`; }
 function downloadProject() { downloadBlob(new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' }), `${project.title || 'storyboard'}.json`); showToast('Proyecto editable exportado'); }
 
 function crc32(bytes) {
@@ -1827,7 +1831,7 @@ async function exportPageAsPng(pageIndex = currentPageIndex) {
   showToast(`Preparando el PNG de la página ${pageIndex + 1}…`);
   try {
     const blob = await renderPageBlob(page, pageIndex, project.pages.length, 'image/png');
-    downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${pageIndex + 1}.png`);
+    downloadBlob(blob, exportedPageFilename(pageIndex));
     showToast(`Página ${pageIndex + 1} exportada como PNG`);
   } catch (error) {
     console.error('No se pudo exportar la página como PNG.', error);
@@ -1842,7 +1846,7 @@ async function exportImage(type) {
   try {
     const mimeType = type === 'jpg' ? 'image/jpeg' : 'image/png';
     const blob = await renderPageBlob(page, currentPageIndex, project.pages.length, mimeType);
-    downloadBlob(blob, `${project.title || 'storyboard'}-pagina-${currentPageIndex + 1}.${type}`);
+    downloadBlob(blob, exportedPageFilename(currentPageIndex, type));
     showToast(`Página exportada como ${type.toUpperCase()}`);
   } catch (error) {
     console.error('No se pudo exportar la página.', error);
@@ -1856,9 +1860,9 @@ async function exportAllPagesPng() {
     const entries = [];
     for (let pageIndex = 0; pageIndex < totalPages; pageIndex += 1) {
       const blob = await renderPageBlob(project.pages[pageIndex], pageIndex, totalPages);
-      entries.push({ name: `pagina-${String(pageIndex + 1).padStart(2, '0')}.png`, data: new Uint8Array(await blob.arrayBuffer()) });
+      entries.push({ name: exportedPageFilename(pageIndex), data: new Uint8Array(await blob.arrayBuffer()) });
     }
-    downloadBlob(createZipBlob(entries), `${project.title || 'storyboard'}-todas-las-paginas-png.zip`);
+    downloadBlob(createZipBlob(entries), `${exportProjectSlug()}_paginas.zip`);
     showToast(`${entries.length} página${entries.length === 1 ? '' : 's'} exportada${entries.length === 1 ? '' : 's'} como PNG`);
   } catch (error) {
     console.error('No se pudieron exportar todas las páginas como PNG.', error);
