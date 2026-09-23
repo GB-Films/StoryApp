@@ -491,13 +491,21 @@ function descriptionLineCount(item) {
   return Math.min(5, Math.max(1, description.split('\n').reduce((lines, line) => lines + Math.max(1, Math.ceil(line.length / 48)), 0)));
 }
 function photoInfoHeight(item) { return Math.min(32, PHOTO_INFO_OVERLAY_HEIGHT + (descriptionLineCount(item) - 1) * 4); }
-function captionRatioForItem(item) { return Math.min(.32, .18 + (descriptionLineCount(item) - 1) * .045); }
+// The shot title and its description are two separate pieces of information.
+// Keep enough room for both in every layout; the previous .18 ratio made the
+// caption collapse to a single visible line on small cards.
+function captionRatioForItem(item) {
+  if (!project.showDescriptions) return .16;
+  return Math.min(.42, .28 + (descriptionLineCount(item) - 1) * .045);
+}
 const layoutCache = new WeakMap();
 function pageLayout(page = currentPage()) {
   // The editor treats every non-contain frame as a crop. Keep export geometry
   // on the same rule so legacy items without an explicit `fit` cannot diverge.
   const aspects = page.items.map(item => item.fit === 'contain' ? assetAspect(findAsset(item.assetId)) : (item.cropAspect || getPageAspect()));
-  const captions = project.showDescriptions && project.infoPlacement !== 'overlay';
+  // Titles are always part of a shot card. The description toggle only
+  // controls the second line, never whether the shot title is rendered.
+  const captions = project.infoPlacement !== 'overlay';
   const options = { engine: project.layoutEngine, aspect: getPageAspect(), padding: project.padding, gap: project.gap, captions, captionRatios: captions ? page.items.map(captionRatioForItem) : undefined };
   const key = JSON.stringify([aspects, options]);
   const cached = layoutCache.get(page);
@@ -788,7 +796,7 @@ function itemMarkup(item, page = currentPage()) {
   const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
   const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
   const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-  const infoMarkup = project.showDescriptions ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small></div>` : '';
+  const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description || !project.showDescriptions ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small class="description-editor" contenteditable="true" spellcheck="false" data-placeholder="Agregar descripción…">${escapeHtml(description)}</small>` : ''}</div>`;
   return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''} ${itemIsSelected(item) ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
     <div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>
     ${overlayInfo ? '' : infoMarkup}
@@ -880,7 +888,7 @@ function pageThumbnailMarkup(page) {
     const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
     const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
     const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-    const caption = project.showDescriptions ? `<div class="page-thumb-caption has-description-color ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};">${escapeHtml(label)}</div>` : '';
+    const caption = `<div class="page-thumb-caption has-description-color ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};">${escapeHtml(label)}</div>`;
     const objectFit = item.fit === 'cover' ? 'cover' : 'contain';
     return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block"><div class="page-thumb-photo" style="${imageStyle}"><img src="${asset.image}" alt="" style="object-fit:${objectFit};object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${overlayInfo ? '' : caption}</div>`;
   }).join('');
@@ -1420,7 +1428,8 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.textAlign = 'left';
   const title = itemDisplayTitle(item, asset);
   const description = item.description || '';
-  if (!project.showDescriptions) return;
+  // The title is always rendered. The description toggle only hides the
+  // optional second line below it.
   const overlayHeight = photoInfoHeight(item);
   const caption = layout.caption || { x: image.x, y: image.y + image.height * (1 - overlayHeight / 100), width: image.width, height: image.height * overlayHeight / 100 };
   const captionX = caption.x / 100 * width;
@@ -1448,7 +1457,7 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.font = `600 ${titleSize}px "Space Grotesk", sans-serif`;
   const titleY = captionY + Math.max(5, (captionHeight - titleSize - descriptionSize * 1.3) / 2);
   ctx.fillText(title, captionX + inset, titleY, Math.max(0, captionWidth - inset * 2));
-  if (captionHeight > titleSize + 8) {
+  if (project.showDescriptions && captionHeight > titleSize + 8) {
     ctx.font = `400 ${descriptionSize}px "DM Sans", sans-serif`;
     ctx.fillStyle = description ? descriptionTextColor : (lightInfo ? '#555' : '#d0d0d0');
     const text = description || 'Agregar descripción…';
@@ -1783,7 +1792,7 @@ function printAllPages() {
       const overlayInfo = project.showDescriptions && project.infoPlacement === 'overlay';
       const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
       const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-      const infoMarkup = project.showDescriptions ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description ? '' : 'is-empty'}" style="height:${overlayInfo ? photoInfoHeight(item) : captionHeight}%;--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || 'Agregar descripción…')}</small></div>` : '';
+      const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description || !project.showDescriptions ? '' : 'is-empty'}" style="height:${overlayInfo ? photoInfoHeight(item) : captionHeight}%;--description-text-color:${descriptionTextColor};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small>${escapeHtml(item.description || 'Agregar descripción…')}</small>` : ''}</div>`;
       const node = document.createElement('div');
       node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''}`;
       node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`;
