@@ -1155,6 +1155,38 @@ function renderInspector() {
 
 function render() { renderControls(); renderLibrary(); renderPage(); renderInspector(); }
 
+function previewArtboardBackgroundSettings() {
+  [$('#canvasPage'), ...$$('.page-thumb-canvas:not(.page-thumb-add-canvas)')].forEach(applyArtboardBackground);
+  $('#backgroundValue').textContent = project.background.toUpperCase();
+  $('#backgroundPatternColorValue').textContent = project.backgroundPatternColor.toUpperCase();
+  $('#backgroundImageOpacityValue').textContent = `${project.backgroundImageOpacity}%`;
+  $('#backgroundImageBlurValue').textContent = `${project.backgroundImageBlur} px`;
+  const preview = $('#backgroundPreview');
+  if (preview && project.backgroundImage) {
+    const previewBlur = Math.min(8, project.backgroundImageBlur / 3);
+    const previewSide = Math.max(1, Math.min(preview.clientWidth || 180, preview.clientHeight || 64));
+    preview.style.backgroundColor = project.background;
+    preview.style.setProperty('--background-preview-opacity', String(project.backgroundImageOpacity / 100));
+    preview.style.setProperty('--background-preview-blur', `${previewBlur}px`);
+    preview.style.setProperty('--background-preview-scale', String(1 + previewBlur * 2 / previewSide));
+  }
+}
+
+function previewStoryboardColors() {
+  const frameColor = project.frameTextColor;
+  $$('.storyboard-meta-frame').forEach(frame => {
+    frame.style.setProperty('--frame-text-color', frameColor);
+    frame.style.setProperty('--frame-rule-color', colorWithAlpha(frameColor, .68));
+  });
+  $$('.description-box,.page-thumb-caption').forEach(box => {
+    box.style.setProperty('--description-box-color', colorWithAlpha(project.descriptionBoxColor, .72));
+    box.style.setProperty('--description-text-color', project.descriptionTextColor);
+  });
+  $('#frameTextColorValue').textContent = frameColor.toUpperCase();
+  $('#descriptionBoxColorValue').textContent = project.descriptionBoxColor.toUpperCase();
+  $('#descriptionTextColorValue').textContent = project.descriptionTextColor.toUpperCase();
+}
+
 function selectItem(id, event = {}) {
   const page = currentPage();
   const itemIndex = page?.items.findIndex(item => item.id === id) ?? -1;
@@ -2063,16 +2095,17 @@ $('#zoomOutBtn').addEventListener('click', () => { zoom = clamp(zoom - .1, .6, 1
 $('#prevPageBtn').addEventListener('click', () => { if (currentPageIndex > 0) { currentPageIndex--; selectedItemId = null; render(); } }); $('#nextPageBtn').addEventListener('click', () => { if (currentPageIndex < project.pages.length - 1) { currentPageIndex++; selectedItemId = null; render(); } });
 
 ['projectTitle', 'projectProducer', 'projectClient', 'projectAgency', 'projectDirector'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer', projectClient: 'client', projectAgency: 'agency', projectDirector: 'director' }[id]; project[key] = id === 'projectProducer' ? DEFAULT_PRODUCER_NAME : event.target.value; if (id === 'projectProducer') { project.author = DEFAULT_PRODUCER_NAME; project.producerBrandingConfigured = true; $('#projectProducerDisplay').textContent = DEFAULT_PRODUCER_NAME; $('#projectProducerLabel').hidden = false; } if (id === 'projectTitle') $('#projectTitleDisplay').textContent = project.title || 'Sin título'; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; renderPage(); saveProject(); }));
-$('#backgroundColor').addEventListener('input', event => { project.background = event.target.value; render(); saveProject(); });
-$('#backgroundPatternColor').addEventListener('input', event => { project.backgroundPatternColor = validHexColor(event.target.value, '#c7c7c7'); render(); saveProject(); });
-$('#backgroundImageOpacity').addEventListener('input', event => { project.backgroundImageOpacity = Number(event.target.value); render(); saveProject(); });
-$('#backgroundImageBlur').addEventListener('input', event => { project.backgroundImageBlur = Number(event.target.value); render(); saveProject(); });
+$('#backgroundColor').addEventListener('input', event => { project.background = validHexColor(event.target.value, '#ffffff'); previewArtboardBackgroundSettings(); saveProject(); });
+$('#backgroundPatternColor').addEventListener('input', event => { project.backgroundPatternColor = validHexColor(event.target.value, '#c7c7c7'); previewArtboardBackgroundSettings(); saveProject(); });
+$('#backgroundImageOpacity').addEventListener('input', event => { project.backgroundImageOpacity = Number(event.target.value); previewArtboardBackgroundSettings(); saveProject(); });
+$('#backgroundImageBlur').addEventListener('input', event => { project.backgroundImageBlur = Number(event.target.value); previewArtboardBackgroundSettings(); saveProject(); });
+['backgroundColor', 'backgroundPatternColor', 'backgroundImageOpacity', 'backgroundImageBlur'].forEach(id => $('#' + id).addEventListener('change', render));
 $('#backgroundImageBtn').addEventListener('click', () => $('#backgroundImageInput').click());
 $('#backgroundImageInput').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith('image/')) { showToast('Elegí un archivo de imagen'); event.target.value = ''; return; } const reader = new FileReader(); reader.onload = () => { project.backgroundImage = reader.result; project.backgroundImageName = file.name; project.backgroundPattern = 'none'; render(); saveProject(); showToast('Foto de fondo cargada'); }; reader.readAsDataURL(file); event.target.value = ''; });
 $('#removeBackgroundImageBtn').addEventListener('click', () => { if (!project.backgroundImage) return; project.backgroundImage = ''; project.backgroundImageName = ''; render(); saveProject(); });
 $('#backgroundPattern').addEventListener('change', event => { const pattern = BACKGROUND_PATTERNS.has(event.target.value) ? event.target.value : 'none'; project.backgroundPattern = pattern; if (pattern !== 'none') { project.backgroundImage = ''; project.backgroundImageName = ''; } render(); saveProject(); });
 $('#layoutEngine').addEventListener('change', event => { project.layoutEngine = event.target.value === 'adaptive' ? 'adaptive' : 'grid'; project.layoutEngineVersion = 1; render(); saveProject(); });
-$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = ['below', 'overlay', 'none'].includes(event.target.value) ? event.target.value : 'below'; render(); saveProject(); }); $('#frameTextColor').addEventListener('input', event => { project.frameTextColor = validHexColor(event.target.value, '#111111'); $('#frameTextColorValue').textContent = project.frameTextColor.toUpperCase(); render(); saveProject(); }); $('#descriptionBoxColor').addEventListener('input', event => { project.descriptionBoxColor = validHexColor(event.target.value, '#000000'); $('#descriptionBoxColorValue').textContent = project.descriptionBoxColor.toUpperCase(); render(); saveProject(); }); $('#descriptionTextColor').addEventListener('input', event => { project.descriptionTextColor = validHexColor(event.target.value, '#ffffff'); $('#descriptionTextColorValue').textContent = project.descriptionTextColor.toUpperCase(); render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
+$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = ['below', 'overlay', 'none'].includes(event.target.value) ? event.target.value : 'below'; render(); saveProject(); }); $('#frameTextColor').addEventListener('input', event => { project.frameTextColor = validHexColor(event.target.value, '#111111'); previewStoryboardColors(); saveProject(); }); $('#descriptionBoxColor').addEventListener('input', event => { project.descriptionBoxColor = validHexColor(event.target.value, '#000000'); previewStoryboardColors(); saveProject(); }); $('#descriptionTextColor').addEventListener('input', event => { project.descriptionTextColor = validHexColor(event.target.value, '#ffffff'); previewStoryboardColors(); saveProject(); }); ['frameTextColor', 'descriptionBoxColor', 'descriptionTextColor'].forEach(id => $('#' + id).addEventListener('change', render)); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
 $('#showProducerBranding').addEventListener('change', event => { project.showProducerBranding = event.target.checked; project.producerBrandingConfigured = true; render(); saveProject(); });
 $('#showProjectFrame').addEventListener('change', event => { project.showProjectFrame = event.target.checked; render(); saveProject(); });
 $('#showClientMeta').addEventListener('change', event => { project.showClientMeta = event.target.checked; render(); saveProject(); });
@@ -2103,7 +2136,8 @@ $$('.batch-fit-btn').forEach(button => button.addEventListener('click', () => ap
 $$('.fit-btn').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; Object.assign(item, frameFields(validFrameMode(button.dataset.frame) ? button.dataset.frame : 'original')); renderPage(); renderInspector(); saveProject(); }));
 $('#photoFocusX').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusX = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoFocusY').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.focusY = Number(event.target.value); renderPage(); renderInspector(); saveProject(); }); $('#photoShotType').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.shotType = event.target.value; renderPage(); renderInspector(); saveProject(); }); $('#photoTitle').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.title = event.target.value; renderPage(); saveProject(); }); $('#photoDescription').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.description = event.target.value; renderPage(); saveProject(); });
 $$('.camera-preset').forEach(button => button.addEventListener('click', () => { const item = findItem(selectedItemId); if (!item) return; item.cameraMove = CAMERA_MOVE_VALUES.has(button.dataset.cameraPreset) ? button.dataset.cameraPreset : 'none'; item.cameraMoveMode = 'overlay'; if (item.cameraMove === 'none' && annotationToolMode === 'move') annotationToolMode = 'none'; renderPage(); renderInspector(); saveProject(); }));
-$('#photoAnnotationColor').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; const color = validHexColor(event.target.value, '#ff3b30'); item.cameraMoveColor = color; item.drawingColor = color; renderPage(); saveProject(); });
+$('#photoAnnotationColor').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; const color = validHexColor(event.target.value, '#ff3b30'); item.cameraMoveColor = color; item.drawingColor = color; document.querySelector(`[data-camera-overlay="${CSS.escape(item.id)}"]`)?.style.setProperty('--camera-color', color); saveProject(); });
+$('#photoAnnotationColor').addEventListener('change', renderPage);
 $('#photoCameraScale').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveScale = clamp(Number(event.target.value) / 100, .45, 1.45); $('#cameraScaleValue').textContent = `${Math.round(item.cameraMoveScale * 100)}%`; renderPage(); saveProject(); });
 $('#cameraMoveSpill').addEventListener('change', event => { const item = findItem(selectedItemId); if (!item) return; item.cameraMoveSpill = event.target.checked; const moveMin = item.cameraMoveSpill ? -400 : 8; const moveMax = item.cameraMoveSpill ? 400 : 92; const cameraMoveX = Number(item.cameraMoveX); const cameraMoveY = Number(item.cameraMoveY); item.cameraMoveX = clamp(Number.isFinite(cameraMoveX) ? cameraMoveX : 50, moveMin, moveMax); item.cameraMoveY = clamp(Number.isFinite(cameraMoveY) ? cameraMoveY : 50, moveMin, moveMax); renderPage(); renderInspector(); saveProject(); });
 $('#photoDrawingWidth').addEventListener('input', event => { const item = findItem(selectedItemId); if (!item) return; item.drawingWidth = clamp(Number(event.target.value), .8, 8); $('#drawingWidthValue').textContent = item.drawingWidth.toFixed(1); saveProject(); });
