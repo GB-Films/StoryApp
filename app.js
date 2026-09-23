@@ -520,6 +520,7 @@ function descriptionLineCount(item) {
   return Math.min(5, Math.max(1, description.split('\n').reduce((lines, line) => lines + Math.max(1, Math.ceil(line.length / 48)), 0)));
 }
 function photoInfoHeight(item) { return Math.min(40, PHOTO_INFO_OVERLAY_HEIGHT + (descriptionLineCount(item) - 1) * 4); }
+function photoInfoMinHeight(item) { return item.description?.trim() ? 48 + (descriptionLineCount(item) - 1) * 16 : 32; }
 // Reserve a compact label below the photo without shrinking the photo frame.
 // Longer descriptions grow the label gradually and never consume image height.
 function captionRatioForItem(item) {
@@ -827,7 +828,7 @@ function itemMarkup(item, page = currentPage()) {
   const showInfo = project.infoPlacement !== 'none';
   const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
   const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-  const infoMarkup = showInfo ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, .72)};"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false">${escapeHtml(description)}</small></div>` : '';
+  const infoMarkup = showInfo ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;min-height:${photoInfoMinHeight(item)}px;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, .72)};"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false">${escapeHtml(description)}</small></div>` : '';
   return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''} ${itemIsSelected(item) ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
     <div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>
     ${belowInfo ? infoMarkup : ''}
@@ -1583,15 +1584,20 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.textAlign = 'left';
   if (project.infoPlacement === 'none') return;
   const title = itemDisplayTitle(item, asset);
-  const description = item.description || '';
+  const description = item.description?.trim() || '';
   // The title is always rendered. The description toggle only hides the
   // optional second line below it.
   const overlayHeight = photoInfoHeight(item);
   const caption = layout.caption || { x: image.x, y: image.y + image.height * (1 - overlayHeight / 100), width: image.width, height: image.height * overlayHeight / 100 };
+  const renderScale = width / Math.max(1, $('#canvasPage')?.clientWidth || width);
   const captionX = caption.x / 100 * width;
-  const captionY = caption.y / 100 * height;
+  let captionY = caption.y / 100 * height;
   const captionWidth = caption.width / 100 * width;
-  const captionHeight = caption.height / 100 * height;
+  let captionHeight = caption.height / 100 * height;
+  if (!layout.caption) {
+    captionHeight = Math.max(captionHeight, photoInfoMinHeight(item) * renderScale);
+    captionY = (image.y + image.height) / 100 * height - captionHeight;
+  }
   ctx.save();
   ctx.beginPath();
   ctx.rect(captionX, captionY, captionWidth, captionHeight);
@@ -1606,7 +1612,6 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.strokeRect(captionX + .5, captionY + .5, Math.max(0, captionWidth - 1), Math.max(0, captionHeight - 1));
   ctx.setLineDash([]);
   ctx.fillStyle = descriptionTextColor;
-  const renderScale = width / Math.max(1, $('#canvasPage')?.clientWidth || width);
   const inset = Math.max(8, Math.round(10 * renderScale));
   const titleSize = Math.max(14, Math.round(14 * renderScale));
   const descriptionSize = Math.max(12, Math.round(12 * renderScale));
@@ -1956,7 +1961,7 @@ function printAllPages() {
       const showInfo = project.infoPlacement !== 'none';
       const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
       const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-      const infoMarkup = showInfo ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, .72)};"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || '')}</small></div>` : '';
+      const infoMarkup = showInfo ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description?.trim() ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;min-height:${photoInfoMinHeight(item)}px;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, .72)};"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description?.trim() || '')}</small></div>` : '';
       const node = document.createElement('div');
       node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''}`;
       node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`;
