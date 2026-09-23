@@ -49,6 +49,19 @@ test('six square photos balance as three per row on a landscape storyboard', () 
   assert.deepEqual([...rows.values()].map(row => row.length), [3, 3]);
 });
 
+test('four and five photos use 2+2 and 3+2 on landscape storyboards', () => {
+  for (const ratio of [1, 9 / 16, 16 / 9]) {
+    for (const captions of [true, false]) {
+      for (const count of [4, 5]) {
+        const rects = checkLayout(Array(count).fill(ratio), { engine: 'grid', aspect: 16 / 9, captions });
+        const rows = [...Map.groupBy(rects, rect => rect.card.y).values()];
+        assert.deepEqual(rows.map(row => row.length), count === 4 ? [2, 2] : [3, 2]);
+        if (count === 5) assert.ok(rows[1][0].card.x > rows[0][0].card.x, 'last row is centered');
+      }
+    }
+  }
+});
+
 test('layout adapts to the actual assets, and removing a photo reclaims space', () => {
   const options = { aspect: 16 / 9, captions: false };
   const squares = arrange(Array(6).fill(1), options);

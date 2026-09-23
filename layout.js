@@ -22,18 +22,21 @@
     const slotAspect = horizontal > vertical ? 16 / 9 : vertical > horizontal ? 9 / 16 : 1;
     const pageAspect = pageWidth / pageHeight;
     const targetGridAspect = pageAspect / slotAspect;
-    let columns = 1;
-    let bestGrid = null;
-    for (let candidate = 1; candidate <= count; candidate++) {
-      const candidateRows = Math.ceil(count / candidate);
-      const emptySlots = candidate * candidateRows - count;
-      const gridAspect = candidate / candidateRows;
-      const aspectError = Math.abs(Math.log(gridAspect / targetGridAspect));
-      const landscapeTieBreak = pageAspect >= 1 ? -candidate * .0001 : candidate * .0001;
-      const score = aspectError + emptySlots * .12 + landscapeTieBreak;
-      if (!bestGrid || score < bestGrid.score) bestGrid = { columns: candidate, score };
+    // Keep common landscape sequences in reading order: 2+2, then 3+2.
+    let columns = pageAspect >= 1 && count === 4 ? 2 : pageAspect >= 1 && count === 5 ? 3 : null;
+    if (!columns) {
+      let bestGrid = null;
+      for (let candidate = 1; candidate <= count; candidate++) {
+        const candidateRows = Math.ceil(count / candidate);
+        const emptySlots = candidate * candidateRows - count;
+        const gridAspect = candidate / candidateRows;
+        const aspectError = Math.abs(Math.log(gridAspect / targetGridAspect));
+        const landscapeTieBreak = pageAspect >= 1 ? -candidate * .0001 : candidate * .0001;
+        const score = aspectError + emptySlots * .12 + landscapeTieBreak;
+        if (!bestGrid || score < bestGrid.score) bestGrid = { columns: candidate, score };
+      }
+      columns = bestGrid.columns;
     }
-    columns = bestGrid.columns;
     const rows = Math.ceil(count / columns);
     const captionRatio = options.captions ? (options.captionRatios?.length ? Math.max(...options.captionRatios) : options.captionRatio ?? .15) : 0;
     const cellWidth = Math.min((width - gap * (columns - 1)) / columns, (height - gap * (rows - 1)) * slotAspect / (rows * (1 + captionRatio)));
