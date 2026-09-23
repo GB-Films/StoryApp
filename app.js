@@ -79,12 +79,23 @@ function applyArtboardBackground(element) {
   element.style.backgroundSize = pattern.size;
   element.style.backgroundPosition = 'center';
   element.style.backgroundRepeat = 'repeat';
-  element.style.setProperty('--background-photo', image ? `url("${image.replaceAll('"', '%22')}")` : 'none');
-  element.style.setProperty('--background-image-opacity', String(Math.max(0, Math.min(100, Number(project?.backgroundImageOpacity ?? 100))) / 100));
+  let layer = [...element.children].find(child => child.classList?.contains('artboard-background-photo'));
+  if (!image) { layer?.remove(); return; }
+  if (!layer) {
+    layer = document.createElement('img');
+    layer.className = 'artboard-background-photo';
+    layer.alt = '';
+    element.prepend(layer);
+  }
+  if (layer._backgroundSource !== image) {
+    layer.src = resolveMediaSource(image);
+    layer._backgroundSource = image;
+  }
+  layer.style.opacity = String(Math.max(0, Math.min(100, Number(project?.backgroundImageOpacity ?? 100))) / 100);
   const blur = Math.max(0, Math.min(24, Number(project?.backgroundImageBlur ?? 0)));
-  element.style.setProperty('--background-image-blur', `${blur}px`);
   const shortSide = Math.max(1, Math.min(element.clientWidth || Number.parseFloat(element.style.width) || 800, element.clientHeight || Number.parseFloat(element.style.height) || 450));
-  element.style.setProperty('--background-image-scale', String(1 + blur * 2 / shortSide));
+  layer.style.filter = blur ? `blur(${blur}px)` : 'none';
+  layer.style.transform = blur ? `scale(${1 + blur * 2 / shortSide})` : 'none';
 }
 
 function drawBackgroundPattern(ctx, width, height, pattern, color = '#c7c7c7') {
@@ -705,6 +716,7 @@ function showEditor() {
   $('#createVersionBtn').hidden = false;
   $('#exportBtn').hidden = false;
   $('#breadcrumbTitle').textContent = project?.title || 'Sin título';
+  queueMicrotask(optimizeCurrentBackgroundImage);
 }
 
 function openDeleteProjectModal(id) {
@@ -842,7 +854,8 @@ function storyboardMetaMarkup(pageNumber = currentPageIndex + 1, totalPages = pr
     project.showAgencyMeta && project.agency?.trim() ? ['AGENCIA', project.agency] : null,
     project.showDirectorMeta && project.director?.trim() ? ['DIRECTOR', project.director] : null
   ].filter(Boolean);
-  const producerMarkup = producer ? `<span class="storyboard-meta-producer">${project.producerLogo ? `<img src="${escapeHtml(resolveMediaSource(project.producerLogo))}" alt="" />` : ''}${project.producer?.trim() ? `<strong>${escapeHtml(DEFAULT_PRODUCER_NAME)}</strong>` : ''}</span>` : '';
+  const producerLogoSource = project.producerLogo ? resolveMediaSource(project.producerLogo).replaceAll('"', '%22').replaceAll("'", '%27') : '';
+  const producerMarkup = producer ? `<span class="storyboard-meta-producer">${producerLogoSource ? `<span class="storyboard-meta-logo" style="--producer-logo:url('${escapeHtml(producerLogoSource)}')"></span>` : ''}${project.producer?.trim() ? `<strong>${escapeHtml(DEFAULT_PRODUCER_NAME)}</strong>` : ''}</span>` : '';
   const titleMarkup = project.showProjectTitle && project.title.trim() ? `<strong class="storyboard-meta-title">${escapeHtml(project.title)}</strong>` : '';
   const detailsMarkup = details.map(([label, value]) => `<span>${label === 'CLIENTE' && project.clientLogo ? `<img class="storyboard-meta-client-logo" src="${project.clientLogo}" alt="" />` : ''}<small>${label}</small><strong>${escapeHtml(value)}</strong></span>`).join('');
   const pageMarkup = project.showPageNumber ? `<strong class="storyboard-meta-page">${String(pageNumber).padStart(2, '0')}</strong>` : '';
@@ -881,10 +894,10 @@ function fitCanvasPage() {
 function renderPage() {
   const page = currentPage();
   $('#canvasPage').className = `canvas-page ${pageFormatClass()} ${slotMode ? 'is-slot-mode' : ''}`;
-  applyArtboardBackground($('#canvasPage'));
   const guides = slotMode ? pageLayout(page).map(({ card: rect }, index) => `<div class="slot-guide" data-slot-index="${index}" style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%"><span>${String(index + 1).padStart(2, '0')}</span></div>`).join('') : '';
   const content = page?.items.length ? page.items.map(item => itemMarkup(item, page)).join('') : '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>';
   $('#canvasPage').innerHTML = guides + content + storyboardMetaMarkup();
+  applyArtboardBackground($('#canvasPage'));
   $$('.design-item').forEach(item => bindDesignItem(item));
   $$('[data-camera-overlay]').forEach(overlay => bindCameraOverlay(overlay));
   $$('[data-drawing-layer]').forEach(layer => bindDrawingLayer(layer));
@@ -1037,6 +1050,30 @@ function renderPageCarousel() {
   $('[data-add-page]', track)?.addEventListener('click', addNewPage);
 }
 
+function applyBackgroundPreview() {
+  const preview = $('#backgroundPreview');
+  preview.hidden = !project.backgroundImage;
+  preview.style.backgroundColor = project.background || '#ffffff';
+  let image = preview.querySelector('.background-preview-photo');
+  if (!project.backgroundImage) { image?.remove(); preview.title = ''; return; }
+  if (!image) {
+    image = document.createElement('img');
+    image.className = 'background-preview-photo';
+    image.alt = '';
+    preview.appendChild(image);
+  }
+  if (image._backgroundSource !== project.backgroundImage) {
+    image.src = resolveMediaSource(project.backgroundImage);
+    image._backgroundSource = project.backgroundImage;
+  }
+  const blur = Math.min(8, (project.backgroundImageBlur ?? 0) / 3);
+  const previewSide = Math.max(1, Math.min(preview.clientWidth || 180, preview.clientHeight || 64));
+  image.style.opacity = String((project.backgroundImageOpacity ?? 100) / 100);
+  image.style.filter = blur ? `blur(${blur}px)` : 'none';
+  image.style.transform = blur ? `scale(${1 + blur * 2 / previewSide})` : 'none';
+  preview.title = project.backgroundImageName || 'Foto de fondo cargada';
+}
+
 function renderControls() {
   $('#projectTitle').value = project.title;
   $('#projectProducer').value = DEFAULT_PRODUCER_NAME;
@@ -1061,19 +1098,7 @@ function renderControls() {
   $('#backgroundImageBlur').value = project.backgroundImageBlur ?? 0;
   $('#backgroundImageBlurValue').textContent = `${project.backgroundImageBlur ?? 0} px`;
   $('#removeBackgroundImageBtn').disabled = !project.backgroundImage;
-  $('#backgroundPreview').hidden = !project.backgroundImage;
-  if (project.backgroundImage) {
-    $('#backgroundPreview').style.setProperty('--background-preview-photo', `url("${project.backgroundImage.replaceAll('"', '%22')}")`);
-    $('#backgroundPreview').style.setProperty('--background-preview-opacity', String((project.backgroundImageOpacity ?? 100) / 100));
-    $('#backgroundPreview').style.setProperty('--background-preview-blur', `${Math.min(8, (project.backgroundImageBlur ?? 0) / 3)}px`);
-    const previewSide = Math.max(1, Math.min($('#backgroundPreview').clientWidth || 180, $('#backgroundPreview').clientHeight || 64));
-    $('#backgroundPreview').style.setProperty('--background-preview-scale', String(1 + Math.min(8, (project.backgroundImageBlur ?? 0) / 3) * 2 / previewSide));
-    $('#backgroundPreview').style.backgroundColor = project.background || '#ffffff';
-    $('#backgroundPreview').title = project.backgroundImageName || 'Foto de fondo cargada';
-  } else {
-    $('#backgroundPreview').style.setProperty('--background-preview-photo', 'none');
-    $('#backgroundPreview').title = '';
-  }
+  applyBackgroundPreview();
   $('#pageGap').value = project.gap;
   $('#pageGapValue').textContent = `${project.gap} px`;
   $('#pagePadding').value = project.padding;
@@ -1162,15 +1187,7 @@ function previewArtboardBackgroundSettings() {
   $('#backgroundPatternColorValue').textContent = project.backgroundPatternColor.toUpperCase();
   $('#backgroundImageOpacityValue').textContent = `${project.backgroundImageOpacity}%`;
   $('#backgroundImageBlurValue').textContent = `${project.backgroundImageBlur} px`;
-  const preview = $('#backgroundPreview');
-  if (preview && project.backgroundImage) {
-    const previewBlur = Math.min(8, project.backgroundImageBlur / 3);
-    const previewSide = Math.max(1, Math.min(preview.clientWidth || 180, preview.clientHeight || 64));
-    preview.style.backgroundColor = project.background;
-    preview.style.setProperty('--background-preview-opacity', String(project.backgroundImageOpacity / 100));
-    preview.style.setProperty('--background-preview-blur', `${previewBlur}px`);
-    preview.style.setProperty('--background-preview-scale', String(1 + previewBlur * 2 / previewSide));
-  }
+  applyBackgroundPreview();
 }
 
 function previewStoryboardColors() {
@@ -1468,6 +1485,33 @@ async function compressImage(file) {
   });
 }
 
+async function compressBackgroundImage(source) {
+  const image = await loadImageSource(source);
+  if (!image) throw new Error('No se pudo leer la imagen de fondo');
+  const max = 1800;
+  const scale = Math.min(1, max / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', .84);
+}
+
+async function optimizeCurrentBackgroundImage() {
+  const activeProject = project;
+  const source = activeProject?.backgroundImage || '';
+  if (!source.startsWith('data:image/') || source.length < 900000) return;
+  try {
+    const optimized = await compressBackgroundImage(source);
+    if (project !== activeProject || project.backgroundImage !== source || optimized.length >= source.length) return;
+    project.backgroundImage = optimized;
+    render();
+    saveProject();
+  } catch (error) {
+    console.warn('No se pudo optimizar la foto de fondo.', error);
+  }
+}
+
 async function handleFiles(fileList, firstSlot = null) {
   const files = [...fileList].filter(file => file.type.startsWith('image/')); if (!files.length) { showToast('Elegí archivos de imagen JPG, PNG o WEBP'); return; }
   try {
@@ -1645,6 +1689,18 @@ function loadImageSource(source) {
   return new Promise(resolve => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => resolve(null); image.src = source; });
 }
 
+function drawTintedImage(ctx, image, x, y, width, height, color) {
+  const buffer = document.createElement('canvas');
+  buffer.width = Math.max(1, Math.ceil(width));
+  buffer.height = Math.max(1, Math.ceil(height));
+  const bufferCtx = buffer.getContext('2d');
+  bufferCtx.drawImage(image, 0, 0, buffer.width, buffer.height);
+  bufferCtx.globalCompositeOperation = 'source-in';
+  bufferCtx.fillStyle = color;
+  bufferCtx.fillRect(0, 0, buffer.width, buffer.height);
+  ctx.drawImage(buffer, x, y, width, height);
+}
+
 async function drawProducerBranding(ctx, width, height) {
   const producer = project.producer?.trim() || '';
   if (!project.showProducerBranding || (!producer && !project.producerLogo)) return;
@@ -1760,7 +1816,7 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
   const producerStart = insetX + 30;
   let leftX = producerStart;
   let producerEnd = insetX;
-  if (logo) { const logoSize = 18; ctx.save(); ctx.filter = 'invert(1)'; ctx.drawImage(logo, leftX, barY + (barHeight - logoSize) / 2, logoSize, logoSize); ctx.restore(); leftX += logoSize + 6; producerEnd = leftX - 6; }
+  if (logo) { const logoSize = 18; drawTintedImage(ctx, logo, leftX, barY + (barHeight - logoSize) / 2, logoSize, logoSize, frameTextColor); leftX += logoSize + 6; producerEnd = leftX - 6; }
   if (project.showProducerBranding && project.producer?.trim()) { ctx.fillStyle = frameTextColor; ctx.textAlign = 'left'; const producerText = project.producer.trim().toUpperCase().slice(0, 44); ctx.fillText(producerText, leftX, barY + barHeight / 2); producerEnd = leftX + ctx.measureText(producerText).width; }
   const titleText = project.showProjectTitle && project.title.trim() ? project.title.trim().toUpperCase().slice(0, 54) : '';
   const titleEnd = frameRight - 30;
@@ -1833,9 +1889,9 @@ async function renderPageCanvasFromArtboard(page, pageIndex, totalPages) {
   const board = document.createElement('div');
   board.className = `canvas-page ${pageFormatClass()}`;
   board.style.cssText = `position:fixed;left:-100000px;top:0;width:${logicalWidth}px;height:${logicalHeight}px;max-width:none;max-height:none;box-shadow:none;transform:none;transition:none;`;
-  applyArtboardBackground(board);
   const content = page.items.map(item => itemMarkup(item, page)).join('');
   board.innerHTML = `${content || '<div class="empty-page"><div><span>▱</span><strong>Tu artboard está vacío</strong><small>Arrastrá una foto desde la biblioteca</small></div></div>'}${storyboardMetaMarkup(pageIndex + 1, totalPages)}`;
+  applyArtboardBackground(board);
   board.querySelectorAll('.is-selected,.is-editing').forEach(element => element.classList.remove('is-selected', 'is-editing'));
   board.querySelectorAll('[contenteditable]').forEach(element => element.removeAttribute('contenteditable'));
   document.body.appendChild(board);
@@ -2106,7 +2162,7 @@ $('#backgroundImageOpacity').addEventListener('input', event => { project.backgr
 $('#backgroundImageBlur').addEventListener('input', event => { project.backgroundImageBlur = Number(event.target.value); previewArtboardBackgroundSettings(); saveProject(); });
 ['backgroundColor', 'backgroundPatternColor', 'backgroundImageOpacity', 'backgroundImageBlur'].forEach(id => $('#' + id).addEventListener('change', render));
 $('#backgroundImageBtn').addEventListener('click', () => $('#backgroundImageInput').click());
-$('#backgroundImageInput').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith('image/')) { showToast('Elegí un archivo de imagen'); event.target.value = ''; return; } const reader = new FileReader(); reader.onload = () => { project.backgroundImage = reader.result; project.backgroundImageName = file.name; project.backgroundPattern = 'none'; render(); saveProject(); showToast('Foto de fondo cargada'); }; reader.readAsDataURL(file); event.target.value = ''; });
+$('#backgroundImageInput').addEventListener('change', async event => { const file = event.target.files?.[0]; event.target.value = ''; if (!file) return; if (!file.type.startsWith('image/')) { showToast('Elegí un archivo de imagen'); return; } const activeProject = project; const url = URL.createObjectURL(file); try { const image = await compressBackgroundImage(url); if (project !== activeProject) return; project.backgroundImage = image; project.backgroundImageName = file.name; project.backgroundPattern = 'none'; render(); saveProject(); showToast('Foto de fondo cargada'); } catch (error) { console.error('No se pudo cargar la foto de fondo.', error); showToast('No se pudo cargar la foto de fondo'); } finally { URL.revokeObjectURL(url); } });
 $('#removeBackgroundImageBtn').addEventListener('click', () => { if (!project.backgroundImage) return; project.backgroundImage = ''; project.backgroundImageName = ''; render(); saveProject(); });
 $('#backgroundPattern').addEventListener('change', event => { const pattern = BACKGROUND_PATTERNS.has(event.target.value) ? event.target.value : 'none'; project.backgroundPattern = pattern; if (pattern !== 'none') { project.backgroundImage = ''; project.backgroundImageName = ''; } render(); saveProject(); });
 $('#layoutEngine').addEventListener('change', event => { project.layoutEngine = event.target.value === 'adaptive' ? 'adaptive' : 'grid'; project.layoutEngineVersion = 1; render(); saveProject(); });
