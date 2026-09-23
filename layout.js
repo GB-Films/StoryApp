@@ -22,8 +22,11 @@
     const slotAspect = horizontal > vertical ? 16 / 9 : vertical > horizontal ? 9 / 16 : 1;
     const pageAspect = pageWidth / pageHeight;
     const targetGridAspect = pageAspect / slotAspect;
-    // Keep common landscape sequences in reading order: 2+2, then 3+2.
-    let columns = pageAspect >= 1 && count === 4 ? 2 : pageAspect >= 1 && count === 5 ? 3 : null;
+    // Four portrait photos used to sit in a single row; preserve that layout.
+    // Other landscape sets keep the editorial 2+2 / 3+2 arrangements.
+    let columns = pageAspect >= 1 && count === 4 && vertical === 4 ? 4
+      : pageAspect >= 1 && count === 4 ? 2
+        : pageAspect >= 1 && count === 5 ? 3 : null;
     if (!columns) {
       let bestGrid = null;
       for (let candidate = 1; candidate <= count; candidate++) {
