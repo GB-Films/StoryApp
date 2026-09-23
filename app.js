@@ -121,6 +121,7 @@ let currentPageIndex = 0;
 let selectedItemId = null;
 let selectedItemIds = new Set();
 let selectionAnchorId = null;
+let suppressCanvasClick = false;
 let activeInspector = 'page';
 let draggedAssetId = null;
 let slotMode = false;
@@ -1156,6 +1157,80 @@ function selectAllCurrentPage() {
   renderPage(); renderInspector();
 }
 
+function startMarqueeSelection(event) {
+  if (event.button !== 0 || event.pointerType !== 'mouse' || event.target.closest('.design-item') || slotMode) return;
+  const board = $('#canvasPage');
+  const boardRect = board.getBoundingClientRect();
+  const origin = { x: clamp((event.clientX - boardRect.left) / boardRect.width, 0, 1), y: clamp((event.clientY - boardRect.top) / boardRect.height, 0, 1) };
+  const existingIds = new Set(selectedItems().map(item => item.id));
+  const additive = event.ctrlKey || event.metaKey || event.shiftKey;
+  let marquee = null;
+  let selectedByBox = new Set();
+  const cleanup = () => {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onCancel);
+    document.removeEventListener('keydown', onKeyDown, true);
+    window.removeEventListener('blur', onCancel);
+    marquee?.remove();
+  };
+  const restoreHighlights = () => $$('.design-item', board).forEach(node => {
+    const id = node.dataset.itemId;
+    node.classList.toggle('is-selected', selectedItemIds.size ? selectedItemIds.has(id) : selectedItemId === id);
+  });
+  const onMove = moveEvent => {
+    if (moveEvent.pointerId !== event.pointerId) return;
+    if (!marquee && Math.hypot(moveEvent.clientX - event.clientX, moveEvent.clientY - event.clientY) < 4) return;
+    if (!marquee) { marquee = document.createElement('div'); marquee.className = 'selection-marquee'; board.appendChild(marquee); }
+    const rect = board.getBoundingClientRect();
+    const end = { x: clamp((moveEvent.clientX - rect.left) / rect.width, 0, 1), y: clamp((moveEvent.clientY - rect.top) / rect.height, 0, 1) };
+    const left = Math.min(origin.x, end.x), right = Math.max(origin.x, end.x);
+    const top = Math.min(origin.y, end.y), bottom = Math.max(origin.y, end.y);
+    marquee.style.cssText = `left:${left * 100}%;top:${top * 100}%;width:${(right - left) * 100}%;height:${(bottom - top) * 100}%`;
+    const bounds = { left: rect.left + left * rect.width, right: rect.left + right * rect.width, top: rect.top + top * rect.height, bottom: rect.top + bottom * rect.height };
+    selectedByBox = new Set();
+    $$('.design-item', board).forEach(node => {
+      const photo = node.querySelector('.design-photo')?.getBoundingClientRect();
+      const hit = photo && bounds.left < photo.right && bounds.right > photo.left && bounds.top < photo.bottom && bounds.bottom > photo.top;
+      if (hit) selectedByBox.add(node.dataset.itemId);
+      node.classList.toggle('is-selected', !!hit || (additive && existingIds.has(node.dataset.itemId)));
+    });
+  };
+  const onUp = upEvent => {
+    if (upEvent.pointerId !== event.pointerId) return;
+    if (!marquee) {
+      cleanup();
+      clearItemSelection(); activeInspector = 'page';
+      renderPage(); renderInspector();
+      suppressCanvasClick = true;
+      setTimeout(() => { suppressCanvasClick = false; }, 0);
+      return;
+    }
+    onMove(upEvent);
+    cleanup();
+    const ids = additive ? new Set([...existingIds, ...selectedByBox]) : selectedByBox;
+    const items = currentPage().items.filter(item => ids.has(item.id));
+    if (items.length) setItemSelection(items, ids.has(selectedItemId) ? selectedItemId : items.at(-1).id);
+    else clearItemSelection();
+    activeInspector = items.length > 1 ? 'page' : items.length ? 'photo' : 'page';
+    renderPage(); renderInspector();
+    suppressCanvasClick = true;
+    setTimeout(() => { suppressCanvasClick = false; }, 0);
+  };
+  const onCancel = cancelEvent => {
+    if (cancelEvent.pointerId !== undefined && cancelEvent.pointerId !== event.pointerId) return;
+    cleanup();
+    restoreHighlights();
+  };
+  const onKeyDown = keyEvent => { if (keyEvent.key === 'Escape') onCancel(keyEvent); };
+  event.preventDefault();
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onCancel);
+  document.addEventListener('keydown', onKeyDown, true);
+  window.addEventListener('blur', onCancel);
+}
+
 function applyFrameToSelection(mode) {
   const items = selectedItems();
   if (items.length < 2 || !validFrameMode(mode)) return;
@@ -1934,7 +2009,11 @@ $('#uploadZone').addEventListener('dragover', event => { event.preventDefault();
 $('#uploadZone').addEventListener('dragleave', () => $('#uploadZone').classList.remove('is-over'));
 $('#uploadZone').addEventListener('drop', event => { event.preventDefault(); $('#uploadZone').classList.remove('is-over'); handleFiles(event.dataTransfer.files); });
 
-$('#canvasPage').addEventListener('click', event => { if (event.target === $('#canvasPage')) { clearItemSelection(); activeInspector = 'page'; render(); } });
+$('#canvasPage').addEventListener('pointerdown', startMarqueeSelection);
+$('#canvasPage').addEventListener('click', event => {
+  if (suppressCanvasClick) { suppressCanvasClick = false; return; }
+  if (!event.target.closest('.design-item')) { clearItemSelection(); activeInspector = 'page'; render(); }
+});
 $('#canvasPage').addEventListener('dragover', event => { event.preventDefault(); $('#canvasPage').classList.add('is-drop-target'); hoverSlotIndex = slotAtPoint(event.clientX, event.clientY); updateSlotGuides(); });
 $('#canvasPage').addEventListener('dragleave', event => { if (!$('#canvasPage').contains(event.relatedTarget)) $('#canvasPage').classList.remove('is-drop-target'); });
 $('#canvasPage').addEventListener('drop', event => { event.preventDefault(); $('#canvasPage').classList.remove('is-drop-target'); const targetSlot = slotAtPoint(event.clientX, event.clientY) ?? currentPage().items.length; const assetId = draggedAssetId; draggedAssetId = null; slotMode = false; hoverSlotIndex = null; if (assetId) addAssetToPage(assetId, targetSlot); else if (event.dataTransfer.files.length) handleFiles(event.dataTransfer.files, targetSlot); });
