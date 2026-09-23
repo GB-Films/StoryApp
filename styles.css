@@ -282,7 +282,7 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .format-btn:disabled { opacity:.65; cursor:not-allowed; }
 .project-title-overlay { position:absolute; z-index:7; top:2%; right:2.5%; max-width:42%; color:#fff; mix-blend-mode:difference; font:500 clamp(8px,1.15vw,14px)/1.2 'DM Mono',monospace; letter-spacing:.7px; text-align:right; text-transform:uppercase; outline:0; cursor:text; }
 .project-title-overlay:empty::before { content:'Título del proyecto'; opacity:.45; }
-.storyboard-meta-frame { position:absolute; z-index:7; inset:3.5%; border-left:1px solid rgba(0,0,0,.68); border-right:1px solid rgba(0,0,0,.68); color:var(--frame-text-color,#111); pointer-events:none; font:500 clamp(7px,.72vw,11px)/1.1 'DM Mono',monospace; letter-spacing:.5px; text-transform:uppercase; }
+.storyboard-meta-frame { position:absolute; z-index:7; inset:3.5%; border-left:1px solid var(--frame-rule-color,rgba(0,0,0,.68)); border-right:1px solid var(--frame-rule-color,rgba(0,0,0,.68)); color:var(--frame-text-color,#111); pointer-events:none; font:500 clamp(7px,.72vw,11px)/1.1 'DM Mono',monospace; letter-spacing:.5px; text-transform:uppercase; }
 .storyboard-meta-frame.is-frame-hidden { border-color:transparent; }
 .storyboard-meta-top,.storyboard-meta-bottom { position:absolute; left:0; right:0; display:flex; align-items:center; gap:8px; min-height:24px; padding:4px 0; background:transparent; }
 .storyboard-meta-top { top:-13px; }
@@ -321,7 +321,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .metadata-fields { display:grid; gap:6px; margin-bottom:12px; }
 .metadata-fields label { color:#777; font:500 9px 'DM Mono',monospace; letter-spacing:.6px; }
 .metadata-fields .text-field { margin-top:-2px; }
-.storyboard-meta-settings .switch-row + .switch-row { margin-top:9px; }
+.storyboard-meta-settings > .switch-row { margin:9px 0 0; }
+.storyboard-meta-settings > label:first-child + .switch-row { margin-top:0; }
 .format-modal-backdrop { background:rgba(0,0,0,.72); }
 .format-modal { width:min(620px,100%); }
 .format-options { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:24px; }

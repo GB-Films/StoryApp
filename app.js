@@ -503,12 +503,11 @@ function descriptionLineCount(item) {
   return Math.min(5, Math.max(1, description.split('\n').reduce((lines, line) => lines + Math.max(1, Math.ceil(line.length / 48)), 0)));
 }
 function photoInfoHeight(item) { return Math.min(32, PHOTO_INFO_OVERLAY_HEIGHT + (descriptionLineCount(item) - 1) * 4); }
-// The shot title and its description are two separate pieces of information.
-// Keep enough room for both in every layout; the previous .18 ratio made the
-// caption collapse to a single visible line on small cards.
+// Reserve a compact label below the photo without shrinking the photo frame.
+// Longer descriptions grow the label gradually and never consume image height.
 function captionRatioForItem(item) {
   if (!project.showDescriptions) return .16;
-  return Math.min(.42, .28 + (descriptionLineCount(item) - 1) * .045);
+  return Math.min(.36, .16 + (descriptionLineCount(item) - 1) * .045);
 }
 const layoutCache = new WeakMap();
 function pageLayout(page = currentPage()) {
@@ -523,6 +522,12 @@ function pageLayout(page = currentPage()) {
   const cached = layoutCache.get(page);
   if (cached?.key === key) return cached.rects;
   const rects = StoryboardLayout.arrange(aspects, options);
+  if (captions) rects.forEach((rect, index) => {
+    const item = page.items[index];
+    const captionRatio = captionRatioForItem(item);
+    const photoBox = item.fit === 'contain' ? rect.image : { x: rect.card.x, y: rect.card.y, width: rect.card.width, height: rect.caption.y - rect.card.y };
+    rect.caption = { x: photoBox.x, y: photoBox.y + photoBox.height, width: photoBox.width, height: photoBox.height * captionRatio };
+  });
   layoutCache.set(page, { key, rects });
   return rects;
 }
@@ -803,13 +808,12 @@ function itemMarkup(item, page = currentPage()) {
   const imageBox = itemImageBox(item, layout);
   const imageStyle = boxStyleWithinCard(imageBox, layout.card);
   const captionStyle = layout.caption ? boxStyleWithinCard(layout.caption, layout.card) : '';
-  const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
   const description = item.description?.trim() || '';
   const overlayInfo = project.infoPlacement === 'overlay';
   const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
   const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-  const boxAlpha = project.showDescriptions && !description ? .48 : .72;
-  const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description || !project.showDescriptions ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, boxAlpha)};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small class="description-editor" contenteditable="true" spellcheck="false">${escapeHtml(description)}</small>` : ''}</div>`;
+  const boxAlpha = .72;
+  const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description || !project.showDescriptions ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, boxAlpha)};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small class="description-editor" contenteditable="true" spellcheck="false">${escapeHtml(description)}</small>` : ''}</div>`;
   return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''} ${itemIsSelected(item) ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
     <div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>
     ${overlayInfo ? '' : infoMarkup}
@@ -829,7 +833,8 @@ function storyboardMetaMarkup(pageNumber = currentPageIndex + 1, totalPages = pr
   const pageMarkup = project.showPageNumber ? `<strong class="storyboard-meta-page">${String(pageNumber).padStart(2, '0')}</strong>` : '';
   const topContent = producerMarkup || titleMarkup ? `<div class="storyboard-meta-top"><span class="storyboard-meta-rule"></span>${producerMarkup}${producerMarkup && titleMarkup ? '<span class="storyboard-meta-rule"></span>' : ''}${titleMarkup}<span class="storyboard-meta-rule"></span></div>` : '';
   const bottomContent = detailsMarkup || pageMarkup ? `<div class="storyboard-meta-bottom"><span class="storyboard-meta-rule"></span>${detailsMarkup ? `<div class="storyboard-meta-details">${detailsMarkup}</div>` : ''}${detailsMarkup && pageMarkup ? '<span class="storyboard-meta-rule"></span>' : ''}${pageMarkup}<span class="storyboard-meta-rule"></span></div>` : '';
-  return `<div class="storyboard-meta-frame ${project.showProjectFrame ? '' : 'is-frame-hidden'}" style="--frame-text-color:${project.frameTextColor || '#111111'}" aria-hidden="true">${topContent}${bottomContent}</div>`;
+  const frameTextColor = project.frameTextColor || '#111111';
+  return `<div class="storyboard-meta-frame ${project.showProjectFrame ? '' : 'is-frame-hidden'}" style="--frame-text-color:${frameTextColor};--frame-rule-color:${colorWithAlpha(frameTextColor, .68)}" aria-hidden="true">${topContent}${bottomContent}</div>`;
 }
 
 function renderLibrary() {
@@ -872,7 +877,7 @@ function renderPage() {
     editor.addEventListener('pointerdown', event => event.stopPropagation());
     editor.addEventListener('click', event => event.stopPropagation());
     editor.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); editor.blur(); } });
-    editor.addEventListener('input', event => { const item = findItem(editor.closest('.design-item')?.dataset.itemId); if (!item) return; item.description = event.currentTarget.textContent.trim(); $('#photoDescription').value = item.description; const box = editor.closest('.description-box'); box.classList.toggle('is-empty', !item.description); box.style.setProperty('--description-box-color', colorWithAlpha(project.descriptionBoxColor, item.description ? .72 : .48)); if (project.infoPlacement === 'overlay') box.style.height = `${photoInfoHeight(item)}%`; saveProject(); });
+    editor.addEventListener('input', event => { const item = findItem(editor.closest('.design-item')?.dataset.itemId); if (!item) return; item.description = event.currentTarget.textContent.trim(); $('#photoDescription').value = item.description; const box = editor.closest('.description-box'); box.classList.toggle('is-empty', !item.description); box.style.setProperty('--description-box-color', colorWithAlpha(project.descriptionBoxColor, .72)); if (project.infoPlacement === 'overlay') box.style.height = `${photoInfoHeight(item)}%`; saveProject(); });
     editor.addEventListener('blur', () => { if (project.infoPlacement !== 'overlay') renderPage(); });
   });
   $('#pageNumber').textContent = currentPageIndex + 1;
@@ -901,7 +906,7 @@ function pageThumbnailMarkup(page) {
     const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
     const overlayInfo = project.infoPlacement === 'overlay';
     const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-    const caption = `<div class="page-thumb-caption has-description-color ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : `${captionStyle}width:100%;`}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, .72)};">${escapeHtml(label)}</div>`;
+    const caption = `<div class="page-thumb-caption has-description-color ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, .72)};">${escapeHtml(label)}</div>`;
     const objectFit = item.fit === 'cover' ? 'cover' : 'contain';
     return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block"><div class="page-thumb-photo" style="${imageStyle}"><img src="${asset.image}" alt="" style="object-fit:${objectFit};object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${overlayInfo ? '' : caption}</div>`;
   }).join('');
@@ -1456,7 +1461,7 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.clip();
   const lightInfo = project.infoStyle === 'light';
   const descriptionTextColor = project.descriptionTextColor || (lightInfo ? '#000000' : '#ffffff');
-  ctx.fillStyle = colorWithAlpha(project.descriptionBoxColor, project.showDescriptions && !description ? .48 : .72);
+  ctx.fillStyle = colorWithAlpha(project.descriptionBoxColor, .72);
   ctx.fillRect(captionX, captionY, captionWidth, captionHeight);
   ctx.strokeStyle = 'rgba(0,0,0,.35)';
   ctx.lineWidth = 1;
@@ -1605,8 +1610,8 @@ async function drawProjectMetaFrame(ctx, width, height, pageNumber, totalPages) 
   const frameRight = width - insetX;
   const frameBottom = height - insetY;
   const drawRule = (y, segments) => { if (!project.showProjectFrame) return; ctx.beginPath(); segments.forEach(([start, end]) => { if (end <= start) return; ctx.moveTo(start, y); ctx.lineTo(end, y); }); ctx.stroke(); };
-  if (project.showProjectFrame) { ctx.strokeStyle = 'rgba(0,0,0,.68)'; ctx.lineWidth = frameLineWidth; ctx.beginPath(); ctx.moveTo(insetX, insetY); ctx.lineTo(insetX, frameBottom); ctx.moveTo(frameRight, insetY); ctx.lineTo(frameRight, frameBottom); ctx.stroke(); }
   const frameTextColor = project.frameTextColor || '#111111';
+  if (project.showProjectFrame) { ctx.strokeStyle = colorWithAlpha(frameTextColor, .68); ctx.lineWidth = frameLineWidth; ctx.beginPath(); ctx.moveTo(insetX, insetY); ctx.lineTo(insetX, frameBottom); ctx.moveTo(frameRight, insetY); ctx.lineTo(frameRight, frameBottom); ctx.stroke(); }
   const fontSize = Math.max(7, Math.min(11, width * .0072));
   ctx.font = `500 ${fontSize}px "DM Mono", monospace`;
   ctx.textBaseline = 'middle';
@@ -1804,17 +1809,18 @@ function printAllPages() {
       const layout = itemLayout(item, page);
       const label = itemDisplayTitle(item, asset);
       const number = String((item.slot ?? 0) + 1).padStart(2, '0');
-      const imageHeight = layout.image.height / layout.card.height * 100;
-      const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
+      const imageBox = itemImageBox(item, layout);
+      const imageStyle = boxStyleWithinCard(imageBox, layout.card);
+      const captionStyle = layout.caption ? boxStyleWithinCard(layout.caption, layout.card) : '';
       const overlayInfo = project.infoPlacement === 'overlay';
       const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
       const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-      const boxAlpha = project.showDescriptions && !item.description ? .48 : .72;
-      const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description || !project.showDescriptions ? '' : 'is-empty'}" style="height:${overlayInfo ? photoInfoHeight(item) : captionHeight}%;--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, boxAlpha)};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small>${escapeHtml(item.description || '')}</small>` : ''}</div>`;
+      const boxAlpha = .72;
+      const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description || !project.showDescriptions ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, boxAlpha)};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small>${escapeHtml(item.description || '')}</small>` : ''}</div>`;
       const node = document.createElement('div');
       node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''}`;
       node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`;
-      node.innerHTML = `<div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="height:${imageHeight}%"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>${overlayInfo ? '' : infoMarkup}`;
+      node.innerHTML = `<div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="${imageStyle}"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>${overlayInfo ? '' : infoMarkup}`;
       sheet.appendChild(node);
     });
     sheet.insertAdjacentHTML('beforeend', storyboardMetaMarkup(pageIndex + 1, project.pages.length));

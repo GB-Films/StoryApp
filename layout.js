@@ -35,13 +35,13 @@
     }
     columns = bestGrid.columns;
     const rows = Math.ceil(count / columns);
-    const cellWidth = Math.min((width - gap * (columns - 1)) / columns, (height - gap * (rows - 1)) * slotAspect / rows);
+    const captionRatio = options.captions ? (options.captionRatios?.length ? Math.max(...options.captionRatios) : options.captionRatio ?? .15) : 0;
+    const cellWidth = Math.min((width - gap * (columns - 1)) / columns, (height - gap * (rows - 1)) * slotAspect / (rows * (1 + captionRatio)));
     const cellHeight = cellWidth / slotAspect;
     const gridWidth = cellWidth * columns + gap * (columns - 1);
-    const gridHeight = cellHeight * rows + gap * (rows - 1);
+    const gridHeight = cellHeight * (1 + captionRatio) * rows + gap * (rows - 1);
     const startX = insetX + (width - gridWidth) / 2;
     const startY = insetY + (height - gridHeight) / 2;
-    const captionRatio = options.captions ? (options.captionRatios?.length ? Math.max(...options.captionRatios) : options.captionRatio ?? .15) : 0;
     const percent = rect => ({ x: rect.x / pageWidth * 100, y: rect.y, width: rect.width / pageWidth * 100, height: rect.height });
     return ratios.map((ratio, index) => {
       const row = Math.floor(index / columns);
@@ -50,16 +50,16 @@
       const rowWidth = cellWidth * itemsInRow + gap * (itemsInRow - 1);
       const rowStartX = insetX + (width - rowWidth) / 2;
       const cardX = rowStartX + column * (cellWidth + gap);
-      const cardY = startY + row * (cellHeight + gap);
+      const cardY = startY + row * (cellHeight * (1 + captionRatio) + gap);
       const itemCaptionRatio = options.captions ? (options.captionRatios?.[index] ?? options.captionRatio ?? captionRatio) : 0;
       const captionHeight = cellHeight * itemCaptionRatio;
-      const imageBoxHeight = cellHeight - captionHeight;
+      const imageBoxHeight = cellHeight;
       const imageWidth = Math.min(cellWidth, imageBoxHeight * ratio);
       const imageHeight = imageWidth / ratio;
       const imageX = cardX + (cellWidth - imageWidth) / 2;
       const imageY = cardY + (imageBoxHeight - imageHeight) / 2;
       return {
-        card: percent({ x: cardX, y: cardY, width: cellWidth, height: cellHeight }),
+        card: percent({ x: cardX, y: cardY, width: cellWidth, height: cellHeight + captionHeight }),
         image: percent({ x: imageX, y: imageY, width: imageWidth, height: imageHeight }),
         caption: captionRatio ? percent({ x: cardX, y: cardY + imageBoxHeight, width: cellWidth, height: captionHeight }) : null
       };
