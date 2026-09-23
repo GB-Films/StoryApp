@@ -44,22 +44,26 @@ function colorWithAlpha(value, alpha) {
   return `rgba(${parseInt(hex.slice(0, 2), 16)},${parseInt(hex.slice(2, 4), 16)},${parseInt(hex.slice(4, 6), 16)},${alpha})`;
 }
 
-function backgroundPatternCss(pattern) {
+function backgroundPatternCss(pattern, color = '#c7c7c7') {
+  const gridLine = colorWithAlpha(color, .42);
+  const fineLine = colorWithAlpha(color, .24);
+  const dotColor = colorWithAlpha(color, .62);
+  const diagonalLine = colorWithAlpha(color, .32);
   const patterns = {
     grid: {
-      image: 'linear-gradient(rgba(0,0,0,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.09) 1px, transparent 1px)',
+      image: `linear-gradient(${gridLine} 1px, transparent 1px), linear-gradient(90deg, ${gridLine} 1px, transparent 1px)`,
       size: '24px 24px'
     },
     dots: {
-      image: 'radial-gradient(rgba(0,0,0,.18) 1px, transparent 1.5px)',
+      image: `radial-gradient(${dotColor} 1px, transparent 1.5px)`,
       size: '18px 18px'
     },
     diagonal: {
-      image: 'repeating-linear-gradient(135deg, rgba(0,0,0,.06) 0 1px, transparent 1px 13px)',
+      image: `repeating-linear-gradient(135deg, ${diagonalLine} 0 1px, transparent 1px 13px)`,
       size: 'auto'
     },
     blueprint: {
-      image: 'linear-gradient(rgba(0,0,0,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.12) 1px, transparent 1px), linear-gradient(rgba(0,0,0,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.06) 1px, transparent 1px)',
+      image: `linear-gradient(${gridLine} 1px, transparent 1px), linear-gradient(90deg, ${gridLine} 1px, transparent 1px), linear-gradient(${fineLine} 1px, transparent 1px), linear-gradient(90deg, ${fineLine} 1px, transparent 1px)`,
       size: '72px 72px, 72px 72px, 18px 18px, 18px 18px'
     }
   };
@@ -69,32 +73,38 @@ function backgroundPatternCss(pattern) {
 function applyArtboardBackground(element) {
   if (!element) return;
   const image = project?.backgroundImage || '';
-  const pattern = image ? { image: `url("${image.replaceAll('"', '%22')}")`, size: 'cover' } : backgroundPatternCss(project?.backgroundPattern);
+  const pattern = backgroundPatternCss(project?.backgroundPattern, project?.backgroundPatternColor);
   element.style.backgroundColor = project?.background || '#ffffff';
   element.style.backgroundImage = pattern.image;
   element.style.backgroundSize = pattern.size;
   element.style.backgroundPosition = 'center';
-  element.style.backgroundRepeat = image ? 'no-repeat' : 'repeat';
+  element.style.backgroundRepeat = 'repeat';
+  element.style.setProperty('--background-photo', image ? `url("${image.replaceAll('"', '%22')}")` : 'none');
+  element.style.setProperty('--background-image-opacity', String(Math.max(0, Math.min(100, Number(project?.backgroundImageOpacity ?? 100))) / 100));
+  const blur = Math.max(0, Math.min(24, Number(project?.backgroundImageBlur ?? 0)));
+  element.style.setProperty('--background-image-blur', `${blur}px`);
+  const shortSide = Math.max(1, Math.min(element.clientWidth || Number.parseFloat(element.style.width) || 800, element.clientHeight || Number.parseFloat(element.style.height) || 450));
+  element.style.setProperty('--background-image-scale', String(1 + blur * 2 / shortSide));
 }
 
-function drawBackgroundPattern(ctx, width, height, pattern) {
+function drawBackgroundPattern(ctx, width, height, pattern, color = '#c7c7c7') {
   ctx.save();
-  ctx.strokeStyle = 'rgba(0,0,0,.09)';
-  ctx.fillStyle = 'rgba(0,0,0,.17)';
+  ctx.strokeStyle = colorWithAlpha(color, .42);
+  ctx.fillStyle = colorWithAlpha(color, .62);
   ctx.lineWidth = Math.max(1, width / 1600);
   if (pattern === 'grid' || pattern === 'blueprint') {
     const step = pattern === 'blueprint' ? 72 : 24;
     for (let x = 0; x <= width; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
     for (let y = 0; y <= height; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
     if (pattern === 'blueprint') {
-      ctx.strokeStyle = 'rgba(0,0,0,.055)';
+      ctx.strokeStyle = colorWithAlpha(color, .24);
       for (let x = 0; x <= width; x += 18) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); }
       for (let y = 0; y <= height; y += 18) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke(); }
     }
   } else if (pattern === 'dots') {
-    ctx.fillStyle = 'rgba(0,0,0,.18)';
     for (let x = 9; x <= width; x += 18) for (let y = 9; y <= height; y += 18) { ctx.beginPath(); ctx.arc(x, y, 1, 0, Math.PI * 2); ctx.fill(); }
   } else if (pattern === 'diagonal') {
+    ctx.strokeStyle = colorWithAlpha(color, .32);
     const step = 13;
     for (let offset = -height; offset < width + height; offset += step) { ctx.beginPath(); ctx.moveTo(offset, 0); ctx.lineTo(offset + height, height); ctx.stroke(); }
   }
@@ -110,11 +120,18 @@ async function drawArtboardBackground(ctx, width, height) {
       const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
       const drawWidth = image.naturalWidth * scale;
       const drawHeight = image.naturalHeight * scale;
-      ctx.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+      ctx.save();
+      const liveWidth = $('#canvasPage')?.clientWidth || width;
+      const blur = Math.max(0, Math.min(24, Number(project.backgroundImageBlur ?? 0))) * width / liveWidth;
+      ctx.globalAlpha = Math.max(0, Math.min(100, Number(project.backgroundImageOpacity ?? 100))) / 100;
+      ctx.filter = `blur(${blur}px)`;
+      ctx.translate(width / 2, height / 2);
+      ctx.scale(1 + blur * 2 / Math.min(width, height), 1 + blur * 2 / Math.min(width, height));
+      ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+      ctx.restore();
     }
-    return;
   }
-  drawBackgroundPattern(ctx, width, height, project?.backgroundPattern);
+  drawBackgroundPattern(ctx, width, height, project?.backgroundPattern, project?.backgroundPatternColor);
 }
 
 let currentPageIndex = 0;
@@ -173,7 +190,7 @@ let projects = [];
 let currentProjectId = null;
 
 function blankPage(title = 'Página 1') { return { id: createId('page'), title, items: [] }; }
-function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: DEFAULT_PRODUCER_NAME, producerBrandingConfigured: false, client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: true, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: DEFAULT_PRODUCER_LOGO, producerLogoName: 'Logo GRAN BERTA FILMS', clientLogo: '', clientLogoName: '', background: '#ffffff', backgroundImage: '', backgroundImageName: '', backgroundPattern: 'none', frameTextColor: '#111111', descriptionTextColor: '', descriptionBoxColor: '#000000', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
+function defaultProject() { return { version: 2, layoutEngine: 'grid', layoutEngineVersion: 1, title: 'Storyboard X', producer: DEFAULT_PRODUCER_NAME, producerBrandingConfigured: false, client: '', agency: '', director: '', date: new Date().toISOString().slice(0, 10), ratio: 'landscape', formatLocked: false, showProjectTitle: true, showProducerBranding: true, showClientMeta: false, showAgencyMeta: false, showDirectorMeta: false, showProjectFrame: true, showPageNumber: true, producerLogo: DEFAULT_PRODUCER_LOGO, producerLogoName: 'Logo GRAN BERTA FILMS', clientLogo: '', clientLogoName: '', background: '#ffffff', backgroundImage: '', backgroundImageName: '', backgroundPattern: 'none', backgroundPatternColor: '#c7c7c7', backgroundImageOpacity: 100, backgroundImageBlur: 0, frameTextColor: '#111111', descriptionTextColor: '', descriptionBoxColor: '#000000', padding: MIN_CANVAS_PADDING, gap: 16, defaultFit: 'contain', defaultFrame: 'original', defaultCropAspect: null, showDescriptions: true, infoPlacement: 'below', infoStyle: 'dark', assets: [], pages: [blankPage()] }; }
 
 const FRAME_ASPECTS = Object.freeze({ horizontal: 16 / 9, vertical: 9 / 16, square: 1 });
 const FRAME_MODES = new Set(['original', 'horizontal', 'vertical', 'square']);
@@ -262,6 +279,9 @@ function normalizeProject(data) {
   normalized.backgroundImage = typeof data.backgroundImage === 'string' ? data.backgroundImage : '';
   normalized.backgroundImageName = typeof data.backgroundImageName === 'string' ? data.backgroundImageName : '';
   normalized.backgroundPattern = BACKGROUND_PATTERNS.has(data.backgroundPattern) ? data.backgroundPattern : 'none';
+  normalized.backgroundPatternColor = validHexColor(data.backgroundPatternColor, '#c7c7c7');
+  normalized.backgroundImageOpacity = Math.max(0, Math.min(100, Number.isFinite(Number(data.backgroundImageOpacity)) ? Number(data.backgroundImageOpacity) : 100));
+  normalized.backgroundImageBlur = Math.max(0, Math.min(24, Number.isFinite(Number(data.backgroundImageBlur)) ? Number(data.backgroundImageBlur) : 0));
   normalized.frameTextColor = validHexColor(data.frameTextColor, '#111111');
   normalized.descriptionTextColor = validHexColor(data.descriptionTextColor, '');
   normalized.descriptionBoxColor = validHexColor(data.descriptionBoxColor, '#000000');
@@ -1031,13 +1051,26 @@ function renderControls() {
   $('#backgroundColor').value = project.background;
   $('#backgroundValue').textContent = project.background.toUpperCase();
   $('#backgroundPattern').value = project.backgroundPattern || 'none';
+  $('#backgroundPatternColor').value = project.backgroundPatternColor || '#c7c7c7';
+  $('#backgroundPatternColorValue').textContent = (project.backgroundPatternColor || '#c7c7c7').toUpperCase();
+  $('#backgroundPatternColorControls').hidden = !project.backgroundPattern || project.backgroundPattern === 'none';
+  $('#backgroundImageControls').hidden = !project.backgroundImage;
+  $('#backgroundImageOpacity').value = project.backgroundImageOpacity ?? 100;
+  $('#backgroundImageOpacityValue').textContent = `${project.backgroundImageOpacity ?? 100}%`;
+  $('#backgroundImageBlur').value = project.backgroundImageBlur ?? 0;
+  $('#backgroundImageBlurValue').textContent = `${project.backgroundImageBlur ?? 0} px`;
   $('#removeBackgroundImageBtn').disabled = !project.backgroundImage;
   $('#backgroundPreview').hidden = !project.backgroundImage;
   if (project.backgroundImage) {
-    $('#backgroundPreview').style.backgroundImage = `url("${project.backgroundImage.replaceAll('"', '%22')}")`;
+    $('#backgroundPreview').style.setProperty('--background-preview-photo', `url("${project.backgroundImage.replaceAll('"', '%22')}")`);
+    $('#backgroundPreview').style.setProperty('--background-preview-opacity', String((project.backgroundImageOpacity ?? 100) / 100));
+    $('#backgroundPreview').style.setProperty('--background-preview-blur', `${Math.min(8, (project.backgroundImageBlur ?? 0) / 3)}px`);
+    const previewSide = Math.max(1, Math.min($('#backgroundPreview').clientWidth || 180, $('#backgroundPreview').clientHeight || 64));
+    $('#backgroundPreview').style.setProperty('--background-preview-scale', String(1 + Math.min(8, (project.backgroundImageBlur ?? 0) / 3) * 2 / previewSide));
+    $('#backgroundPreview').style.backgroundColor = project.background || '#ffffff';
     $('#backgroundPreview').title = project.backgroundImageName || 'Foto de fondo cargada';
   } else {
-    $('#backgroundPreview').style.backgroundImage = 'none';
+    $('#backgroundPreview').style.setProperty('--background-preview-photo', 'none');
     $('#backgroundPreview').title = '';
   }
   $('#pageGap').value = project.gap;
@@ -1737,7 +1770,9 @@ function inlineComputedStyles(source, clone) {
   ['::before', '::after'].forEach(pseudo => {
     const pseudoStyle = getComputedStyle(source, pseudo);
     let content = pseudoStyle.content;
-    if (!content || content === 'none' || content === 'normal' || content === '""' || content === "''") return;
+    const hasBackgroundImage = pseudoStyle.backgroundImage && pseudoStyle.backgroundImage !== 'none';
+    if ((!content || content === 'none' || content === 'normal' || content === '""' || content === "''") && !hasBackgroundImage) return;
+    if (!content || content === 'none' || content === 'normal' || content === '""' || content === "''") content = '';
     if (content.startsWith('attr(') && source.dataset.placeholder) content = source.dataset.placeholder;
     if ((content.startsWith('"') && content.endsWith('"')) || (content.startsWith("'") && content.endsWith("'"))) content = content.slice(1, -1);
     const generated = document.createElement('span');
@@ -2029,6 +2064,9 @@ $('#prevPageBtn').addEventListener('click', () => { if (currentPageIndex > 0) { 
 
 ['projectTitle', 'projectProducer', 'projectClient', 'projectAgency', 'projectDirector'].forEach(id => $('#' + id).addEventListener('input', event => { const key = { projectTitle: 'title', projectProducer: 'producer', projectClient: 'client', projectAgency: 'agency', projectDirector: 'director' }[id]; project[key] = id === 'projectProducer' ? DEFAULT_PRODUCER_NAME : event.target.value; if (id === 'projectProducer') { project.author = DEFAULT_PRODUCER_NAME; project.producerBrandingConfigured = true; $('#projectProducerDisplay').textContent = DEFAULT_PRODUCER_NAME; $('#projectProducerLabel').hidden = false; } if (id === 'projectTitle') $('#projectTitleDisplay').textContent = project.title || 'Sin título'; $('#breadcrumbTitle').textContent = project.title || 'Sin título'; renderPage(); saveProject(); }));
 $('#backgroundColor').addEventListener('input', event => { project.background = event.target.value; render(); saveProject(); });
+$('#backgroundPatternColor').addEventListener('input', event => { project.backgroundPatternColor = validHexColor(event.target.value, '#c7c7c7'); render(); saveProject(); });
+$('#backgroundImageOpacity').addEventListener('input', event => { project.backgroundImageOpacity = Number(event.target.value); render(); saveProject(); });
+$('#backgroundImageBlur').addEventListener('input', event => { project.backgroundImageBlur = Number(event.target.value); render(); saveProject(); });
 $('#backgroundImageBtn').addEventListener('click', () => $('#backgroundImageInput').click());
 $('#backgroundImageInput').addEventListener('change', event => { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith('image/')) { showToast('Elegí un archivo de imagen'); event.target.value = ''; return; } const reader = new FileReader(); reader.onload = () => { project.backgroundImage = reader.result; project.backgroundImageName = file.name; project.backgroundPattern = 'none'; render(); saveProject(); showToast('Foto de fondo cargada'); }; reader.readAsDataURL(file); event.target.value = ''; });
 $('#removeBackgroundImageBtn').addEventListener('click', () => { if (!project.backgroundImage) return; project.backgroundImage = ''; project.backgroundImageName = ''; render(); saveProject(); });
