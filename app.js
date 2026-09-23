@@ -5,7 +5,7 @@ const CURRENT_PROJECT_KEY = 'storyboard-studio-current-project-v1';
 const PROJECT_SORT_KEY = 'storyboard-studio-project-sort-v1';
 const INDEXED_DB_NAME = 'gb-studio-workspace-v1';
 const MIN_CANVAS_PADDING = 6;
-const PHOTO_INFO_OVERLAY_HEIGHT = 12;
+const PHOTO_INFO_OVERLAY_HEIGHT = 18;
 
 const SHOT_TYPES = [
   { value: 'PG', label: 'Plano general' },
@@ -226,7 +226,7 @@ function legacyCropAspect(page, data) {
   const w = (100 - pad * 2 - gap * (cols - 1)) / cols;
   const h = (100 - pad * 2 - gap * (rows - 1)) / rows;
   const safe = Math.min(1.6, w * .12, h * .12);
-  const imageHeight = h - safe * 2 - (data.infoPlacement !== 'overlay' ? Math.min((h - safe * 2) * .18, 11) : 0);
+  const imageHeight = h - safe * 2 - (data.infoPlacement === 'below' ? Math.min((h - safe * 2) * .18, 11) : 0);
   return (data.ratio === 'portrait' ? 9 / 16 : data.ratio === 'square' ? 1 : 16 / 9) * (w - safe * 2) / imageHeight;
 }
 
@@ -268,8 +268,8 @@ function normalizeProject(data) {
   normalized.frameTextColor = validHexColor(data.frameTextColor, '#111111');
   normalized.descriptionTextColor = validHexColor(data.descriptionTextColor, '');
   normalized.descriptionBoxColor = validHexColor(data.descriptionBoxColor, '#000000');
-  normalized.showDescriptions = typeof data.showDescriptions === 'boolean' ? data.showDescriptions : true;
-  normalized.infoPlacement = data.infoPlacement === 'overlay' ? 'overlay' : 'below';
+  normalized.showDescriptions = true;
+  normalized.infoPlacement = ['below', 'overlay', 'none'].includes(data.infoPlacement) ? data.infoPlacement : 'below';
   normalized.infoStyle = data.infoStyle === 'light' ? 'light' : 'dark';
   normalized.padding = Math.max(MIN_CANVAS_PADDING, Number(normalized.padding) || MIN_CANVAS_PADDING);
   if (migrateOldCropDefault) normalized.defaultFit = 'contain';
@@ -502,11 +502,10 @@ function descriptionLineCount(item) {
   const description = item.description?.trim() || '';
   return Math.min(5, Math.max(1, description.split('\n').reduce((lines, line) => lines + Math.max(1, Math.ceil(line.length / 48)), 0)));
 }
-function photoInfoHeight(item) { return Math.min(32, PHOTO_INFO_OVERLAY_HEIGHT + (descriptionLineCount(item) - 1) * 4); }
+function photoInfoHeight(item) { return Math.min(40, PHOTO_INFO_OVERLAY_HEIGHT + (descriptionLineCount(item) - 1) * 4); }
 // Reserve a compact label below the photo without shrinking the photo frame.
 // Longer descriptions grow the label gradually and never consume image height.
 function captionRatioForItem(item) {
-  if (!project.showDescriptions) return .16;
   return Math.min(.36, .16 + (descriptionLineCount(item) - 1) * .045);
 }
 const layoutCache = new WeakMap();
@@ -516,7 +515,7 @@ function pageLayout(page = currentPage()) {
   const aspects = page.items.map(item => item.fit === 'contain' ? assetAspect(findAsset(item.assetId)) : (item.cropAspect || getPageAspect()));
   // Titles are always part of a shot card. The description toggle only
   // controls the second line, never whether the shot title is rendered.
-  const captions = project.infoPlacement !== 'overlay';
+  const captions = project.infoPlacement === 'below';
   const options = { engine: project.layoutEngine, aspect: getPageAspect(), padding: project.padding, gap: project.gap, captions, captionRatios: captions ? page.items.map(captionRatioForItem) : undefined };
   const key = JSON.stringify([aspects, options]);
   const cached = layoutCache.get(page);
@@ -810,13 +809,14 @@ function itemMarkup(item, page = currentPage()) {
   const captionStyle = layout.caption ? boxStyleWithinCard(layout.caption, layout.card) : '';
   const description = item.description?.trim() || '';
   const overlayInfo = project.infoPlacement === 'overlay';
+  const belowInfo = project.infoPlacement === 'below';
+  const showInfo = project.infoPlacement !== 'none';
   const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
   const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-  const boxAlpha = .72;
-  const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description || !project.showDescriptions ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, boxAlpha)};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small class="description-editor" contenteditable="true" spellcheck="false">${escapeHtml(description)}</small>` : ''}</div>`;
+  const infoMarkup = showInfo ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, .72)};"><strong>${escapeHtml(label)}</strong><small class="description-editor" contenteditable="true" spellcheck="false">${escapeHtml(description)}</small></div>` : '';
   return `<div class="design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''} ${itemIsSelected(item) ? 'is-selected' : ''}" data-item-id="${item.id}" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block" draggable="false">
     <div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="${imageStyle}"><img src="${asset.image}" alt="${escapeHtml(label)}" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>
-    ${overlayInfo ? '' : infoMarkup}
+    ${belowInfo ? infoMarkup : ''}
   </div>`;
 }
 
@@ -903,12 +903,13 @@ function pageThumbnailMarkup(page) {
     const imageBox = itemImageBox(item, layout);
     const imageStyle = boxStyleWithinCard(imageBox, layout.card);
     const captionStyle = layout.caption ? boxStyleWithinCard(layout.caption, layout.card) : '';
-    const captionHeight = layout.caption ? layout.caption.height / layout.card.height * 100 : 0;
     const overlayInfo = project.infoPlacement === 'overlay';
+    const belowInfo = project.infoPlacement === 'below';
+    const showInfo = project.infoPlacement !== 'none';
     const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-    const caption = `<div class="page-thumb-caption has-description-color ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, .72)};">${escapeHtml(label)}</div>`;
+    const caption = showInfo ? `<div class="page-thumb-caption has-description-color ${overlayInfo ? 'page-thumb-caption-overlay ' : ''}page-thumb-caption-style-${project.infoStyle || 'dark'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, .72)};">${escapeHtml(label)}</div>` : '';
     const objectFit = item.fit === 'cover' ? 'cover' : 'contain';
-    return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block"><div class="page-thumb-photo" style="${imageStyle}"><img src="${asset.image}" alt="" style="object-fit:${objectFit};object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${overlayInfo ? '' : caption}</div>`;
+    return `<div class="page-thumb-item" style="left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%;display:block"><div class="page-thumb-photo" style="${imageStyle}"><img src="${asset.image}" alt="" style="object-fit:${objectFit};object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span>${number}</span>${overlayInfo ? caption : ''}</div>${belowInfo ? caption : ''}</div>`;
   }).join('');
 }
 
@@ -1052,7 +1053,6 @@ function renderControls() {
   $('#layoutEngine').value = project.layoutEngine || 'grid';
   $('#layoutModeLabel').textContent = project.layoutEngine === 'adaptive' ? '✦ Distribución adaptable' : '✦ Grilla equitativa';
   $('#autoLayoutStatus').title = project.layoutEngine === 'adaptive' ? 'Las fotos se distribuyen según sus proporciones' : 'La grilla equitativa elige la mejor cantidad de filas y columnas para aprovechar el canvas';
-  $('#showDescriptions').checked = project.showDescriptions;
   $('#infoPlacement').value = project.infoPlacement || 'below';
   $('#descriptionBoxColor').value = project.descriptionBoxColor || '#000000';
   $('#descriptionBoxColorValue').textContent = (project.descriptionBoxColor || '#000000').toUpperCase();
@@ -1445,6 +1445,7 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.fillText(number, badgeX + badgeWidth / 2, badgeY + 14);
   ctx.restore();
   ctx.textAlign = 'left';
+  if (project.infoPlacement === 'none') return;
   const title = itemDisplayTitle(item, asset);
   const description = item.description || '';
   // The title is always rendered. The description toggle only hides the
@@ -1479,7 +1480,7 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.font = `600 ${titleSize}px "Space Grotesk", sans-serif`;
   const titleY = captionY + Math.max(verticalPadding, (captionHeight - titleSize * 1.2 - descriptionSize * 1.3 - textGap - verticalPadding * 2) / 2 + verticalPadding);
   ctx.fillText(title, captionX + inset, titleY, Math.max(0, captionWidth - inset * 2));
-  if (project.showDescriptions && description && captionHeight > titleSize + 8) {
+  if (description && captionHeight > titleSize + 8) {
     ctx.font = `400 ${descriptionSize}px "DM Sans", sans-serif`;
     ctx.fillStyle = description ? descriptionTextColor : (lightInfo ? '#555' : '#d0d0d0');
     const text = description;
@@ -1813,14 +1814,15 @@ function printAllPages() {
       const imageStyle = boxStyleWithinCard(imageBox, layout.card);
       const captionStyle = layout.caption ? boxStyleWithinCard(layout.caption, layout.card) : '';
       const overlayInfo = project.infoPlacement === 'overlay';
+      const belowInfo = project.infoPlacement === 'below';
+      const showInfo = project.infoPlacement !== 'none';
       const infoStyleClass = `description-style-${project.infoStyle || 'dark'}`;
       const descriptionTextColor = project.descriptionTextColor || (project.infoStyle === 'light' ? '#000000' : '#ffffff');
-      const boxAlpha = .72;
-      const infoMarkup = `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description || !project.showDescriptions ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, boxAlpha)};"><strong>${escapeHtml(label)}</strong>${project.showDescriptions ? `<small>${escapeHtml(item.description || '')}</small>` : ''}</div>`;
+      const infoMarkup = showInfo ? `<div class="description-box has-description-color ${overlayInfo ? 'description-overlay ' : ''}${infoStyleClass} ${item.description ? '' : 'is-empty'}" style="${overlayInfo ? `height:${photoInfoHeight(item)}%;` : captionStyle}--description-text-color:${descriptionTextColor};--description-box-color:${colorWithAlpha(project.descriptionBoxColor, .72)};"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(item.description || '')}</small></div>` : '';
       const node = document.createElement('div');
       node.className = `design-item ${item.fit === 'contain' ? 'fit-contain' : 'fit-cover'}${item.cameraMoveSpill ? ' has-camera-spill' : ''}`;
       node.style.cssText = `left:${layout.card.x}%;top:${layout.card.y}%;width:${layout.card.width}%;height:${layout.card.height}%`;
-      node.innerHTML = `<div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="${imageStyle}"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>${overlayInfo ? '' : infoMarkup}`;
+      node.innerHTML = `<div class="design-photo${item.cameraMoveSpill ? ' camera-spill' : ''}" style="${imageStyle}"><img src="${asset.image}" alt="" style="object-position:${item.focusX ?? 50}% ${item.focusY ?? 50}%" /><span class="item-number">${number}</span>${drawingMarkup(item)}${cameraMoveMarkup(item)}${overlayInfo ? infoMarkup : ''}</div>${belowInfo ? infoMarkup : ''}`;
       sheet.appendChild(node);
     });
     sheet.insertAdjacentHTML('beforeend', storyboardMetaMarkup(pageIndex + 1, project.pages.length));
@@ -1957,7 +1959,7 @@ $('#backgroundImageInput').addEventListener('change', event => { const file = ev
 $('#removeBackgroundImageBtn').addEventListener('click', () => { if (!project.backgroundImage) return; project.backgroundImage = ''; project.backgroundImageName = ''; render(); saveProject(); });
 $('#backgroundPattern').addEventListener('change', event => { const pattern = BACKGROUND_PATTERNS.has(event.target.value) ? event.target.value : 'none'; project.backgroundPattern = pattern; if (pattern !== 'none') { project.backgroundImage = ''; project.backgroundImageName = ''; } render(); saveProject(); });
 $('#layoutEngine').addEventListener('change', event => { project.layoutEngine = event.target.value === 'adaptive' ? 'adaptive' : 'grid'; project.layoutEngineVersion = 1; render(); saveProject(); });
-$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#showDescriptions').addEventListener('change', event => { project.showDescriptions = event.target.checked; render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = event.target.value === 'overlay' ? 'overlay' : 'below'; render(); saveProject(); }); $('#frameTextColor').addEventListener('input', event => { project.frameTextColor = validHexColor(event.target.value, '#111111'); $('#frameTextColorValue').textContent = project.frameTextColor.toUpperCase(); render(); saveProject(); }); $('#descriptionBoxColor').addEventListener('input', event => { project.descriptionBoxColor = validHexColor(event.target.value, '#000000'); $('#descriptionBoxColorValue').textContent = project.descriptionBoxColor.toUpperCase(); render(); saveProject(); }); $('#descriptionTextColor').addEventListener('input', event => { project.descriptionTextColor = validHexColor(event.target.value, '#ffffff'); $('#descriptionTextColorValue').textContent = project.descriptionTextColor.toUpperCase(); render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
+$('#pageGap').addEventListener('input', event => { project.gap = Number(event.target.value); render(); saveProject(); }); $('#pagePadding').addEventListener('input', event => { project.padding = Number(event.target.value); render(); saveProject(); }); $('#infoPlacement').addEventListener('change', event => { project.infoPlacement = ['below', 'overlay', 'none'].includes(event.target.value) ? event.target.value : 'below'; render(); saveProject(); }); $('#frameTextColor').addEventListener('input', event => { project.frameTextColor = validHexColor(event.target.value, '#111111'); $('#frameTextColorValue').textContent = project.frameTextColor.toUpperCase(); render(); saveProject(); }); $('#descriptionBoxColor').addEventListener('input', event => { project.descriptionBoxColor = validHexColor(event.target.value, '#000000'); $('#descriptionBoxColorValue').textContent = project.descriptionBoxColor.toUpperCase(); render(); saveProject(); }); $('#descriptionTextColor').addEventListener('input', event => { project.descriptionTextColor = validHexColor(event.target.value, '#ffffff'); $('#descriptionTextColorValue').textContent = project.descriptionTextColor.toUpperCase(); render(); saveProject(); }); $('#showProjectTitle').addEventListener('change', event => { project.showProjectTitle = event.target.checked; render(); saveProject(); });
 $('#showProducerBranding').addEventListener('change', event => { project.showProducerBranding = event.target.checked; project.producerBrandingConfigured = true; render(); saveProject(); });
 $('#showProjectFrame').addEventListener('change', event => { project.showProjectFrame = event.target.checked; render(); saveProject(); });
 $('#showClientMeta').addEventListener('change', event => { project.showClientMeta = event.target.checked; render(); saveProject(); });
