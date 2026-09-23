@@ -173,6 +173,8 @@ button:focus-visible,input:focus-visible,select:focus-visible { outline-color:#0
 .description-box.description-overlay.description-style-light small,.description-box.description-overlay.description-style-light .description-editor:empty::before { color:#555; }
 .description-box.has-description-color.description-style-dark small,.description-box.has-description-color.description-style-light small { color:var(--description-text-color); }
 .description-box.has-description-color.description-style-dark .description-editor:empty::before,.description-box.has-description-color.description-style-light .description-editor:empty::before { color:var(--description-text-color); }
+.description-box.has-description-color.is-empty { color:var(--description-text-color); }
+.description-box.has-description-color.is-empty small,.description-box.has-description-color.is-empty .description-editor:empty::before { color:var(--description-text-color); }
 .canvas-workspace { flex-direction:column; align-items:stretch; justify-content:space-between; padding:32px 35px 14px; }
 .canvas-stage { flex:1 1 auto; width:100%; min-height:260px; }
 .page-carousel { flex:0 0 auto; display:grid; grid-template-columns:58px minmax(0,1fr); align-items:start; gap:10px; width:100%; padding-top:11px; border-top:1px solid rgba(0,0,0,.12); }

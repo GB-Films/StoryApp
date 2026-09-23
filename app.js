@@ -1441,12 +1441,15 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
   ctx.strokeRect(captionX + .5, captionY + .5, Math.max(0, captionWidth - 1), Math.max(0, captionHeight - 1));
   ctx.setLineDash([]);
   ctx.fillStyle = descriptionTextColor;
-  const inset = Math.max(8, Math.round(width * .005));
-  const titleSize = Math.max(14, Math.round(width * .009));
-  const descriptionSize = Math.max(12, Math.round(width * .0075));
+  const renderScale = width / Math.max(1, $('#canvasPage')?.clientWidth || width);
+  const inset = Math.max(8, Math.round(10 * renderScale));
+  const titleSize = Math.max(14, Math.round(14 * renderScale));
+  const descriptionSize = Math.max(12, Math.round(12 * renderScale));
+  const verticalPadding = 5 * renderScale;
+  const textGap = 3 * renderScale;
   ctx.textBaseline = 'top';
   ctx.font = `600 ${titleSize}px "Space Grotesk", sans-serif`;
-  const titleY = captionY + Math.max(5, (captionHeight - titleSize - descriptionSize * 1.3) / 2);
+  const titleY = captionY + Math.max(verticalPadding, (captionHeight - titleSize * 1.2 - descriptionSize * 1.3 - textGap - verticalPadding * 2) / 2 + verticalPadding);
   ctx.fillText(title, captionX + inset, titleY, Math.max(0, captionWidth - inset * 2));
   if (captionHeight > titleSize + 8) {
     ctx.font = `400 ${descriptionSize}px "DM Sans", sans-serif`;
@@ -1462,8 +1465,8 @@ function drawItemMetadata(ctx, item, asset, layout, width, height) {
       else line = candidate;
     });
     if (line) lines.push(line);
-    const maxLines = Math.max(1, Math.floor((captionHeight - (titleY - captionY) - titleSize - 5) / (descriptionSize * 1.3)));
-    lines.slice(0, maxLines).forEach((lineText, index) => ctx.fillText(lineText, captionX + inset, titleY + titleSize + 4 + index * descriptionSize * 1.3, maxWidth));
+    const maxLines = Math.max(1, Math.floor((captionHeight - (titleY - captionY) - titleSize * 1.2 - verticalPadding) / (descriptionSize * 1.3)));
+    lines.slice(0, maxLines).forEach((lineText, index) => ctx.fillText(lineText, captionX + inset, titleY + titleSize * 1.2 + textGap + index * descriptionSize * 1.3, maxWidth));
   }
   ctx.restore();
 }
