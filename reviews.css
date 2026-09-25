@@ -41,7 +41,7 @@
 .reviews-home-empty p { max-width:380px; margin:0; color:#777; font-size:12px; line-height:1.5; }
 .reviews-home-empty button { margin-top:10px; padding:10px 16px; border:1px solid #111; background:#111; color:#fff; cursor:pointer; }
 .reviews-home-note { margin-top:32px; color:#888; font:10px 'DM Mono',monospace; }
-.reviews-library-back { margin-bottom:20px; padding:0; border:0; background:none; color:#aaa; font:10px 'DM Mono',monospace; cursor:pointer; }
+.reviews-library-back { display:block; margin-bottom:20px; padding:0; border:0; background:none; color:#aaa; font:10px 'DM Mono',monospace; cursor:pointer; }
 .reviews-library-back:hover { color:#fff; }
 .reviews-form-modal { width:min(570px,100%); max-height:90dvh; overflow:auto; }
 .reviews-form-modal [hidden] { display:none!important; }
@@ -74,8 +74,7 @@ body.public-review .reviews-view { grid-template-columns:minmax(0,1fr) minmax(28
 .reviews-upload>span { grid-row:span 2; font-size:27px; line-height:1; }
 .reviews-upload strong { font-size:11px; }
 .reviews-upload small { color:#aaa; font-size:9px; }
-.reviews-local-upload { display:flex; justify-content:space-between; margin:0 16px 19px; padding:7px 2px; border:0; background:transparent; color:#aaa; font:10px 'DM Mono',monospace; text-align:left; }
-.reviews-local-upload:hover { color:#fff; }
+.reviews-dropbox-only { margin:4px 17px 16px; color:#878787; font:10px/1.45 'DM Mono',monospace; }
 .reviews-link-form { display:grid; gap:8px; margin:2px 16px 10px; padding:13px; border:1px solid #555; background:#252525; }
 .reviews-link-form label { color:#aaa; font:9px 'DM Mono',monospace; letter-spacing:.4px; }
 .reviews-link-form input,.reviews-link-form select { min-width:0; width:100%; padding:8px; border:1px solid #666; border-radius:0; background:#141414; color:#fff; font:11px 'Space Grotesk',sans-serif; }
@@ -84,12 +83,27 @@ body.public-review .reviews-view { grid-template-columns:minmax(0,1fr) minmax(28
 .reviews-link-actions { display:flex; gap:7px; }
 .reviews-link-actions button { flex:1; padding:8px; border:1px solid #666; background:#222; color:#fff; font:10px 'DM Mono',monospace; }
 .reviews-link-actions button[type=submit] { border-color:#fff; background:#fff; color:#111; }
-.reviews-list-heading { margin:0 20px 9px; padding-top:17px; border-top:1px solid #393939; color:#999; font:500 9px 'DM Mono',monospace; letter-spacing:1px; }
+.reviews-list-heading { display:flex; align-items:center; justify-content:space-between; gap:7px; margin:0 20px 9px; padding-top:17px; border-top:1px solid #393939; color:#999; font:500 9px 'DM Mono',monospace; letter-spacing:1px; }
+.reviews-list-heading button { padding:4px 0; border:0; background:none; color:#eee; font:9px 'DM Mono',monospace; white-space:nowrap; }
+.reviews-list-heading button:hover { text-decoration:underline; }
+.reviews-section-form { display:flex; gap:4px; margin:0 12px 10px; }
+.reviews-section-form input { min-width:0; flex:1; padding:8px; border:1px solid #666; background:#101010; color:#fff; font:11px 'Space Grotesk',sans-serif; }
+.reviews-section-form button { padding:7px; border:1px solid #666; background:#292929; color:#fff; font:10px 'DM Mono',monospace; }
 .reviews-list { min-height:0; flex:1 1 auto; overflow:auto; padding:0 10px; }
+.reviews-section { margin-bottom:12px; border:1px solid #343434; }
+.reviews-section-heading { display:flex; align-items:center; gap:7px; padding:9px 10px; border-bottom:1px solid #343434; background:#222; }
+.reviews-section-heading strong { min-width:0; flex:1; overflow:hidden; color:#ddd; font:600 10px 'Space Grotesk',sans-serif; text-overflow:ellipsis; white-space:nowrap; }
+.reviews-section-heading span { color:#888; font:9px 'DM Mono',monospace; }
+.reviews-section-heading button { padding:0 2px; border:0; background:none; color:#888; font:12px 'DM Mono',monospace; }
+.reviews-section-heading button:hover { color:#fff; }
+.reviews-section-files { min-height:43px; padding:5px; }
+.reviews-section-files.is-drop-target { outline:1px dashed #fff; outline-offset:-3px; background:#292929; }
+.reviews-section-empty { margin:7px; color:#666; font:10px 'DM Mono',monospace; }
 .reviews-list-empty { margin:12px 10px; color:#777; font-size:11px; }
-.reviews-file { display:flex; gap:10px; align-items:center; width:100%; margin-bottom:4px; padding:10px; border:1px solid transparent; background:transparent; color:#eee; text-align:left; }
+.reviews-file { display:flex; gap:10px; align-items:center; width:100%; margin-bottom:4px; padding:10px; border:1px solid transparent; background:transparent; color:#eee; text-align:left; cursor:grab!important; }
 .reviews-file:hover { background:#292929; }
 .reviews-file.is-active { border-color:#777; background:#303030; }
+.reviews-file.is-dragging { opacity:.45; }
 .reviews-file-icon { flex:0 0 35px; display:grid; place-items:center; height:35px; border:1px solid #666; color:#ddd; font-size:15px; }
 .reviews-file-copy { min-width:0; display:grid; gap:4px; }
 .reviews-file-copy strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; font-weight:600; }
@@ -107,7 +121,6 @@ body.public-review .reviews-view { grid-template-columns:minmax(0,1fr) minmax(28
 .reviews-remove-media { flex:none; border:0; background:none; color:#999; font:10px 'DM Mono',monospace; }
 .reviews-remove-media:hover { color:#fff; text-decoration:underline; }
 .reviews-stage { position:relative; min-height:0; flex:1 1 auto; display:grid; place-items:center; overflow:hidden; padding:24px; background:#101010; }
-.reviews-stage.is-drop-target { outline:2px dashed #fff; outline-offset:-12px; }
 .reviews-empty { display:grid; justify-items:center; max-width:330px; color:#aaa; text-align:center; }
 .reviews-empty>span { margin-bottom:16px; color:#666; font-size:60px; }
 .reviews-empty strong { color:#f5f5f5; font:600 19px 'Space Grotesk',sans-serif; }
@@ -140,6 +153,7 @@ body.public-review .reviews-view { grid-template-columns:minmax(0,1fr) minmax(28
 .reviews-playback-tools label { display:flex; align-items:center; gap:4px; }
 .reviews-playback-tools select,.reviews-playback-tools input { width:60px; padding:5px; border:1px solid #555; background:#111; color:#fff; font:10px 'DM Mono',monospace; }
 .reviews-playback-tools input { width:70px; }
+.reviews-playback-tools .reviews-frame-note { width:100%; color:#777; font:9px 'DM Mono',monospace; }
 .reviews-view-tools #reviewsZoomValue { min-width:34px; text-align:center; }
 .reviews-view-tools #reviewsScreenshotBtn { margin-left:auto; }
 .reviews-hud-restore { position:absolute; right:15px; bottom:15px; z-index:5; padding:8px 11px; border:1px solid #777; background:#171717; color:#fff; font:10px 'DM Mono',monospace; }

@@ -76,6 +76,9 @@
   if (sharedReview) document.body.classList.add('public-review');
   let formMode = null;
   let confirmResolve = null;
+  let sectionEditId = null;
+  let draggedRecordId = null;
+  let seekPointer = null;
   function closeForm() { $('#reviewsFormModal').hidden = true; formMode = null; }
   function askConfirmation(title, copy, label = 'Eliminar') {
     $('#reviewsConfirmTitle').textContent = title;
@@ -191,7 +194,11 @@
   function clearAnnotation() { state.draft = []; state.scratch = []; state.activeCommentId = null; redraw(); renderCommentList(); }
   function fps() { return Number(state.active?.fps) || 24; }
   function firstFrame() { return Number.isSafeInteger(state.active?.frameStart) ? state.active.frameStart : 1; }
-  function frameNumber() { return firstFrame() + Math.round(currentTime() * fps()); }
+  function frameIndex() { return Math.round(currentTime() * fps()); }
+  function lastFrameIndex() { return Number.isFinite(video.duration) ? Math.max(0, Math.ceil(video.duration * fps()) - 1) : 0; }
+  function frameNumber() { return firstFrame() + Math.min(frameIndex(), lastFrameIndex()); }
+  function frameMode() { return state.active?.timelineMode === 'frames'; }
+  function seekFrame(index) { if (!isVideo() || !Number.isFinite(video.duration)) return; video.pause(); video.currentTime = Math.min(video.duration, Math.max(0, Math.min(lastFrameIndex(), Math.round(index))) / fps()); updateClock(); }
   function isMp4() { return isVideo() && /\.mp4$/i.test(state.active?.name || ''); }
   async function saveActiveSettings() { if (!state.active || state.active.ephemeral) return; state.active.updatedAt = new Date().toISOString(); try { await saveRecord(state.active); } catch { showStatus('No se pudieron guardar los ajustes en este navegador.'); } }
   function resetView() { state.view = { scale: 1, x: 0, y: 0 }; applyView(); state.model?.fit(); }
@@ -248,21 +255,77 @@
     const rect = canvas.getBoundingClientRect();
     return [Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))];
   }
+  function sectionDefinitions() { return [...(currentVersion()?.sections || []), { id: 'default', title: 'Sin clasificar' }]; }
+  function recordSection(record) { return record.sectionId || 'default'; }
+  function orderedRecords(sectionId) { return versionRecords().filter(record => recordSection(record) === sectionId).sort((a, b) => (Number.isFinite(a.sortIndex) ? a.sortIndex : -Date.parse(a.createdAt || a.updatedAt)) - (Number.isFinite(b.sortIndex) ? b.sortIndex : -Date.parse(b.createdAt || b.updatedAt))); }
+  async function moveRecord(recordId, targetSectionId, beforeId = null) {
+    const record = versionRecords().find(entry => entry.id === recordId);
+    if (!record || !sectionDefinitions().some(section => section.id === targetSectionId)) return;
+    const sourceSectionId = recordSection(record);
+    const sourceIds = orderedRecords(sourceSectionId).map(entry => entry.id).filter(id => id !== recordId);
+    const targetIds = sourceSectionId === targetSectionId ? sourceIds : orderedRecords(targetSectionId).map(entry => entry.id);
+    const index = beforeId && targetIds.includes(beforeId) ? targetIds.indexOf(beforeId) : targetIds.length;
+    targetIds.splice(index, 0, recordId);
+    const updates = new Map();
+    const applyOrder = (ids, sectionId) => ids.forEach((id, sortIndex) => { const original = state.records.find(entry => entry.id === id); updates.set(id, { ...original, sectionId, sortIndex }); });
+    if (sourceSectionId !== targetSectionId) applyOrder(sourceIds, sourceSectionId);
+    applyOrder(targetIds, targetSectionId);
+    try {
+      const db = await openDatabase();
+      await new Promise((resolve, reject) => { const tx = db.transaction('items', 'readwrite'); for (const updated of updates.values()) tx.objectStore('items').put(updated); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); });
+      state.records = state.records.map(entry => updates.get(entry.id) || entry);
+      if (state.active) state.active = state.records.find(entry => entry.id === state.active.id) || state.active;
+      renderList();
+    } catch (error) { console.error(error); showStatus('No se pudo cambiar el orden en este navegador.'); }
+  }
+  function openSectionForm(section = null) { sectionEditId = section?.id || null; $('#reviewsSectionName').value = section?.title || ''; $('#reviewsSectionForm').hidden = false; $('#reviewsSectionName').focus(); }
+  function closeSectionForm() { sectionEditId = null; $('#reviewsSectionForm').hidden = true; }
+  async function deleteSection(id) {
+    const version = currentVersion(), section = version?.sections?.find(entry => entry.id === id); if (!section) return;
+    if (!await askConfirmation('¿Eliminar esta sección?', `Los archivos de “${section.title}” se moverán a Sin clasificar. No se borrarán los archivos ni sus comentarios.`, 'Eliminar sección')) return;
+    const project = currentProject();
+    const updatedProject = { ...project, versions: project.versions.map(entry => entry.id === version.id ? { ...entry, sections: entry.sections.filter(item => item.id !== id) } : entry) };
+    const moved = orderedRecords(id).map((record, index) => ({ ...record, sectionId: 'default', sortIndex: orderedRecords('default').length + index }));
+    try {
+      const db = await openDatabase();
+      await new Promise((resolve, reject) => { const tx = db.transaction(['projects', 'items'], 'readwrite'); tx.objectStore('projects').put(updatedProject); moved.forEach(record => tx.objectStore('items').put(record)); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); });
+      state.projects = state.projects.map(entry => entry.id === project.id ? updatedProject : entry);
+      const changes = new Map(moved.map(record => [record.id, record])); state.records = state.records.map(entry => changes.get(entry.id) || entry);
+      if (state.active) state.active = state.records.find(entry => entry.id === state.active.id) || state.active;
+      renderList();
+    } catch (error) { console.error(error); showStatus('No se pudo eliminar la sección.'); }
+  }
   function renderList() {
     const list = $('#reviewsList');
     list.replaceChildren();
     const records = document.body.classList.contains('public-review') ? state.active ? [state.active] : [] : versionRecords();
     $('#reviewsCount').textContent = records.length;
-    if (!records.length) {
-      const empty = document.createElement('p'); empty.className = 'reviews-list-empty'; empty.textContent = 'Todavía no cargaste archivos.'; list.append(empty); return;
-    }
-    for (const record of [...records].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
-      const button = document.createElement('button'); button.type = 'button'; button.className = `reviews-file${record.id === state.active?.id ? ' is-active' : ''}`;
-      const icon = document.createElement('span'); icon.className = 'reviews-file-icon'; icon.textContent = record.kind === 'video' ? '▶' : record.kind === 'model' ? '◇' : '▧';
-      const copy = document.createElement('span'); copy.className = 'reviews-file-copy';
-      const name = document.createElement('strong'); name.textContent = record.name;
-      const details = document.createElement('small'); details.textContent = `${record.source === 'dropbox' ? 'DROPBOX · ' : ''}${record.kind === 'video' ? 'VIDEO' : record.kind === 'model' ? 'FBX 3D' : 'FOTO'} · ${record.comments.length} comentario${record.comments.length === 1 ? '' : 's'}`;
-      copy.append(name, details); button.append(icon, copy); button.addEventListener('click', () => selectRecord(record.id)); list.append(button);
+    $('#reviewsAddSection').hidden = !currentVersion() || isGuestReview();
+    if (!records.length && !currentVersion()) { const empty = document.createElement('p'); empty.className = 'reviews-list-empty'; empty.textContent = 'Todavía no hay archivos.'; list.append(empty); return; }
+    const sections = currentVersion() ? sectionDefinitions() : [{ id: 'default', title: 'Archivos' }];
+    for (const section of sections) {
+      const group = document.createElement('section'); group.className = 'reviews-section'; group.dataset.sectionId = section.id;
+      const heading = document.createElement('div'); heading.className = 'reviews-section-heading';
+      const title = document.createElement('strong'); title.textContent = section.title;
+      const sectionRecords = currentVersion() ? orderedRecords(section.id) : records;
+      const count = document.createElement('span'); count.textContent = String(sectionRecords.length);
+      heading.append(title, count);
+      if (section.id !== 'default') {
+        const edit = cardAction('✎', `Renombrar sección ${section.title}`, () => openSectionForm(section));
+        const remove = cardAction('×', `Eliminar sección ${section.title}`, () => deleteSection(section.id));
+        heading.append(edit, remove);
+      }
+      const files = document.createElement('div'); files.className = 'reviews-section-files'; files.dataset.sectionId = section.id;
+      if (!sectionRecords.length) { const empty = document.createElement('p'); empty.className = 'reviews-section-empty'; empty.textContent = records.length ? 'Arrastrá acá un archivo de esta review' : 'Vinculá un archivo de Dropbox'; files.append(empty); }
+      for (const record of sectionRecords) {
+        const button = document.createElement('button'); button.type = 'button'; button.className = `reviews-file${record.id === state.active?.id ? ' is-active' : ''}`; button.dataset.recordId = record.id; button.draggable = Boolean(currentVersion());
+        const icon = document.createElement('span'); icon.className = 'reviews-file-icon'; icon.textContent = record.kind === 'video' ? '▶' : record.kind === 'model' ? '◇' : '▧';
+        const copy = document.createElement('span'); copy.className = 'reviews-file-copy';
+        const name = document.createElement('strong'); name.textContent = record.name;
+        const details = document.createElement('small'); details.textContent = `${record.source === 'dropbox' ? 'DROPBOX · ' : 'LOCAL ANTERIOR · '}${record.kind === 'video' ? 'VIDEO' : record.kind === 'model' ? 'FBX 3D' : 'FOTO'} · ${record.comments.length} comentario${record.comments.length === 1 ? '' : 's'}`;
+        copy.append(name, details); button.append(icon, copy); button.addEventListener('click', () => selectRecord(record.id)); files.append(button);
+      }
+      group.append(heading, files); list.append(group);
     }
   }
   function renderMarkers() {
@@ -298,10 +361,16 @@
     }
   }
   function updateClock() {
-    $('#reviewsCurrentTime').textContent = formatTime(currentTime());
-    $('#reviewsDuration').textContent = formatTime(video.duration);
+    const inFrames = frameMode(), seek = $('#reviewsSeek');
+    $('#reviewsCurrentTime').textContent = inFrames ? String(frameNumber()) : formatTime(currentTime());
+    $('#reviewsDuration').textContent = inFrames ? String(firstFrame() + lastFrameIndex()) : formatTime(video.duration);
     $('#reviewsCommentTime').textContent = isVideo() ? formatTime(currentTime()) : 'Foto';
-    $('#reviewsSeek').value = video.duration ? String(Math.round(currentTime() / video.duration * 1000)) : '0';
+    seek.max = String(inFrames ? Math.max(1, lastFrameIndex()) : 1000);
+    seek.step = '1';
+    seek.value = video.duration ? String(inFrames ? Math.min(frameIndex(), lastFrameIndex()) : Math.round(currentTime() / video.duration * 1000)) : '0';
+    seek.setAttribute('aria-label', inFrames ? `Fotograma ${frameNumber()}; usar flechas para avanzar de a uno` : 'Posición del video en el tiempo');
+    $('#reviewsFrameJumpLabel').hidden = !inFrames;
+    if (document.activeElement !== $('#reviewsFrameJump')) $('#reviewsFrameJump').value = String(frameNumber());
     $('#reviewsPlayBtn').textContent = video.paused ? '▶' : '❚❚';
     $('#reviewsPlayBtn').setAttribute('aria-label', video.paused ? 'Reproducir' : 'Pausar');
     $('#reviewsMuteBtn').textContent = video.muted ? '×' : '♪';
@@ -311,6 +380,7 @@
   function renderPlaybackSettings() {
     const record = state.active;
     $('#reviewsFps').value = String(record?.fps || 24);
+    $('#reviewsTimelineMode').value = frameMode() ? 'frames' : 'time';
     $('#reviewsFrameStart').value = String(firstFrame());
     $('#reviewsInValue').textContent = Number.isFinite(record?.inPoint) ? formatTime(record.inPoint) : '—';
     $('#reviewsOutValue').textContent = Number.isFinite(record?.outPoint) ? formatTime(record.outPoint) : '—';
@@ -326,7 +396,7 @@
     localStorage.setItem(ACTIVE_KEY, id);
     renderList(); renderCommentList();
     $('#reviewsMediaTitle').textContent = record.name;
-    $('#reviewsMediaDetails').textContent = record.source === 'dropbox' ? `${record.kind === 'video' ? 'Video' : 'Foto'} · Dropbox · sin copia local` : `${record.kind === 'model' ? 'Modelo FBX' : record.kind === 'video' ? 'Video' : 'Foto'} · ${readableSize(record.size)}`;
+    $('#reviewsMediaDetails').textContent = record.source === 'dropbox' ? `${record.kind === 'model' ? 'Modelo FBX' : record.kind === 'video' ? 'Video' : 'Foto'} · Dropbox · sin copia local` : `${record.kind === 'model' ? 'Modelo FBX' : record.kind === 'video' ? 'Video' : 'Foto'} · archivo local anterior · ${readableSize(record.size)}`;
     $('#reviewsMediaSurface').style.setProperty('--review-aspect', String(16 / 9));
     $('#reviewsMediaError').hidden = true;
     $('#reviewsOpenSource').hidden = record.source !== 'dropbox';
@@ -345,6 +415,15 @@
     try {
       if (record.source === 'dropbox') {
         const link = parseDropboxLink(record.sourceUrl);
+        if (record.kind === 'model') {
+          const response = await fetch(link.streamUrl);
+          if (!response.ok) throw new Error('Dropbox no permitió abrir este FBX. Revisá el enlace compartido.');
+          const { mountFbx } = await import('./reviews-3d.js?v=1');
+          if (state.active?.id !== id) return;
+          const viewer = await mountFbx($('#reviewsModel'), await response.blob());
+          if (state.active?.id !== id) { viewer.dispose(); return; }
+          state.model = viewer; return;
+        }
         if (record.kind === 'video') video.src = link.streamUrl; else image.src = link.streamUrl;
         updateClock(); renderMarkers(); requestAnimationFrame(resizeCanvas);
         return;
@@ -382,24 +461,6 @@
     try { await saveRecord(state.active); } catch { showStatus('No se pudo guardar el cambio. Revisá el espacio disponible.'); }
     renderCommentList(); renderList(); renderMarkers(); redraw();
   }
-  async function addFiles(files) {
-    if (isGuestReview() || !currentVersion()) return;
-    for (const file of files) {
-      const kind = /\.fbx$/i.test(file.name) ? 'model' : file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : null;
-      if (!kind) { showStatus(`Formato no compatible: ${file.name}`); continue; }
-      const now = new Date().toISOString();
-      const record = { id: crypto.randomUUID(), projectId: state.projectId, versionId: state.versionId, name: file.name, kind, size: file.size, createdAt: now, updatedAt: now, comments: [] };
-      try {
-        const db = await openDatabase();
-        await new Promise((resolve, reject) => {
-          const tx = db.transaction(['items', 'media'], 'readwrite');
-          tx.objectStore('items').put(record); tx.objectStore('media').put(file, record.id);
-          tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
-        });
-        state.records.unshift(record); await selectRecord(record.id);
-      } catch (error) { showStatus(`No se pudo guardar ${file.name}. Puede faltar espacio en este navegador.`); console.error(error); }
-    }
-  }
   async function addDropboxLink(event) {
     event.preventDefault();
     if (isGuestReview() || !currentVersion()) return;
@@ -410,7 +471,7 @@
     const existing = state.records.find(record => record.versionId === state.versionId && record.source === 'dropbox' && record.sourceUrl === link.sourceUrl);
     if (existing) { await selectRecord(existing.id); message.textContent = 'Este archivo ya estaba vinculado; lo abrimos en el visor.'; return; }
     const now = new Date().toISOString();
-    const record = { id: crypto.randomUUID(), projectId: state.projectId, versionId: state.versionId, name: link.name, kind: $('#reviewsLinkKind').value, source: 'dropbox', sourceUrl: link.sourceUrl, size: 0, createdAt: now, updatedAt: now, comments: [] };
+    const record = { id: crypto.randomUUID(), projectId: state.projectId, versionId: state.versionId, sectionId: 'default', sortIndex: -Date.now(), name: link.name, kind: $('#reviewsLinkKind').value, source: 'dropbox', sourceUrl: link.sourceUrl, size: 0, createdAt: now, updatedAt: now, comments: [] };
     try {
       await saveRecord(record);
       state.records.unshift(record); await selectRecord(record.id);
@@ -420,7 +481,7 @@
   }
   function clearViewer() {
     stopMedia(); state.active = null; localStorage.removeItem(ACTIVE_KEY);
-    $('#reviewsMediaTitle').textContent = 'Elegí un archivo'; $('#reviewsMediaDetails').textContent = 'Vinculá Dropbox o cargá un archivo para empezar.';
+    $('#reviewsMediaTitle').textContent = 'Elegí un archivo'; $('#reviewsMediaDetails').textContent = 'Vinculá un archivo de Dropbox para empezar.';
     $('#reviewsEmpty').hidden = false; $('#reviewsMediaSurface').hidden = true; $('#reviewsTimeline').hidden = true;
     $('#reviewsAnnotationBar').hidden = true; $('#reviewsCommentForm').hidden = true; $('#reviewsRemoveMedia').hidden = true; $('#reviewsOpenSource').hidden = true; $('#reviewsShareBtn').hidden = true; $('#reviewsMediaError').hidden = true; $('#reviewsViewTools').hidden = true; $('#reviewsPlaybackTools').hidden = true;
     showStatus('Elegí un archivo para ver sus comentarios.'); renderList(); renderCommentList();
@@ -486,7 +547,7 @@
     else { state.active.outPoint = point; if (Number.isFinite(state.active.inPoint) && state.active.inPoint >= point) state.active.inPoint = null; }
     renderPlaybackSettings(); saveActiveSettings();
   }
-  function stepFrame(direction) { if (!isVideo() || !Number.isFinite(video.duration)) return; video.pause(); video.currentTime = Math.max(0, Math.min(video.duration, currentTime() + direction / fps())); updateClock(); }
+  function stepFrame(direction) { seekFrame(frameIndex() + direction); }
   function jumpNote(direction) {
     if (!isVideo()) return;
     const times = [...new Set(state.active.comments.map(comment => comment.time))].sort((a, b) => a - b);
@@ -513,7 +574,7 @@
       const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${state.active.name.replace(/\.[^.]+$/, '')}-${isVideo() ? `fotograma-${frameNumber()}` : 'captura'}.png`; anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
       showStatus('Captura PNG descargada.');
-    } catch (error) { showStatus('No se pudo capturar este archivo externo: Dropbox no habilita la lectura de sus píxeles desde esta página. Probá con un archivo local.'); console.error(error); }
+    } catch (error) { showStatus('No se pudo capturar este archivo externo: Dropbox no habilita la lectura de sus píxeles desde esta página. Podés descargar el original desde Dropbox para capturarlo fuera de GB Studio.'); console.error(error); }
   }
   function downloadMp4() {
     if (!isMp4()) return;
@@ -554,7 +615,7 @@
       } else {
         const project = currentProject(); if (!project) return;
         const old = project.versions.find(entry => entry.id === formMode.id);
-        const version = { id: old?.id || crypto.randomUUID(), title, category: $('#reviewsEntityCategory').value, createdAt: old?.createdAt || now, updatedAt: now };
+        const version = { ...old, id: old?.id || crypto.randomUUID(), title, category: $('#reviewsEntityCategory').value, createdAt: old?.createdAt || now, updatedAt: now };
         const updated = { ...project, updatedAt: now, versions: old ? project.versions.map(entry => entry.id === old.id ? version : entry) : [...project.versions, version] };
         await saveProject(updated);
         state.projects = state.projects.map(entry => entry.id === updated.id ? updated : entry);
@@ -571,14 +632,28 @@
   document.addEventListener('keydown', event => { if (event.key !== 'Escape') return; if (!$('#reviewsConfirmModal').hidden) closeConfirmation(false); else if (!$('#reviewsFormModal').hidden) closeForm(); else $('#reviewsCopyModal').hidden = true; });
   $('#storyboardsNav').addEventListener('click', () => video.pause());
   document.querySelector('.brand').addEventListener('click', () => video.pause());
-  $('#reviewsUploadBtn').addEventListener('click', () => $('#reviewsFileInput').click());
   function setLinkFormOpen(open) { $('#reviewsLinkForm').hidden = !open; $('#reviewsLinkBtn').setAttribute('aria-expanded', String(open)); $('#reviewsView .reviews-library').classList.toggle('is-linking', open); if (open) $('#reviewsLinkUrl').focus(); }
   $('#reviewsLinkBtn').addEventListener('click', () => setLinkFormOpen($('#reviewsLinkForm').hidden));
   $('#reviewsEmptyUpload').addEventListener('click', () => setLinkFormOpen(true));
   $('#reviewsLinkCancel').addEventListener('click', () => setLinkFormOpen(false));
   $('#reviewsLinkForm').addEventListener('submit', addDropboxLink);
-  $('#reviewsLinkUrl').addEventListener('input', () => { const message = $('#reviewsLinkMessage'); message.classList.remove('is-error'); message.textContent = 'En Dropbox: Compartir → Copiar enlace del archivo. Para verlo acá, debe permitir acceso a cualquiera con el enlace.'; const value = $('#reviewsLinkUrl').value.toLowerCase().split('?')[0]; if (/\.(?:jpg|jpeg|png|webp|gif|avif|heic|bmp)$/.test(value)) $('#reviewsLinkKind').value = 'image'; else if (/\.(?:mp4|mov|m4v|webm|mkv)$/.test(value)) $('#reviewsLinkKind').value = 'video'; });
-  $('#reviewsFileInput').addEventListener('change', event => { addFiles([...event.target.files]); event.target.value = ''; });
+  $('#reviewsLinkUrl').addEventListener('input', () => { const message = $('#reviewsLinkMessage'); message.classList.remove('is-error'); message.textContent = 'En Dropbox: Compartir → Copiar enlace del archivo. Para verlo acá, debe permitir acceso a cualquiera con el enlace.'; const value = $('#reviewsLinkUrl').value.toLowerCase().split('?')[0]; if (/\.fbx$/.test(value)) $('#reviewsLinkKind').value = 'model'; else if (/\.(?:jpg|jpeg|png|webp|gif|avif|heic|bmp)$/.test(value)) $('#reviewsLinkKind').value = 'image'; else if (/\.(?:mp4|mov|m4v|webm|mkv)$/.test(value)) $('#reviewsLinkKind').value = 'video'; });
+  $('#reviewsAddSection').addEventListener('click', () => openSectionForm());
+  $('#reviewsSectionCancel').addEventListener('click', closeSectionForm);
+  $('#reviewsSectionForm').addEventListener('submit', async event => {
+    event.preventDefault(); const version = currentVersion(), project = currentProject(), title = $('#reviewsSectionName').value.trim();
+    if (!version || !project || !title) return;
+    const sections = [...(version.sections || [])];
+    if (sectionEditId) { const item = sections.find(section => section.id === sectionEditId); if (!item) return; item.title = title; }
+    else sections.push({ id: crypto.randomUUID(), title });
+    const updated = { ...project, updatedAt: new Date().toISOString(), versions: project.versions.map(entry => entry.id === version.id ? { ...entry, sections } : entry) };
+    try { await saveProject(updated); state.projects = state.projects.map(entry => entry.id === project.id ? updated : entry); closeSectionForm(); renderList(); }
+    catch (error) { console.error(error); showStatus('No se pudo guardar la sección.'); }
+  });
+  $('#reviewsList').addEventListener('dragstart', event => { const file = event.target.closest('.reviews-file[data-record-id]'); if (!file || !currentVersion()) return; draggedRecordId = file.dataset.recordId; event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', draggedRecordId); file.classList.add('is-dragging'); });
+  $('#reviewsList').addEventListener('dragend', () => { draggedRecordId = null; $('#reviewsList').querySelectorAll('.is-dragging,.is-drop-target').forEach(element => element.classList.remove('is-dragging', 'is-drop-target')); });
+  $('#reviewsList').addEventListener('dragover', event => { if (!draggedRecordId) return; const section = event.target.closest('[data-section-id]'); if (!section) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; $('#reviewsList').querySelectorAll('.is-drop-target').forEach(element => element.classList.remove('is-drop-target')); section.classList.add('is-drop-target'); });
+  $('#reviewsList').addEventListener('drop', event => { if (!draggedRecordId) return; const target = event.target.closest('[data-section-id]'); if (!target) return; event.preventDefault(); const sectionId = target.dataset.sectionId; const beforeId = event.target.closest('[data-record-id]')?.dataset.recordId || null; const recordId = draggedRecordId; draggedRecordId = null; moveRecord(recordId, sectionId, beforeId); });
   $('#reviewsRemoveMedia').addEventListener('click', removeActive);
   $('#reviewsGuestLogin').addEventListener('click', () => $('#authGateButton').click());
   window.addEventListener('studio-auth-change', () => {
@@ -597,6 +672,10 @@
   $('#reviewsInBtn').addEventListener('click', () => setRangePoint('in'));
   $('#reviewsOutBtn').addEventListener('click', () => setRangePoint('out'));
   $('#reviewsClearRange').addEventListener('click', () => { if (!isVideo()) return; state.active.inPoint = null; state.active.outPoint = null; renderPlaybackSettings(); saveActiveSettings(); });
+  $('#reviewsTimelineMode').addEventListener('change', event => { if (!isVideo()) return; state.active.timelineMode = event.target.value === 'frames' ? 'frames' : 'time'; renderPlaybackSettings(); saveActiveSettings(); });
+  $('#reviewsPrevFrame').addEventListener('click', () => stepFrame(-1));
+  $('#reviewsNextFrame').addEventListener('click', () => stepFrame(1));
+  $('#reviewsFrameJump').addEventListener('change', event => { if (!isVideo()) return; seekFrame(Number(event.target.value) - firstFrame()); });
   $('#reviewsFps').addEventListener('change', event => { if (!isVideo()) return; state.active.fps = Number(event.target.value); renderPlaybackSettings(); saveActiveSettings(); });
   $('#reviewsFrameStart').addEventListener('change', event => { if (!isVideo()) return; state.active.frameStart = Math.max(0, Math.min(9999999, Math.round(Number(event.target.value) || 0))); renderPlaybackSettings(); saveActiveSettings(); });
   $('#reviewsFitBtn').addEventListener('click', resetView);
@@ -606,9 +685,8 @@
   $('#reviewsHudBtn').addEventListener('click', toggleHud);
   $('#reviewsHudRestore').addEventListener('click', toggleHud);
   document.addEventListener('fullscreenchange', () => { $('#reviewsFullscreenBtn').textContent = document.fullscreenElement ? 'F · Salir de pantalla completa' : 'F · Pantalla completa'; requestAnimationFrame(fitSurface); });
-  $('#reviewsStage').addEventListener('dragover', event => { if (!isGuestReview() && currentVersion() && event.dataTransfer?.types.includes('Files')) { event.preventDefault(); $('#reviewsStage').classList.add('is-drop-target'); } });
-  $('#reviewsStage').addEventListener('dragleave', () => $('#reviewsStage').classList.remove('is-drop-target'));
-  $('#reviewsStage').addEventListener('drop', event => { event.preventDefault(); $('#reviewsStage').classList.remove('is-drop-target'); addFiles([...event.dataTransfer.files]); });
+  document.addEventListener('dragover', event => { if (!$('#reviewsView').hidden && event.dataTransfer?.types.includes('Files')) event.preventDefault(); });
+  document.addEventListener('drop', event => { if (!$('#reviewsView').hidden && event.dataTransfer?.files?.length) { event.preventDefault(); showStatus('En Reviews solo podés vincular archivos ya compartidos desde Dropbox.'); } });
   $('#reviewsStage').addEventListener('wheel', event => { if (!state.active || state.active.kind === 'model') return; event.preventDefault(); zoomAt(Math.exp(-event.deltaY * .002), event.clientX, event.clientY); }, { passive: false });
   $('#reviewsStage').addEventListener('pointerdown', event => { if (!state.zHeld || !state.active || event.button !== 0) return; event.preventDefault(); state.zoomPointer = { id: event.pointerId, y: event.clientY, scale: state.view.scale, moved: false }; $('#reviewsStage').setPointerCapture(event.pointerId); });
   $('#reviewsStage').addEventListener('pointermove', event => { const drag = state.zoomPointer; if (!drag || drag.id !== event.pointerId) return; if (Math.abs(event.clientY - drag.y) > 3) drag.moved = true; if (drag.moved) zoomAt(Math.exp((drag.y - event.clientY) * .012) * drag.scale / state.view.scale, event.clientX, event.clientY); });
@@ -637,7 +715,11 @@
   $('#reviewsPlayBtn').addEventListener('click', togglePlayback);
   $('#reviewsMuteBtn').addEventListener('click', () => { video.muted = !video.muted; updateClock(); });
   video.addEventListener('click', () => { if (state.drawing || state.zHeld) return; togglePlayback(); });
-  $('#reviewsSeek').addEventListener('input', event => { if (!Number.isFinite(video.duration)) return; video.currentTime = video.duration * Number(event.target.value) / 1000; state.activeCommentId = null; redraw(); updateClock(); renderCommentList(); });
+  $('#reviewsSeek').addEventListener('input', event => { if (!Number.isFinite(video.duration)) return; if (frameMode()) seekFrame(Number(event.target.value)); else video.currentTime = video.duration * Number(event.target.value) / 1000; state.activeCommentId = null; redraw(); updateClock(); renderCommentList(); });
+  $('#reviewsSeek').addEventListener('pointerdown', event => { if (!frameMode() || event.button !== 0 || !isVideo()) return; event.preventDefault(); seekPointer = { id: event.pointerId, x: event.clientX, frame: frameIndex() }; $('#reviewsSeek').setPointerCapture(event.pointerId); });
+  $('#reviewsSeek').addEventListener('pointermove', event => { if (!seekPointer || seekPointer.id !== event.pointerId) return; seekFrame(seekPointer.frame + Math.round((event.clientX - seekPointer.x) / 8)); state.activeCommentId = null; redraw(); renderCommentList(); });
+  const endSeek = event => { if (!seekPointer || seekPointer.id !== event.pointerId) return; seekPointer = null; if ($('#reviewsSeek').hasPointerCapture(event.pointerId)) $('#reviewsSeek').releasePointerCapture(event.pointerId); };
+  $('#reviewsSeek').addEventListener('pointerup', endSeek); $('#reviewsSeek').addEventListener('pointercancel', endSeek);
   video.addEventListener('loadedmetadata', () => { $('#reviewsMediaSurface').style.setProperty('--review-aspect', String((video.videoWidth || 16) / (video.videoHeight || 9))); renderPlaybackSettings(); renderMarkers(); fitSurface(); });
   image.addEventListener('load', () => { $('#reviewsMediaSurface').style.setProperty('--review-aspect', String((image.naturalWidth || 16) / (image.naturalHeight || 9))); fitSurface(); });
   video.addEventListener('timeupdate', () => { if (!video.paused && Number.isFinite(state.active?.outPoint) && currentTime() >= state.active.outPoint) { video.pause(); video.currentTime = state.active.outPoint; } updateClock(); });

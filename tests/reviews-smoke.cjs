@@ -3,6 +3,14 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const fulfillVideo = (route, base64) => {
+  const body = Buffer.from(base64, 'base64');
+  const range = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range || '');
+  if (!range) return route.fulfill({ status: 200, contentType: 'video/webm', headers: { 'accept-ranges': 'bytes' }, body });
+  const start = Math.min(Number(range[1]), body.length - 1);
+  const end = range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
+  return route.fulfill({ status: 206, contentType: 'video/webm', headers: { 'accept-ranges': 'bytes', 'content-range': `bytes ${start}-${end}/${body.length}` }, body: body.subarray(start, end + 1) });
+};
 
 const root = path.join(__dirname, '..');
 const server = http.createServer((request, response) => {
@@ -37,7 +45,14 @@ const server = http.createServer((request, response) => {
     await page.locator('#reviewsHomeGrid .reviews-home-card-open').first().click();
     assert.equal(await page.locator('#reviewsView').isVisible(), true);
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="640"><rect width="360" height="640" fill="#40566b"/></svg>';
-    await page.locator('#reviewsFileInput').setInputFiles({ name: 'plano.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg) });
+    assert.equal(await page.locator('#reviewsFileInput').count(), 0, 'there is no local upload control');
+    await page.evaluate(() => { const files = new DataTransfer(); files.items.add(new File(['local'], 'local.mp4', { type: 'video/mp4' })); document.querySelector('#reviewsStage').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: files })); });
+    assert.equal(await page.locator('#reviewsCount').textContent(), '0', 'dropping a local file does not add it');
+    assert.match(await page.locator('#reviewsCommentContext').textContent(), /solo podés vincular archivos/);
+    await page.route('https://www.dropbox.com/scl/fi/**', route => route.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg }));
+    await page.locator('#reviewsLinkBtn').click();
+    await page.locator('#reviewsLinkUrl').fill('https://www.dropbox.com/scl/fi/original/plano-inicial.jpg?rlkey=original');
+    await page.locator('#reviewsLinkForm button[type=submit]').click();
     await page.locator('#reviewsImage').waitFor({ state: 'visible' });
     await page.waitForFunction(() => document.querySelector('#reviewsImage').naturalWidth === 360);
     const mediaBox = await page.locator('#reviewsMediaSurface').boundingBox();
@@ -66,7 +81,9 @@ const server = http.createServer((request, response) => {
     await page.locator('#reviewsEntityForm button[type=submit]').click();
     await page.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'VFX · V1' }).click();
     assert.equal(await page.locator('#reviewsCount').textContent(), '0', 'a new review starts with its own empty file list');
-    await page.locator('#reviewsFileInput').setInputFiles({ name: 'vfx.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg) });
+    await page.locator('#reviewsLinkBtn').click();
+    await page.locator('#reviewsLinkUrl').fill('https://www.dropbox.com/scl/fi/vfx/vfx.jpg?rlkey=vfx');
+    await page.locator('#reviewsLinkForm button[type=submit]').click();
     await page.locator('#reviewsImage').waitFor({ state: 'visible' });
     await page.locator('#reviewsCommentText').fill('Corrección exclusiva de VFX');
     await page.locator('#reviewsCommentForm button[type=submit]').click();
@@ -97,7 +114,6 @@ const server = http.createServer((request, response) => {
     assert.equal(await page.locator('#dashboardView').isVisible(), true);
     await enterReview();
     assert.equal(await page.locator('#reviewsCommentCount').textContent(), '1');
-    await page.route('https://www.dropbox.com/scl/fi/**', route => route.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg }));
     await page.locator('#reviewsLinkBtn').click();
     await page.locator('#reviewsLinkUrl').fill('https://notdropbox.com/scl/fi/id/plano.jpg');
     await page.locator('#reviewsLinkForm button[type=submit]').click();
@@ -128,11 +144,11 @@ const server = http.createServer((request, response) => {
     assert.match(await page.locator('.reviews-comment-text').first().textContent(), /Corrección sobre Dropbox/);
     const dropboxStorage = await page.evaluate(async () => new Promise((resolve, reject) => {
       const request = indexedDB.open('gb-studio-reviews-v1');
-      request.onsuccess = () => { const tx = request.result.transaction(['items', 'media']); const item = tx.objectStore('items').getAll(); const media = tx.objectStore('media').getAll(); tx.oncomplete = () => resolve({ item: item.result.find(record => record.source === 'dropbox'), mediaCount: media.result.length }); tx.onerror = () => reject(tx.error); };
+      request.onsuccess = () => { const tx = request.result.transaction(['items', 'media']); const item = tx.objectStore('items').getAll(); const media = tx.objectStore('media').getAll(); tx.oncomplete = () => resolve({ item: item.result.find(record => record.name === 'plano.jpg'), mediaCount: media.result.length }); tx.onerror = () => reject(tx.error); };
       request.onerror = () => reject(request.error);
     }));
     assert.equal(dropboxStorage.item.comments[0].text, 'Corrección sobre Dropbox');
-    assert.equal(dropboxStorage.mediaCount, 2, 'the Dropbox asset is not copied to IndexedDB');
+    assert.equal(dropboxStorage.mediaCount, 0, 'Dropbox assets are never copied to IndexedDB');
     const videoFixture = await page.evaluate(async () => {
       if (!window.MediaRecorder || !MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) return null;
       const source = document.createElement('canvas'); source.width = 320; source.height = 180;
@@ -145,13 +161,16 @@ const server = http.createServer((request, response) => {
       const animation = setInterval(() => { graphics.fillStyle = frame++ % 2 ? '#547d8e' : '#647d8e'; graphics.fillRect(0, 0, 320, 180); }, 50);
       recorder.start(); await new Promise(resolve => setTimeout(resolve, 1100)); clearInterval(animation); recorder.stop(); await done;
       stream.getTracks().forEach(track => track.stop());
-      const input = document.querySelector('#reviewsFileInput'); const transfer = new DataTransfer();
       const file = new File(chunks, 'revision.webm', { type: 'video/webm' });
-      transfer.items.add(file);
-      input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }));
       return new Promise(resolve => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(',')[1]); reader.readAsDataURL(file); });
     });
     assert.ok(videoFixture, 'the test browser can generate a video fixture');
+    await page.route('https://www.dropbox.com/scl/fi/**', route => route.request().url().includes('.webm')
+      ? fulfillVideo(route, videoFixture)
+      : route.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg }));
+    await page.locator('#reviewsLinkBtn').click();
+    await page.locator('#reviewsLinkUrl').fill('https://www.dropbox.com/scl/fi/video-local/revision-base.webm?rlkey=local');
+    await page.locator('#reviewsLinkForm button[type=submit]').click();
     await page.locator('#reviewsVideo').waitFor({ state: 'visible' });
     await page.waitForFunction(() => document.querySelector('#reviewsVideo').readyState >= 1);
     await page.locator('#reviewsCommentText').fill('Revisar el corte');
@@ -185,6 +204,23 @@ const server = http.createServer((request, response) => {
     await page.evaluate(() => { document.querySelector('#reviewsVideo').currentTime = 0; });
     await page.waitForFunction(() => document.querySelector('#reviewsFrameNumber').textContent.includes('1001'));
     assert.match(await page.locator('#reviewsFrameNumber').textContent(), /1001/);
+    await page.locator('#reviewsTimelineMode').selectOption('frames');
+    await page.locator('#reviewsFrameJump').fill('1005');
+    await page.locator('#reviewsFrameJump').dispatchEvent('change');
+    await page.waitForFunction(() => document.querySelector('#reviewsFrameNumber').textContent.includes('1005'));
+    assert.ok(Math.abs(await page.evaluate(() => document.querySelector('#reviewsVideo').currentTime) - 4 / 24) < .02, 'frame number seeks to an FPS-aligned video position');
+    await page.locator('#reviewsNextFrame').click();
+    assert.match(await page.locator('#reviewsFrameNumber').textContent(), /1006/, 'one-frame button advances one frame');
+    const frameSeekBox = await page.locator('#reviewsSeek').boundingBox();
+    await page.mouse.move(frameSeekBox.x + frameSeekBox.width / 2, frameSeekBox.y + frameSeekBox.height / 2);
+    await page.mouse.down(); await page.mouse.move(frameSeekBox.x + frameSeekBox.width / 2 + 16, frameSeekBox.y + frameSeekBox.height / 2, { steps: 4 }); await page.mouse.up();
+    assert.match(await page.locator('#reviewsFrameNumber').textContent(), /1008/, 'precision drag advances one frame for each 8 px');
+    assert.equal(await page.locator('#reviewsSeek').getAttribute('step'), '1');
+    await page.reload(); await unlock(); await enterReview();
+    await page.waitForFunction(() => document.querySelector('#reviewsVideo').duration > .5);
+    assert.equal(await page.locator('#reviewsTimelineMode').inputValue(), 'frames', 'frame mode persists for this video');
+    assert.equal(await page.locator('#reviewsFrameStart').inputValue(), '1001');
+    await page.locator('#reviewsTimelineMode').selectOption('time');
     await page.evaluate(() => { document.activeElement.blur(); document.querySelector('#reviewsVideo').currentTime = .2; });
     await page.keyboard.press('I');
     assert.notEqual(await page.locator('#reviewsInValue').textContent(), '—');
@@ -219,9 +255,8 @@ const server = http.createServer((request, response) => {
     await page.waitForFunction(() => document.fullscreenElement?.id === 'reviewsView');
     await page.keyboard.press('F');
     await page.waitForFunction(() => !document.fullscreenElement);
-    const screenshotDownload = page.waitForEvent('download');
     await page.locator('#reviewsScreenshotBtn').click();
-    assert.match((await screenshotDownload).suggestedFilename(), /fotograma-.*\.png$/);
+    await page.waitForFunction(() => document.querySelector('#reviewsCommentContext').textContent.includes('Dropbox no habilita'), null, { timeout: 3000 });
     await page.locator('#reviewsSketchBtn').click();
     const scratchBox = await page.locator('#reviewsCanvas').boundingBox();
     await page.mouse.move(scratchBox.x + 30, scratchBox.y + 30); await page.mouse.down(); await page.mouse.move(scratchBox.x + 100, scratchBox.y + 80, { steps: 4 }); await page.mouse.up();
@@ -231,13 +266,13 @@ const server = http.createServer((request, response) => {
     await page.waitForFunction(() => document.querySelector('#reviewsCommentCount').textContent === '3');
     assert.equal(await page.evaluate(async () => new Promise(resolve => { const open = indexedDB.open('gb-studio-reviews-v1'); open.onsuccess = () => { const request = open.result.transaction('items').objectStore('items').getAll(); request.onsuccess = () => resolve(request.result.find(item => item.kind === 'video').comments.at(-1).strokes.length); }; })), 0, 'temporary drawing is not saved with a comment');
     await page.route('https://www.dropbox.com/scl/fi/**', route => route.request().url().includes('revision.webm')
-      ? route.fulfill({ status: 200, contentType: 'video/webm', body: Buffer.from(videoFixture, 'base64') })
+      ? fulfillVideo(route, videoFixture)
       : route.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg }));
     await page.locator('#reviewsLinkBtn').click();
     await page.locator('#reviewsLinkUrl').fill('https://www.dropbox.com/scl/fi/videoid/revision.webm?rlkey=xyz&dl=0');
     assert.equal(await page.locator('#reviewsLinkKind').inputValue(), 'video');
     await page.locator('#reviewsLinkForm button[type=submit]').click();
-    await page.waitForFunction(() => document.querySelector('#reviewsVideo').getAttribute('src')?.includes('dropbox.com'));
+    await page.waitForFunction(() => document.querySelector('#reviewsVideo').getAttribute('src')?.includes('/videoid/'));
     await page.waitForFunction(() => document.querySelector('#reviewsVideo').duration > .5);
     assert.match(await page.locator('#reviewsVideo').getAttribute('src'), /rlkey=xyz&raw=1/);
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -249,10 +284,38 @@ const server = http.createServer((request, response) => {
     await page.locator('#reviewsCommentForm button[type=submit]').click();
     await page.waitForFunction(() => document.querySelector('#reviewsCommentCount').textContent === '1');
     assert.equal(await page.locator('.reviews-marker').count(), 1, 'Dropbox video has timed comments');
+    await page.locator('#reviewsAddSection').click();
+    await page.locator('#reviewsSectionName').fill('Última versión');
+    await page.locator('#reviewsSectionForm button[type=submit]').click();
+    await page.locator('.reviews-section').filter({ hasText: 'Última versión' }).waitFor();
+    await page.locator('.reviews-file.is-active').dragTo(page.locator('.reviews-section').filter({ hasText: 'Última versión' }).locator('.reviews-section-files'));
+    await page.waitForFunction(() => [...document.querySelectorAll('.reviews-section')].some(section => section.querySelector('strong')?.textContent === 'Última versión' && section.querySelector('.reviews-file.is-active')));
+    const latestSection = page.locator('.reviews-section').filter({ hasText: 'Última versión' });
+    await page.locator('.reviews-file').filter({ hasText: 'revision-base.webm' }).dragTo(latestSection.locator('.reviews-section-files'));
+    await page.waitForFunction(() => [...document.querySelectorAll('.reviews-section')].some(section => section.querySelector('strong')?.textContent === 'Última versión' && section.querySelectorAll('.reviews-file').length === 2));
+    await latestSection.locator('.reviews-file').filter({ hasText: 'revision-base.webm' }).dragTo(latestSection.locator('.reviews-file').filter({ hasText: 'revision.webm' }));
+    await page.waitForFunction(() => [...document.querySelectorAll('.reviews-section')].find(section => section.querySelector('strong')?.textContent === 'Última versión')?.querySelector('.reviews-file')?.textContent.includes('revision-base.webm'));
+    if (process.env.REVIEW_SECTIONS_SCREENSHOT) await page.screenshot({ path: process.env.REVIEW_SECTIONS_SCREENSHOT, fullPage: true });
+    await page.reload(); await unlock(); await enterReview();
+    assert.equal(await page.locator('.reviews-section').filter({ hasText: 'Última versión' }).locator('.reviews-file').count(), 2, 'section assignment survives reload');
+    assert.match(await page.locator('.reviews-section').filter({ hasText: 'Última versión' }).locator('.reviews-file').first().textContent(), /revision-base.webm/, 'custom file order survives reload');
+    await page.locator('button[aria-label="Renombrar sección Última versión"]').click();
+    await page.locator('#reviewsSectionName').fill('Corte final');
+    await page.locator('#reviewsSectionForm button[type=submit]').click();
+    await page.locator('.reviews-section').filter({ hasText: 'Corte final' }).waitFor();
+    await page.locator('button[aria-label="Eliminar sección Corte final"]').click();
+    await page.locator('#reviewsConfirmAccept').click();
+    await page.waitForFunction(() => ![...document.querySelectorAll('.reviews-section-heading strong')].some(item => item.textContent === 'Corte final'));
+    assert.equal(await page.locator('.reviews-section').filter({ hasText: 'Sin clasificar' }).locator('.reviews-file.is-active').count(), 1, 'deleting a section moves its file without deleting it');
     if (process.env.REVIEW_TEST_FBX) {
       const fixture = await page.request.get('https://raw.githubusercontent.com/mrdoob/three.js/r186/examples/models/fbx/stanford-bunny.fbx');
       assert.equal(fixture.ok(), true, 'official FBX example is available');
-      await page.locator('#reviewsFileInput').setInputFiles({ name: 'stanford-bunny.fbx', mimeType: 'application/octet-stream', buffer: await fixture.body() });
+      const fbxBody = await fixture.body();
+      await page.route('https://www.dropbox.com/scl/fi/fbx/**', route => route.fulfill({ status: 200, contentType: 'application/octet-stream', headers: { 'access-control-allow-origin': '*' }, body: fbxBody }));
+      await page.locator('#reviewsLinkBtn').click();
+      await page.locator('#reviewsLinkUrl').fill('https://www.dropbox.com/scl/fi/fbx/stanford-bunny.fbx?rlkey=fbx');
+      assert.equal(await page.locator('#reviewsLinkKind').inputValue(), 'model');
+      await page.locator('#reviewsLinkForm button[type=submit]').click();
       await page.locator('#reviewsModel canvas').waitFor({ state: 'visible', timeout: 30000 });
       assert.equal(await page.locator('#reviewsMediaError').isVisible(), false, 'FBX model renders without an error');
     }
@@ -274,7 +337,7 @@ const server = http.createServer((request, response) => {
     await page.locator('#reviewsConfirmAccept').click();
     await page.waitForFunction(() => ![...document.querySelectorAll('#reviewsHomeGrid .reviews-home-card-open')].some(card => card.textContent.includes('VFX · V1')));
     assert.equal(await page.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'VFX · V1' }).count(), 0, 'deleting one review keeps the project');
-    assert.equal(await page.evaluate(async () => new Promise(resolve => { const open = indexedDB.open('gb-studio-reviews-v1'); open.onsuccess = () => { const get = open.result.transaction('items').objectStore('items').getAll(); get.onsuccess = () => resolve(get.result.some(record => record.name === 'vfx.svg')); }; })), false, 'deleting a review removes only its files and comments');
+    assert.equal(await page.evaluate(async () => new Promise(resolve => { const open = indexedDB.open('gb-studio-reviews-v1'); open.onsuccess = () => { const get = open.result.transaction('items').objectStore('items').getAll(); get.onsuccess = () => resolve(get.result.some(record => record.name === 'vfx.jpg')); }; })), false, 'deleting a review removes only its files and comments');
     await page.locator('#reviewsBackProjects').click();
     await page.locator('#reviewsCreateProject').click();
     await page.locator('#reviewsEntityTitle').fill('Proyecto temporal');
@@ -332,6 +395,6 @@ const server = http.createServer((request, response) => {
       assert.ok(migrated.projectId && migrated.versionId && migrated.comments[0].text === 'Conservar comentario', 'migration preserves existing feedback');
       assert.equal(await migration.evaluate(async () => new Promise(resolve => { const open = indexedDB.open('gb-studio-reviews-v1'); open.onsuccess = () => { const get = open.result.transaction('media').objectStore('media').get('legacy-file'); get.onsuccess = () => resolve(get.result?.size || 0); }; })), 14, 'migration preserves the original local media');
     } finally { await migration.close(); }
-    console.log('Reviews smoke passed: local and Dropbox image/video, drawing, comments, timeline, reload, and resolve.');
+    console.log('Reviews smoke passed: Dropbox-only linking, sections, frame scrubbing, comments, migration, and guest viewing.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
