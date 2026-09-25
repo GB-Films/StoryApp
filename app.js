@@ -701,6 +701,7 @@ function showDashboard() {
   $('#dashboardView').hidden = false;
   $('#editorView').hidden = true;
   $('#reviewsView').hidden = true;
+  $('#reviewsHome').hidden = true;
   document.body.classList.remove('reviews-open');
   document.body.classList.remove('reviews-hud-hidden');
   document.body.classList.remove('public-review');
@@ -718,6 +719,7 @@ function showEditor() {
   $('#dashboardView').hidden = true;
   $('#editorView').hidden = false;
   $('#reviewsView').hidden = true;
+  $('#reviewsHome').hidden = true;
   document.body.classList.remove('reviews-open');
   document.body.classList.remove('reviews-hud-hidden');
   document.body.classList.remove('public-review');

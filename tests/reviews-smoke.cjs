@@ -22,9 +22,19 @@ const server = http.createServer((request, response) => {
     await page.route('https://www.gstatic.com/firebasejs/**', route => route.abort());
     const url = `http://127.0.0.1:${server.address().port}`;
     const unlock = async () => { await page.waitForTimeout(300); await page.evaluate(() => { document.body.classList.remove('auth-locked'); document.querySelector('#authGate').hidden = true; }); };
+    const enterReview = async () => { await page.locator('#reviewsNav').click(); await page.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'Campaña test' }).click(); await page.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'Montaje · V1' }).click(); await page.locator('#reviewsView').waitFor({ state: 'visible' }); };
     await page.goto(url);
     await unlock();
     await page.locator('#reviewsNav').click();
+    assert.equal(await page.locator('#reviewsHome').isVisible(), true, 'Reviews opens on its project dashboard');
+    if (process.env.REVIEW_HOME_SCREENSHOT) await page.screenshot({ path: process.env.REVIEW_HOME_SCREENSHOT, fullPage: true });
+    await page.locator('#reviewsCreateProject').click();
+    if (process.env.REVIEW_FORM_SCREENSHOT) await page.screenshot({ path: process.env.REVIEW_FORM_SCREENSHOT, fullPage: true });
+    await page.locator('#reviewsEntityTitle').fill('Campaña test');
+    await page.locator('#reviewsEntityClient').fill('Cliente test');
+    await page.locator('#reviewsEntityForm button[type=submit]').click();
+    if (process.env.REVIEW_VERSION_SCREENSHOT) await page.screenshot({ path: process.env.REVIEW_VERSION_SCREENSHOT, fullPage: true });
+    await page.locator('#reviewsHomeGrid .reviews-home-card-open').first().click();
     assert.equal(await page.locator('#reviewsView').isVisible(), true);
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="360" height="640"><rect width="360" height="640" fill="#40566b"/></svg>';
     await page.locator('#reviewsFileInput').setInputFiles({ name: 'plano.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg) });
@@ -49,7 +59,28 @@ const server = http.createServer((request, response) => {
     }));
     assert.equal(stored[0].comments[0].text, 'Ajustar el encuadre');
     assert.ok(stored[0].comments[0].strokes[0].points.length > 1, 'the drawing is attached to the comment');
-    await page.reload(); await unlock(); await page.locator('#reviewsNav').click();
+    await page.locator('#reviewsBackVersions').click();
+    await page.locator('#reviewsCreateVersion').click();
+    await page.locator('#reviewsEntityTitle').fill('VFX · V1');
+    await page.locator('#reviewsEntityCategory').selectOption('VFX');
+    await page.locator('#reviewsEntityForm button[type=submit]').click();
+    await page.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'VFX · V1' }).click();
+    assert.equal(await page.locator('#reviewsCount').textContent(), '0', 'a new review starts with its own empty file list');
+    await page.locator('#reviewsFileInput').setInputFiles({ name: 'vfx.svg', mimeType: 'image/svg+xml', buffer: Buffer.from(svg) });
+    await page.locator('#reviewsImage').waitFor({ state: 'visible' });
+    await page.locator('#reviewsCommentText').fill('Corrección exclusiva de VFX');
+    await page.locator('#reviewsCommentForm button[type=submit]').click();
+    await page.waitForFunction(() => document.querySelector('#reviewsCommentCount').textContent === '1');
+    await page.locator('#reviewsBackVersions').click();
+    await page.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'Montaje · V1' }).click();
+    assert.equal(await page.locator('#reviewsCount').textContent(), '1', 'original review keeps its files and comments');
+    assert.equal(await page.locator('#reviewsCommentCount').textContent(), '1', 'VFX feedback does not appear in the montage review');
+    await page.locator('#reviewsRemoveMedia').click();
+    assert.equal(await page.locator('#reviewsConfirmModal').isVisible(), true, 'file removal uses a designed confirmation');
+    if (process.env.REVIEW_MODAL_SCREENSHOT) await page.screenshot({ path: process.env.REVIEW_MODAL_SCREENSHOT, fullPage: true });
+    await page.locator('#reviewsConfirmCancel').click();
+    assert.equal(await page.locator('#reviewsCount').textContent(), '1', 'cancelling preserves the file');
+    await page.reload(); await unlock(); await enterReview();
     await page.waitForFunction(() => document.querySelector('#reviewsCommentCount').textContent === '1');
     assert.match(await page.locator('.reviews-comment-text').textContent(), /Ajustar el encuadre/);
     await page.locator('.reviews-comment-open').click();
@@ -64,7 +95,7 @@ const server = http.createServer((request, response) => {
     assert.equal(await page.locator('.reviews-comment.is-resolved').count(), 1);
     await page.locator('#storyboardsNav').click();
     assert.equal(await page.locator('#dashboardView').isVisible(), true);
-    await page.locator('#reviewsNav').click();
+    await enterReview();
     assert.equal(await page.locator('#reviewsCommentCount').textContent(), '1');
     await page.route('https://www.dropbox.com/scl/fi/**', route => route.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg }));
     await page.locator('#reviewsLinkBtn').click();
@@ -92,7 +123,7 @@ const server = http.createServer((request, response) => {
     await page.locator('#reviewsCommentText').fill('Corrección sobre Dropbox');
     await page.locator('#reviewsCommentForm button[type=submit]').click();
     await page.waitForFunction(() => document.querySelector('#reviewsCommentCount').textContent === '1');
-    await page.reload(); await unlock(); await page.locator('#reviewsNav').click();
+    await page.reload(); await unlock(); await enterReview();
     await page.waitForFunction(() => document.querySelector('#reviewsImage').naturalWidth === 360);
     assert.match(await page.locator('.reviews-comment-text').first().textContent(), /Corrección sobre Dropbox/);
     const dropboxStorage = await page.evaluate(async () => new Promise((resolve, reject) => {
@@ -101,7 +132,7 @@ const server = http.createServer((request, response) => {
       request.onerror = () => reject(request.error);
     }));
     assert.equal(dropboxStorage.item.comments[0].text, 'Corrección sobre Dropbox');
-    assert.equal(dropboxStorage.mediaCount, 1, 'the Dropbox asset is not copied to IndexedDB');
+    assert.equal(dropboxStorage.mediaCount, 2, 'the Dropbox asset is not copied to IndexedDB');
     const videoFixture = await page.evaluate(async () => {
       if (!window.MediaRecorder || !MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) return null;
       const source = document.createElement('canvas'); source.width = 320; source.height = 180;
@@ -134,7 +165,7 @@ const server = http.createServer((request, response) => {
     await page.waitForFunction(() => document.querySelector('#reviewsVideo').currentTime > .05);
     await page.locator('#storyboardsNav').click();
     assert.equal(await page.evaluate(() => document.querySelector('#reviewsVideo').paused), true, 'video pauses when leaving Reviews');
-    await page.locator('#reviewsNav').click();
+    await enterReview();
     await page.locator('#reviewsDrawBtn').click();
     const videoBox = await page.locator('#reviewsCanvas').boundingBox();
     await page.mouse.move(videoBox.x + videoBox.width * .3, videoBox.y + videoBox.height * .3);
@@ -236,6 +267,32 @@ const server = http.createServer((request, response) => {
     const mobileOverflow = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: window.innerWidth, elements: [...document.querySelectorAll('#reviewsView *')].filter(element => element.getBoundingClientRect().right > window.innerWidth + 1).slice(0, 8).map(element => ({ tag: element.tagName, id: element.id, className: String(element.className), right: element.getBoundingClientRect().right })) }));
     assert.ok(mobileOverflow.width <= mobileOverflow.viewport + 1, `mobile review layout fits viewport width: ${JSON.stringify(mobileOverflow)}`);
     assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
+    await page.locator('#reviewsBackVersions').click();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'review versions dashboard fits a phone');
+    await page.locator('.reviews-home-card-actions button[aria-label="Eliminar VFX · V1"]').click();
+    assert.equal(await page.locator('#reviewsConfirmModal').isVisible(), true);
+    await page.locator('#reviewsConfirmAccept').click();
+    await page.waitForFunction(() => ![...document.querySelectorAll('#reviewsHomeGrid .reviews-home-card-open')].some(card => card.textContent.includes('VFX · V1')));
+    assert.equal(await page.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'VFX · V1' }).count(), 0, 'deleting one review keeps the project');
+    assert.equal(await page.evaluate(async () => new Promise(resolve => { const open = indexedDB.open('gb-studio-reviews-v1'); open.onsuccess = () => { const get = open.result.transaction('items').objectStore('items').getAll(); get.onsuccess = () => resolve(get.result.some(record => record.name === 'vfx.svg')); }; })), false, 'deleting a review removes only its files and comments');
+    await page.locator('#reviewsBackProjects').click();
+    await page.locator('#reviewsCreateProject').click();
+    await page.locator('#reviewsEntityTitle').fill('Proyecto temporal');
+    await page.locator('#reviewsEntityClient').fill('Cliente temporal');
+    await page.locator('#reviewsEntityForm button[type=submit]').click();
+    await page.locator('#reviewsBackProjects').click();
+    await page.locator('.reviews-home-card-actions button[aria-label="Editar Proyecto temporal"]').click();
+    await page.locator('#reviewsEntityTitle').fill('Proyecto temporal editado');
+    await page.locator('#reviewsEntityForm button[type=submit]').click();
+    await page.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'Proyecto temporal editado' }).waitFor();
+    assert.equal(await page.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'Proyecto temporal editado' }).count(), 1, 'project title is editable on its card');
+    await page.locator('.reviews-home-card-actions button[aria-label="Eliminar Proyecto temporal editado"]').click();
+    await page.locator('#reviewsConfirmCancel').click();
+    assert.equal(await page.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'Proyecto temporal editado' }).count(), 1, 'cancel keeps project');
+    await page.locator('.reviews-home-card-actions button[aria-label="Eliminar Proyecto temporal editado"]').click();
+    await page.locator('#reviewsConfirmAccept').click();
+    await page.waitForFunction(() => ![...document.querySelectorAll('#reviewsHomeGrid .reviews-home-card-open')].some(card => card.textContent.includes('Proyecto temporal editado')));
+    assert.equal(await page.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'Proyecto temporal editado' }).count(), 0, 'confirmation deletes only the selected project');
     const guest = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     try {
       await guest.route('https://www.gstatic.com/firebasejs/**', route => route.abort());
@@ -256,6 +313,25 @@ const server = http.createServer((request, response) => {
       await guest.locator('#storyboardsNav').click();
       assert.equal(await guest.locator('#authGate').isVisible(), true, 'storyboards remain protected');
     } finally { await guest.close(); }
+    const migration = await browser.newPage();
+    try {
+      await migration.route('**/reviews.js*', route => route.abort());
+      await migration.route('https://www.gstatic.com/firebasejs/**', route => route.abort());
+      await migration.goto(url);
+      await migration.evaluate(async () => {
+        await new Promise((resolve, reject) => { const request = indexedDB.open('gb-studio-reviews-v1', 1); request.onupgradeneeded = () => { request.result.createObjectStore('items', { keyPath: 'id' }); request.result.createObjectStore('media'); }; request.onsuccess = () => { const db = request.result; const tx = db.transaction(['items', 'media'], 'readwrite'); tx.objectStore('items').put({ id: 'legacy-file', name: 'montaje-viejo.mp4', kind: 'video', size: 100, comments: [{ id: 'comment-1', text: 'Conservar comentario', time: 0, strokes: [], createdAt: '2026-01-01' }], createdAt: '2026-01-01', updatedAt: '2026-01-01' }); tx.objectStore('media').put(new Blob(['video original'], { type: 'video/mp4' }), 'legacy-file'); tx.oncomplete = () => { db.close(); resolve(); }; tx.onerror = () => reject(tx.error); }; request.onerror = () => reject(request.error); });
+      });
+      await migration.unroute('**/reviews.js*');
+      await migration.reload();
+      await migration.waitForTimeout(300);
+      await migration.evaluate(() => { document.body.classList.remove('auth-locked'); document.querySelector('#authGate').hidden = true; });
+      await migration.locator('#reviewsNav').click();
+      await migration.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'Reviews anteriores' }).click();
+      assert.equal(await migration.locator('#reviewsHomeGrid .reviews-home-card-open').filter({ hasText: 'Review original' }).count(), 1, 'old records are grouped in a legacy review');
+      const migrated = await migration.evaluate(async () => new Promise(resolve => { const open = indexedDB.open('gb-studio-reviews-v1'); open.onsuccess = () => { const get = open.result.transaction('items').objectStore('items').get('legacy-file'); get.onsuccess = () => resolve(get.result); }; }));
+      assert.ok(migrated.projectId && migrated.versionId && migrated.comments[0].text === 'Conservar comentario', 'migration preserves existing feedback');
+      assert.equal(await migration.evaluate(async () => new Promise(resolve => { const open = indexedDB.open('gb-studio-reviews-v1'); open.onsuccess = () => { const get = open.result.transaction('media').objectStore('media').get('legacy-file'); get.onsuccess = () => resolve(get.result?.size || 0); }; })), 14, 'migration preserves the original local media');
+    } finally { await migration.close(); }
     console.log('Reviews smoke passed: local and Dropbox image/video, drawing, comments, timeline, reload, and resolve.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

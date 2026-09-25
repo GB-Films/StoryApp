@@ -4,7 +4,7 @@
   const $ = selector => document.querySelector(selector);
   const DB_NAME = 'gb-studio-reviews-v1';
   const ACTIVE_KEY = 'gb-studio-reviews-active-v1';
-  const state = { records: [], active: null, mediaUrl: null, model: null, drawing: false, sketchMode: false, draft: [], scratch: [], activeCommentId: null, pointerId: null, saving: false, view: { scale: 1, x: 0, y: 0 }, zHeld: false, zoomPointer: null };
+  const state = { records: [], projects: [], projectId: null, versionId: null, active: null, mediaUrl: null, model: null, drawing: false, sketchMode: false, draft: [], scratch: [], activeCommentId: null, pointerId: null, saving: false, view: { scale: 1, x: 0, y: 0 }, zHeld: false, zoomPointer: null };
   const video = $('#reviewsVideo');
   const image = $('#reviewsImage');
   const canvas = $('#reviewsCanvas');
@@ -13,11 +13,12 @@
 
   function openDatabase() {
     if (!databasePromise) databasePromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, 1);
+      const request = indexedDB.open(DB_NAME, 2);
       request.onupgradeneeded = () => {
         const db = request.result;
         if (!db.objectStoreNames.contains('items')) db.createObjectStore('items', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('media')) db.createObjectStore('media');
+        if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -36,7 +37,11 @@
     });
   }
   async function saveRecord(record) { await databaseRequest('items', 'readwrite', store => store.put(record)); }
+  async function saveProject(project) { await databaseRequest('projects', 'readwrite', store => store.put(project)); }
   async function getMedia(id) { return databaseRequest('media', 'readonly', store => store.get(id)); }
+  function currentProject() { return state.projects.find(project => project.id === state.projectId); }
+  function currentVersion() { return currentProject()?.versions.find(version => version.id === state.versionId); }
+  function versionRecords() { return state.records.filter(record => record.versionId === state.versionId); }
   function formatTime(seconds) {
     const whole = Number.isFinite(Number(seconds)) ? Math.max(0, Math.floor(Number(seconds))) : 0;
     const hours = Math.floor(whole / 3600);
@@ -69,6 +74,107 @@
   }
   const sharedReview = sharedReviewFromHash();
   if (sharedReview) document.body.classList.add('public-review');
+  let formMode = null;
+  let confirmResolve = null;
+  function closeForm() { $('#reviewsFormModal').hidden = true; formMode = null; }
+  function askConfirmation(title, copy, label = 'Eliminar') {
+    $('#reviewsConfirmTitle').textContent = title;
+    $('#reviewsConfirmCopy').textContent = copy;
+    $('#reviewsConfirmAccept').textContent = label;
+    $('#reviewsConfirmModal').hidden = false;
+    $('#reviewsConfirmCancel').focus();
+    return new Promise(resolve => { confirmResolve = resolve; });
+  }
+  function closeConfirmation(accepted) { $('#reviewsConfirmModal').hidden = true; confirmResolve?.(accepted); confirmResolve = null; }
+  function openForm(type, entity = null) {
+    formMode = { type, id: entity?.id || null };
+    const project = type === 'project';
+    $('#reviewsProjectFields').hidden = !project;
+    $('#reviewsVersionFields').hidden = project;
+    $('#reviewsEntityClient').required = project;
+    $('#reviewsEntityTitle').value = entity?.title || '';
+    $('#reviewsEntityClient').value = entity?.client || '';
+    $('#reviewsEntityAgency').value = entity?.agency || '';
+    $('#reviewsEntityDirector').value = entity?.director || '';
+    $('#reviewsEntityCategory').value = entity?.category || 'Montaje';
+    $('#reviewsFormTitle').textContent = `${entity ? 'Editar' : project ? 'Nuevo' : 'Nueva'} ${project ? 'proyecto' : 'review'}`;
+    $('#reviewsFormCopy').textContent = project ? 'El proyecto reúne distintas instancias de feedback, cada una con sus propios archivos y comentarios.' : 'Una review independiente para montaje, VFX, cliente u otra etapa.';
+    $('#reviewsFormSubmit').textContent = entity ? 'Guardar cambios →' : project ? 'Crear proyecto →' : 'Crear review →';
+    $('#reviewsFormModal').hidden = false;
+    $('#reviewsEntityTitle').focus();
+  }
+  function cardAction(label, title, handler) { const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.setAttribute('aria-label', title); button.addEventListener('click', handler); return button; }
+  function renderHome() {
+    const project = currentProject();
+    const grid = $('#reviewsHomeGrid'); grid.replaceChildren();
+    $('#reviewsHomeTitle').textContent = project ? project.title : 'Proyectos de review';
+    $('#reviewsHomeCopy').textContent = project ? 'Elegí una review o creá otra para una etapa distinta. Cada review tiene sus archivos y comentarios.' : 'Organizá las revisiones por proyecto y separá el feedback de montaje, VFX y cliente.';
+    $('#reviewsCreateProject').hidden = Boolean(project);
+    $('#reviewsProjectContext').hidden = !project;
+    $('#reviewsHomeSectionLabel').textContent = project ? 'REVIEWS DE ESTE PROYECTO' : 'PROYECTOS';
+    const entries = project ? [...project.versions] : [...state.projects];
+    $('#reviewsHomeCount').textContent = `${entries.length} ${project ? entries.length === 1 ? 'review' : 'reviews' : entries.length === 1 ? 'proyecto' : 'proyectos'}`;
+    $('#reviewsHomeEmpty').hidden = entries.length > 0;
+    $('#reviewsEmptyCreate').textContent = project ? '＋ Crear review' : '＋ Crear proyecto';
+    $('#reviewsHomeEmpty h2').textContent = project ? 'Todavía no hay reviews.' : 'Un lugar para cada devolución.';
+    $('#reviewsHomeEmpty p').textContent = project ? 'Creá una review de montaje, VFX o cliente para empezar a cargar material.' : 'Creá un proyecto y después abrí reviews distintas para montaje, VFX o cliente.';
+    if (project) $('#reviewsProjectMeta').textContent = [project.client && `CLIENTE · ${project.client}`, project.agency && `AGENCIA · ${project.agency}`, project.director && `DIRECTOR · ${project.director}`, 'GRAN BERTA FILMS'].filter(Boolean).join('  /  ');
+    for (const entry of entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
+      const card = document.createElement('article'); card.className = 'reviews-home-card';
+      const open = document.createElement('button'); open.type = 'button'; open.className = 'reviews-home-card-open';
+      const mark = document.createElement('span'); mark.className = 'reviews-home-card-mark'; mark.textContent = project ? entry.category.slice(0, 1) : '▣';
+      const tag = document.createElement('span'); tag.className = 'reviews-home-card-tag'; tag.textContent = project ? entry.category.toUpperCase() : (entry.client || 'SIN CLIENTE').toUpperCase();
+      const title = document.createElement('strong'); title.textContent = entry.title;
+      const count = document.createElement('small'); const records = project ? state.records.filter(record => record.versionId === entry.id) : state.records.filter(record => record.projectId === entry.id);
+      count.textContent = project ? `${records.length} archivo${records.length === 1 ? '' : 's'} · ${records.reduce((sum, record) => sum + record.comments.length, 0)} comentarios` : `${entry.versions.length} review${entry.versions.length === 1 ? '' : 's'} · ${records.length} archivos`;
+      const arrow = document.createElement('span'); arrow.className = 'reviews-home-card-arrow'; arrow.textContent = '↗';
+      open.append(mark, tag, title, count, arrow);
+      open.addEventListener('click', () => project ? openVersion(entry.id) : showReviewsHome(entry.id));
+      const actions = document.createElement('div'); actions.className = 'reviews-home-card-actions';
+      actions.append(cardAction('✎ Editar', `Editar ${entry.title}`, () => openForm(project ? 'version' : 'project', entry)), cardAction('⌫ Eliminar', `Eliminar ${entry.title}`, () => project ? deleteVersion(entry.id) : deleteProject(entry.id)));
+      card.append(open, actions); grid.append(card);
+    }
+  }
+  function showReviewsHome(projectId = null) {
+    if (document.body.classList.contains('auth-locked')) return;
+    showDashboard();
+    stopMedia(); state.active = null; state.projectId = projectId; state.versionId = null;
+    $('#dashboardView').hidden = true; $('#reviewsHome').hidden = false; $('#reviewsView').hidden = true;
+    $('#storyboardsNav').classList.remove('is-active'); $('#reviewsNav').classList.add('is-active');
+    $('#breadcrumbTitle').textContent = currentProject()?.title || 'Reviews';
+    renderHome();
+  }
+  async function openVersion(versionId) {
+    const project = currentProject(); const version = project?.versions.find(entry => entry.id === versionId);
+    if (!version) return;
+    state.versionId = versionId;
+    showReviews();
+    const records = versionRecords();
+    const preferred = records.find(record => record.id === localStorage.getItem(ACTIVE_KEY));
+    if (records.length) await selectRecord((preferred || records.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]).id);
+    else clearViewer();
+  }
+  async function deleteProject(id) {
+    const project = state.projects.find(entry => entry.id === id); if (!project) return;
+    if (!await askConfirmation('¿Eliminar este proyecto?', `Se van a quitar “${project.title}”, sus reviews, archivos y comentarios de este navegador. Los originales de Dropbox no se borrarán.`)) return;
+    try {
+      const db = await openDatabase();
+      await new Promise((resolve, reject) => { const tx = db.transaction(['projects', 'items', 'media'], 'readwrite'); tx.objectStore('projects').delete(id); for (const record of state.records.filter(entry => entry.projectId === id)) { tx.objectStore('items').delete(record.id); tx.objectStore('media').delete(record.id); } tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); });
+      state.projects = state.projects.filter(entry => entry.id !== id); state.records = state.records.filter(entry => entry.projectId !== id);
+      if (state.projectId === id) state.projectId = null;
+      renderHome();
+    } catch (error) { console.error(error); $('#reviewsHomeCopy').textContent = 'No se pudo eliminar este proyecto. Revisá el almacenamiento del navegador.'; }
+  }
+  async function deleteVersion(id) {
+    const project = currentProject(), version = project?.versions.find(entry => entry.id === id); if (!version) return;
+    if (!await askConfirmation('¿Eliminar esta review?', `Se van a quitar “${version.title}” y sus archivos y comentarios de este navegador. Las otras reviews del proyecto se conservan.`)) return;
+    const updated = { ...project, versions: project.versions.filter(entry => entry.id !== id), updatedAt: new Date().toISOString() };
+    try {
+      const db = await openDatabase();
+      await new Promise((resolve, reject) => { const tx = db.transaction(['projects', 'items', 'media'], 'readwrite'); tx.objectStore('projects').put(updated); for (const record of state.records.filter(entry => entry.versionId === id)) { tx.objectStore('items').delete(record.id); tx.objectStore('media').delete(record.id); } tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); });
+      state.projects = state.projects.map(entry => entry.id === project.id ? updated : entry); state.records = state.records.filter(entry => entry.versionId !== id); renderHome();
+    } catch (error) { console.error(error); $('#reviewsHomeCopy').textContent = 'No se pudo eliminar esta review. Revisá el almacenamiento del navegador.'; }
+  }
   function isGuestReview() { return document.body.classList.contains('public-review') && !window.STUDIO_SIGNED_IN; }
   function applyReviewPermissions() {
     const guest = isGuestReview();
@@ -145,11 +251,12 @@
   function renderList() {
     const list = $('#reviewsList');
     list.replaceChildren();
-    $('#reviewsCount').textContent = state.records.length;
-    if (!state.records.length) {
+    const records = document.body.classList.contains('public-review') ? state.active ? [state.active] : [] : versionRecords();
+    $('#reviewsCount').textContent = records.length;
+    if (!records.length) {
       const empty = document.createElement('p'); empty.className = 'reviews-list-empty'; empty.textContent = 'Todavía no cargaste archivos.'; list.append(empty); return;
     }
-    for (const record of [...state.records].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
+    for (const record of [...records].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))) {
       const button = document.createElement('button'); button.type = 'button'; button.className = `reviews-file${record.id === state.active?.id ? ' is-active' : ''}`;
       const icon = document.createElement('span'); icon.className = 'reviews-file-icon'; icon.textContent = record.kind === 'video' ? '▶' : record.kind === 'model' ? '◇' : '▧';
       const copy = document.createElement('span'); copy.className = 'reviews-file-copy';
@@ -276,11 +383,12 @@
     renderCommentList(); renderList(); renderMarkers(); redraw();
   }
   async function addFiles(files) {
+    if (isGuestReview() || !currentVersion()) return;
     for (const file of files) {
       const kind = /\.fbx$/i.test(file.name) ? 'model' : file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : null;
       if (!kind) { showStatus(`Formato no compatible: ${file.name}`); continue; }
       const now = new Date().toISOString();
-      const record = { id: crypto.randomUUID(), name: file.name, kind, size: file.size, createdAt: now, updatedAt: now, comments: [] };
+      const record = { id: crypto.randomUUID(), projectId: state.projectId, versionId: state.versionId, name: file.name, kind, size: file.size, createdAt: now, updatedAt: now, comments: [] };
       try {
         const db = await openDatabase();
         await new Promise((resolve, reject) => {
@@ -294,14 +402,15 @@
   }
   async function addDropboxLink(event) {
     event.preventDefault();
+    if (isGuestReview() || !currentVersion()) return;
     const message = $('#reviewsLinkMessage'); message.classList.remove('is-error');
     let link;
     try { link = parseDropboxLink($('#reviewsLinkUrl').value); }
     catch (error) { message.textContent = error.message; message.classList.add('is-error'); return; }
-    const existing = state.records.find(record => record.source === 'dropbox' && record.sourceUrl === link.sourceUrl);
+    const existing = state.records.find(record => record.versionId === state.versionId && record.source === 'dropbox' && record.sourceUrl === link.sourceUrl);
     if (existing) { await selectRecord(existing.id); message.textContent = 'Este archivo ya estaba vinculado; lo abrimos en el visor.'; return; }
     const now = new Date().toISOString();
-    const record = { id: crypto.randomUUID(), name: link.name, kind: $('#reviewsLinkKind').value, source: 'dropbox', sourceUrl: link.sourceUrl, size: 0, createdAt: now, updatedAt: now, comments: [] };
+    const record = { id: crypto.randomUUID(), projectId: state.projectId, versionId: state.versionId, name: link.name, kind: $('#reviewsLinkKind').value, source: 'dropbox', sourceUrl: link.sourceUrl, size: 0, createdAt: now, updatedAt: now, comments: [] };
     try {
       await saveRecord(record);
       state.records.unshift(record); await selectRecord(record.id);
@@ -309,8 +418,15 @@
       message.textContent = 'En Dropbox: Compartir → Copiar enlace del archivo. Para verlo acá, debe permitir acceso a cualquiera con el enlace.';
     } catch (error) { message.textContent = 'No se pudo guardar el enlace en este navegador.'; message.classList.add('is-error'); console.error(error); }
   }
+  function clearViewer() {
+    stopMedia(); state.active = null; localStorage.removeItem(ACTIVE_KEY);
+    $('#reviewsMediaTitle').textContent = 'Elegí un archivo'; $('#reviewsMediaDetails').textContent = 'Vinculá Dropbox o cargá un archivo para empezar.';
+    $('#reviewsEmpty').hidden = false; $('#reviewsMediaSurface').hidden = true; $('#reviewsTimeline').hidden = true;
+    $('#reviewsAnnotationBar').hidden = true; $('#reviewsCommentForm').hidden = true; $('#reviewsRemoveMedia').hidden = true; $('#reviewsOpenSource').hidden = true; $('#reviewsShareBtn').hidden = true; $('#reviewsMediaError').hidden = true; $('#reviewsViewTools').hidden = true; $('#reviewsPlaybackTools').hidden = true;
+    showStatus('Elegí un archivo para ver sus comentarios.'); renderList(); renderCommentList();
+  }
   async function removeActive() {
-    const record = state.active; if (!record || !confirm(`¿Quitar “${record.name}” y sus comentarios de este navegador?${record.source === 'dropbox' ? ' El archivo original de Dropbox no se eliminará.' : ''}`)) return;
+    const record = state.active; if (!record || !await askConfirmation('¿Quitar este archivo?', `Se van a quitar “${record.name}” y sus comentarios de este navegador.${record.source === 'dropbox' ? ' El archivo original de Dropbox se conserva.' : ''}`, 'Quitar archivo')) return;
     try {
       const db = await openDatabase();
       await new Promise((resolve, reject) => {
@@ -319,13 +435,7 @@
         tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error);
       });
       stopMedia(); state.records = state.records.filter(entry => entry.id !== record.id); state.active = null; localStorage.removeItem(ACTIVE_KEY);
-      if (state.records.length) await selectRecord(state.records[0].id);
-      else {
-        $('#reviewsMediaTitle').textContent = 'Elegí un archivo'; $('#reviewsMediaDetails').textContent = 'Vinculá Dropbox o cargá un archivo para empezar.';
-        $('#reviewsEmpty').hidden = false; $('#reviewsMediaSurface').hidden = true; $('#reviewsTimeline').hidden = true;
-        $('#reviewsAnnotationBar').hidden = true; $('#reviewsCommentForm').hidden = true; $('#reviewsRemoveMedia').hidden = true; $('#reviewsOpenSource').hidden = true; $('#reviewsShareBtn').hidden = true; $('#reviewsMediaError').hidden = true; $('#reviewsViewTools').hidden = true; $('#reviewsPlaybackTools').hidden = true;
-        showStatus('Elegí un archivo para ver sus comentarios.'); renderList(); renderCommentList();
-      }
+      const next = versionRecords()[0]; if (next) await selectRecord(next.id); else clearViewer();
     } catch (error) { showStatus('No se pudo eliminar el archivo.'); console.error(error); }
   }
   function showReviews() {
@@ -333,16 +443,30 @@
     if (document.body.classList.contains('auth-locked') && !publicView) return;
     showDashboard();
     if (publicView) document.body.classList.add('public-review');
-    $('#dashboardView').hidden = true; $('#reviewsView').hidden = false; document.body.classList.add('reviews-open');
+    $('#dashboardView').hidden = true; $('#reviewsHome').hidden = true; $('#reviewsView').hidden = false; document.body.classList.add('reviews-open');
     $('#reviewsHudRestore').hidden = true;
     $('#storyboardsNav').classList.remove('is-active'); $('#reviewsNav').classList.add('is-active');
-    $('#breadcrumbTitle').textContent = 'Reviews';
+    $('#breadcrumbTitle').textContent = currentVersion()?.title || 'Reviews';
+    $('#reviewsLibraryEyebrow').textContent = currentProject()?.title?.toUpperCase() || 'REVISIÓN DE MATERIAL';
+    $('#reviewsLibraryTitle').firstChild.textContent = currentVersion()?.title || 'Reviews';
     applyReviewPermissions();
     requestAnimationFrame(fitSurface);
   }
   async function initialize() {
     try {
       state.records = await databaseRequest('items', 'readonly', store => store.getAll()) || [];
+      state.projects = await databaseRequest('projects', 'readonly', store => store.getAll()) || [];
+      const legacy = state.records.filter(record => !record.projectId || !record.versionId);
+      if (legacy.length) {
+        let project = state.projects.find(entry => entry.legacy);
+        if (!project) {
+          const now = new Date().toISOString();
+          project = { id: crypto.randomUUID(), title: 'Reviews anteriores', client: 'Sin asignar', agency: '', director: '', legacy: true, createdAt: now, updatedAt: now, versions: [{ id: crypto.randomUUID(), title: 'Review original', category: 'General', createdAt: now, updatedAt: now }] };
+        }
+        const db = await openDatabase();
+        await new Promise((resolve, reject) => { const tx = db.transaction(['projects', 'items'], 'readwrite'); tx.objectStore('projects').put(project); for (const record of legacy) { record.projectId = project.id; record.versionId = project.versions[0].id; tx.objectStore('items').put(record); } tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); });
+        if (!state.projects.some(entry => entry.id === project.id)) state.projects.push(project);
+      }
       renderList();
     } catch (error) { showStatus('Reviews necesita almacenamiento local del navegador para guardar archivos y comentarios.'); console.error(error); }
     if (sharedReview) {
@@ -352,9 +476,7 @@
       showReviews();
       return;
     }
-    const id = localStorage.getItem(ACTIVE_KEY);
-    if (id && state.records.some(record => record.id === id)) await selectRecord(id);
-    else if (state.records.length) await selectRecord(state.records[0].id);
+    renderHome();
   }
 
   function setRangePoint(which) {
@@ -407,8 +529,46 @@
   function toggleHud() { const hidden = document.body.classList.toggle('reviews-hud-hidden'); $('#reviewsHudRestore').hidden = !hidden; requestAnimationFrame(fitSurface); }
   function isEditingText(target) { return target?.closest?.('input,textarea,select,[contenteditable="true"]'); }
 
-  $('#reviewsNav').addEventListener('click', showReviews);
-  $('#dashboardReviewsBtn').addEventListener('click', showReviews);
+  $('#reviewsNav').addEventListener('click', () => sharedReview && !window.STUDIO_SIGNED_IN ? showReviews() : showReviewsHome());
+  $('#dashboardReviewsBtn').addEventListener('click', () => showReviewsHome());
+  $('#reviewsBackVersions').addEventListener('click', () => showReviewsHome(state.projectId));
+  $('#reviewsBackProjects').addEventListener('click', () => showReviewsHome());
+  $('#reviewsCreateProject').addEventListener('click', () => openForm('project'));
+  $('#reviewsCreateVersion').addEventListener('click', () => openForm('version'));
+  $('#reviewsEmptyCreate').addEventListener('click', () => openForm(currentProject() ? 'version' : 'project'));
+  $('#reviewsFormClose').addEventListener('click', closeForm);
+  $('#reviewsFormCancel').addEventListener('click', closeForm);
+  $('#reviewsEntityForm').addEventListener('submit', async event => {
+    event.preventDefault(); if (!formMode) return;
+    const title = $('#reviewsEntityTitle').value.trim(), client = $('#reviewsEntityClient').value.trim();
+    if (!title || (formMode.type === 'project' && !client)) return;
+    const now = new Date().toISOString();
+    try {
+      if (formMode.type === 'project') {
+        const old = state.projects.find(entry => entry.id === formMode.id);
+        const project = { id: old?.id || crypto.randomUUID(), title, client, agency: $('#reviewsEntityAgency').value.trim(), director: $('#reviewsEntityDirector').value.trim(), createdAt: old?.createdAt || now, updatedAt: now, versions: old?.versions || [{ id: crypto.randomUUID(), title: 'Montaje · V1', category: 'Montaje', createdAt: now, updatedAt: now }] };
+        if (old?.legacy) project.legacy = true;
+        await saveProject(project);
+        state.projects = old ? state.projects.map(entry => entry.id === old.id ? project : entry) : [...state.projects, project];
+        closeForm(); if (old) renderHome(); else showReviewsHome(project.id);
+      } else {
+        const project = currentProject(); if (!project) return;
+        const old = project.versions.find(entry => entry.id === formMode.id);
+        const version = { id: old?.id || crypto.randomUUID(), title, category: $('#reviewsEntityCategory').value, createdAt: old?.createdAt || now, updatedAt: now };
+        const updated = { ...project, updatedAt: now, versions: old ? project.versions.map(entry => entry.id === old.id ? version : entry) : [...project.versions, version] };
+        await saveProject(updated);
+        state.projects = state.projects.map(entry => entry.id === updated.id ? updated : entry);
+        closeForm(); renderHome();
+      }
+    } catch (error) { console.error(error); $('#reviewsFormCopy').textContent = 'No se pudo guardar. Revisá el espacio disponible en este navegador.'; }
+  });
+  $('#reviewsConfirmClose').addEventListener('click', () => closeConfirmation(false));
+  $('#reviewsConfirmCancel').addEventListener('click', () => closeConfirmation(false));
+  $('#reviewsConfirmAccept').addEventListener('click', () => closeConfirmation(true));
+  $('#reviewsCopyClose').addEventListener('click', () => { $('#reviewsCopyModal').hidden = true; });
+  $('#reviewsCopyDone').addEventListener('click', () => { $('#reviewsCopyModal').hidden = true; });
+  for (const id of ['#reviewsFormModal', '#reviewsConfirmModal', '#reviewsCopyModal']) $(id).addEventListener('click', event => { if (event.target !== $(id)) return; if (id === '#reviewsFormModal') closeForm(); else if (id === '#reviewsConfirmModal') closeConfirmation(false); else $(id).hidden = true; });
+  document.addEventListener('keydown', event => { if (event.key !== 'Escape') return; if (!$('#reviewsConfirmModal').hidden) closeConfirmation(false); else if (!$('#reviewsFormModal').hidden) closeForm(); else $('#reviewsCopyModal').hidden = true; });
   $('#storyboardsNav').addEventListener('click', () => video.pause());
   document.querySelector('.brand').addEventListener('click', () => video.pause());
   $('#reviewsUploadBtn').addEventListener('click', () => $('#reviewsFileInput').click());
@@ -432,7 +592,7 @@
     if (state.active?.source !== 'dropbox') return;
     const link = new URL(location.href); link.hash = new URLSearchParams({ review: state.active.sourceUrl, kind: state.active.kind }).toString();
     try { await navigator.clipboard.writeText(link.href); showStatus('Enlace de vista copiado. La otra persona podrá ver el archivo; los comentarios todavía no se comparten.'); }
-    catch { window.prompt('Copiá el enlace de vista:', link.href); }
+    catch { $('#reviewsCopyInput').value = link.href; $('#reviewsCopyModal').hidden = false; $('#reviewsCopyInput').focus(); $('#reviewsCopyInput').select(); }
   });
   $('#reviewsInBtn').addEventListener('click', () => setRangePoint('in'));
   $('#reviewsOutBtn').addEventListener('click', () => setRangePoint('out'));
@@ -446,7 +606,7 @@
   $('#reviewsHudBtn').addEventListener('click', toggleHud);
   $('#reviewsHudRestore').addEventListener('click', toggleHud);
   document.addEventListener('fullscreenchange', () => { $('#reviewsFullscreenBtn').textContent = document.fullscreenElement ? 'F · Salir de pantalla completa' : 'F · Pantalla completa'; requestAnimationFrame(fitSurface); });
-  $('#reviewsStage').addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) { event.preventDefault(); $('#reviewsStage').classList.add('is-drop-target'); } });
+  $('#reviewsStage').addEventListener('dragover', event => { if (!isGuestReview() && currentVersion() && event.dataTransfer?.types.includes('Files')) { event.preventDefault(); $('#reviewsStage').classList.add('is-drop-target'); } });
   $('#reviewsStage').addEventListener('dragleave', () => $('#reviewsStage').classList.remove('is-drop-target'));
   $('#reviewsStage').addEventListener('drop', event => { event.preventDefault(); $('#reviewsStage').classList.remove('is-drop-target'); addFiles([...event.dataTransfer.files]); });
   $('#reviewsStage').addEventListener('wheel', event => { if (!state.active || state.active.kind === 'model') return; event.preventDefault(); zoomAt(Math.exp(-event.deltaY * .002), event.clientX, event.clientY); }, { passive: false });
