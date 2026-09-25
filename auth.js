@@ -11,6 +11,7 @@ const authGateStatus = document.querySelector('#authGateStatus');
 // connected to the correct Firebase project without putting project-specific
 // credentials in the source code by accident.
 const firebaseConfig = window.STORYBOARD_FIREBASE_CONFIG;
+const publicReview = new URLSearchParams(location.hash.slice(1)).has('share') || new URLSearchParams(location.hash.slice(1)).has('review');
 
 function setAuthGate(locked, title = '', copy = '', status = '') {
   document.body.classList.toggle('auth-locked', locked);
@@ -28,17 +29,21 @@ function showAuthMessage(message) {
 
 function renderSignedOut() {
   window.STUDIO_SIGNED_IN = false;
+  window.STUDIO_ROLE = null;
+  window.STUDIO_USER = null;
   accountAvatar.textContent = 'G';
   accountAvatar.style.backgroundImage = '';
   accountLabel.textContent = 'Iniciar sesión';
   accountButton?.setAttribute('aria-label', 'Iniciar sesión con Google');
   accountButton?.classList.remove('is-authenticated');
-  setAuthGate(true, 'Iniciá sesión para entrar.', 'Tu espacio de preproducción está protegido. Continuá con tu cuenta de Google para ver tus proyectos.');
+  setAuthGate(!publicReview, 'Iniciá sesión para entrar.', 'Tu espacio de preproducción está protegido. Continuá con tu cuenta de Google para ver tus proyectos.');
   window.dispatchEvent(new Event('studio-auth-change'));
 }
 
-function renderSignedIn(user) {
+function renderSignedIn(user, role) {
   window.STUDIO_SIGNED_IN = true;
+  window.STUDIO_ROLE = role;
+  window.STUDIO_USER = user;
   const name = user.displayName || user.email || 'Cuenta';
   accountLabel.textContent = name;
   accountButton?.setAttribute('aria-label', `Cerrar sesión de ${name}`);
@@ -54,6 +59,17 @@ function renderSignedIn(user) {
   window.dispatchEvent(new Event('studio-auth-change'));
 }
 
+function renderNoAccess(user) {
+  window.STUDIO_SIGNED_IN = false;
+  window.STUDIO_ROLE = null;
+  window.STUDIO_USER = user;
+  accountAvatar.textContent = (user.displayName || user.email || 'G').charAt(0).toUpperCase();
+  accountLabel.textContent = user.email || 'Cuenta sin acceso';
+  accountButton?.setAttribute('aria-label', 'Cerrar sesión');
+  setAuthGate(!publicReview, 'Esta cuenta no tiene acceso.', 'Pedile al administrador de GB Studio que habilite tu correo de Google para entrar al estudio.');
+  window.dispatchEvent(new Event('studio-auth-change'));
+}
+
 if (!firebaseConfig?.apiKey || !firebaseConfig?.authDomain || !firebaseConfig?.projectId) {
   renderSignedOut();
   setAuthGate(true, 'No se pudo conectar el acceso.', 'La configuración de Firebase no está disponible en esta versión publicada.', 'Revisá la conexión del proyecto e intentá nuevamente.');
@@ -62,14 +78,33 @@ if (!firebaseConfig?.apiKey || !firebaseConfig?.authDomain || !firebaseConfig?.p
   authGateButton?.addEventListener('click', missingConfigMessage);
 } else {
   try {
-    const [{ initializeApp }, { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut }] = await Promise.all([
+    const [{ initializeApp }, { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut }, cloud] = await Promise.all([
       import('https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js'),
       import('https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js'),
+      import('./reviews-cloud.js?v=2'),
     ]);
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
-    onAuthStateChanged(auth, user => user ? renderSignedIn(user) : renderSignedOut());
+    let stopRoleWatch = null;
+    window.STUDIO_CLOUD = cloud;
+    onAuthStateChanged(auth, user => {
+      stopRoleWatch?.(); stopRoleWatch = null;
+      if (!user || user.isAnonymous) { renderSignedOut(); return; }
+      const google = user.emailVerified && user.providerData.some(item => item.providerId === 'google.com');
+      if (!google) { renderNoAccess(user); return; }
+      if (user.email?.toLowerCase() === 'info@granbertafilms.com') { renderSignedIn(user, 'admin'); return; }
+      if (!publicReview) setAuthGate(true, 'Verificando acceso…', 'Estamos comprobando si tu cuenta está autorizada para entrar al estudio.');
+      stopRoleWatch = cloud.watchStaffRole(user, role => {
+        if (auth.currentUser?.uid !== user.uid) return;
+        role ? renderSignedIn(user, role) : renderNoAccess(user);
+      }, error => {
+        if (auth.currentUser?.uid !== user.uid) return;
+        console.error('Could not verify studio access', error);
+        renderNoAccess(user);
+        if (!publicReview) setAuthGate(true, 'No se pudo verificar el acceso.', 'Revisá la conexión con Firebase e intentá nuevamente.');
+      });
+    });
     const signIn = async () => {
       try {
         await signInWithPopup(auth, provider);

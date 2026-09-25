@@ -41,6 +41,7 @@ const server = http.createServer((request, response) => {
     await page.locator('#reviewsEntityTitle').fill('Campaña test');
     await page.locator('#reviewsEntityClient').fill('Cliente test');
     await page.locator('#reviewsEntityForm button[type=submit]').click();
+    await page.locator('#reviewsFormModal').waitFor({ state: 'hidden' });
     if (process.env.REVIEW_VERSION_SCREENSHOT) await page.screenshot({ path: process.env.REVIEW_VERSION_SCREENSHOT, fullPage: true });
     await page.locator('#reviewsHomeGrid .reviews-home-card-open').first().click();
     assert.equal(await page.locator('#reviewsView').isVisible(), true);
@@ -284,10 +285,11 @@ const server = http.createServer((request, response) => {
     await page.waitForFunction(() => document.querySelector('#reviewsVideo').duration > .5);
     assert.match(await page.locator('#reviewsVideo').getAttribute('src'), /rlkey=xyz&raw=1/);
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.evaluate(() => { window.STUDIO_SIGNED_IN = true; });
     await page.locator('#reviewsShareBtn').click();
-    const copiedLink = await page.evaluate(() => navigator.clipboard.readText());
-    assert.match(copiedLink, /#review=/);
-    assert.equal(new URLSearchParams(new URL(copiedLink).hash.slice(1)).get('review'), 'https://www.dropbox.com/scl/fi/videoid/revision.webm?rlkey=xyz');
+    await page.waitForFunction(() => document.querySelector('#reviewsCommentContext').textContent.includes('No se pudo publicar'));
+    assert.equal(await page.locator('#reviewsCopyModal').isVisible(), false, 'a failed cloud publish does not expose a fake share link');
+    await page.evaluate(() => { window.STUDIO_SIGNED_IN = false; });
     await page.locator('#reviewsCommentText').fill('Cambio en video de Dropbox');
     await page.locator('#reviewsCommentForm button[type=submit]').click();
     await page.waitForFunction(() => document.querySelector('#reviewsCommentCount').textContent === '1');
@@ -375,13 +377,13 @@ const server = http.createServer((request, response) => {
       const guestBounds = await guest.evaluate(() => ({ stage: document.querySelector('#reviewsStage').getBoundingClientRect().toJSON(), media: document.querySelector('#reviewsMediaSurface').getBoundingClientRect().toJSON() }));
       assert.ok(guestBounds.media.bottom <= guestBounds.stage.bottom - 10 && guestBounds.media.top >= guestBounds.stage.top + 10, `guest video fits stage: ${JSON.stringify(guestBounds)}`);
       assert.equal(await guest.locator('#authGate').isVisible(), false, 'the video can be viewed without login');
-      assert.equal(await guest.locator('#reviewsGuestPrompt').isVisible(), true, 'login is requested only for comments');
+      assert.equal(await guest.locator('#reviewsGuestPrompt').isVisible(), false, 'legacy single-file links do not promise shared feedback');
       assert.equal(await guest.locator('#reviewsCommentForm').isVisible(), false);
       if (process.env.REVIEW_GUEST_SCREENSHOT) await guest.screenshot({ path: process.env.REVIEW_GUEST_SCREENSHOT, fullPage: true });
       await guest.setViewportSize({ width: 390, height: 844 });
       assert.equal(await guest.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'guest player fits a phone');
-      assert.equal(await guest.locator('#reviewsGuestPrompt').isVisible(), true);
-      await guest.locator('#storyboardsNav').click();
+      assert.equal(await guest.locator('#reviewsGuestPrompt').isVisible(), false);
+      await guest.goto(url);
       assert.equal(await guest.locator('#authGate').isVisible(), true, 'storyboards remain protected');
     } finally { await guest.close(); }
     const migration = await browser.newPage();

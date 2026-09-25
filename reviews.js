@@ -4,12 +4,14 @@
   const $ = selector => document.querySelector(selector);
   const DB_NAME = 'gb-studio-reviews-v1';
   const ACTIVE_KEY = 'gb-studio-reviews-active-v1';
-  const state = { records: [], projects: [], projectId: null, versionId: null, active: null, mediaUrl: null, model: null, drawing: false, sketchMode: false, draft: [], scratch: [], activeCommentId: null, pointerId: null, saving: false, view: { scale: 1, x: 0, y: 0 }, zHeld: false, zoomPointer: null };
+  const state = { records: [], projects: [], projectId: null, versionId: null, active: null, mediaUrl: null, model: null, drawing: false, sketchMode: false, draft: [], scratch: [], activeCommentId: null, pointerId: null, saving: false, view: { scale: 1, x: 0, y: 0 }, zHeld: false, zoomPointer: null, shareToken: null, guestName: '', guestUid: null, stopComments: null };
   const video = $('#reviewsVideo');
   const image = $('#reviewsImage');
   const canvas = $('#reviewsCanvas');
   const ctx = canvas.getContext('2d');
   let databasePromise;
+  let initialized;
+  let hydratedUserUid = null;
 
   function openDatabase() {
     if (!databasePromise) databasePromise = new Promise((resolve, reject) => {
@@ -36,8 +38,19 @@
       transaction.onabort = () => reject(transaction.error || new Error('No se pudo guardar el archivo'));
     });
   }
-  async function saveRecord(record) { await databaseRequest('items', 'readwrite', store => store.put(record)); }
-  async function saveProject(project) { await databaseRequest('projects', 'readwrite', store => store.put(project)); }
+  const cloud = () => import('./reviews-cloud.js?v=2');
+  async function saveRecord(record) {
+    const token = state.projects.find(project => project.id === record.projectId)?.versions.find(version => version.id === record.versionId)?.shareToken;
+    if (token && record.source === 'dropbox') await (await cloud()).upsertSharedFile(token, record);
+    if (window.STUDIO_SIGNED_IN && !isGuestReview()) await (await cloud()).saveStaffFile(record);
+    await databaseRequest('items', 'readwrite', store => store.put(record));
+  }
+  async function saveProject(project) {
+    const shared = project.versions.filter(version => version.shareToken);
+    if (shared.length) { const api = await cloud(); for (const version of shared) await api.updateShareMetadata(project, version); }
+    if (window.STUDIO_SIGNED_IN && !isGuestReview()) await (await cloud()).saveStaffProject(project);
+    await databaseRequest('projects', 'readwrite', store => store.put(project));
+  }
   async function getMedia(id) { return databaseRequest('media', 'readonly', store => store.get(id)); }
   function currentProject() { return state.projects.find(project => project.id === state.projectId); }
   function currentVersion() { return currentProject()?.versions.find(version => version.id === state.versionId); }
@@ -73,7 +86,10 @@
     catch { return null; }
   }
   const sharedReview = sharedReviewFromHash();
-  if (sharedReview) document.body.classList.add('public-review');
+  const sharedToken = new URLSearchParams(location.hash.slice(1)).get('share');
+  if (sharedReview || sharedToken) document.body.classList.add('public-review');
+  if (sharedReview) document.body.classList.add('legacy-public-review');
+  if (sharedToken) { state.shareToken = sharedToken; state.guestName = sessionStorage.getItem(`gb-review-guest:${sharedToken}`) || ''; }
   let formMode = null;
   let confirmResolve = null;
   let sectionEditId = null;
@@ -133,11 +149,13 @@
       open.append(mark, tag, title, count, arrow);
       open.addEventListener('click', () => project ? openVersion(entry.id) : showReviewsHome(entry.id));
       const actions = document.createElement('div'); actions.className = 'reviews-home-card-actions';
+      if (project) actions.append(cardAction('↗ Compartir', `Compartir ${entry.title}`, () => shareVersion(entry.id)));
       actions.append(cardAction('✎ Editar', `Editar ${entry.title}`, () => openForm(project ? 'version' : 'project', entry)), cardAction('⌫ Eliminar', `Eliminar ${entry.title}`, () => project ? deleteVersion(entry.id) : deleteProject(entry.id)));
       card.append(open, actions); grid.append(card);
     }
   }
   function showReviewsHome(projectId = null) {
+    if (document.body.classList.contains('public-review')) return;
     if (document.body.classList.contains('auth-locked')) return;
     showDashboard();
     stopMedia(); state.active = null; state.projectId = projectId; state.versionId = null;
@@ -156,10 +174,54 @@
     if (records.length) await selectRecord((preferred || records.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]).id);
     else clearViewer();
   }
+  async function shareVersion(versionId = state.versionId) {
+    if (!window.STUDIO_SIGNED_IN) return;
+    const project = currentProject(), version = project?.versions.find(entry => entry.id === versionId);
+    if (!version) return;
+    const records = state.records.filter(record => record.versionId === versionId);
+    if (!records.length) {
+      const message = 'Vinculá al menos un archivo de Dropbox antes de compartir esta review.';
+      if ($('#reviewsHome').hidden) showStatus(message); else $('#reviewsHomeCopy').textContent = message;
+      return;
+    }
+    if (records.some(record => record.source !== 'dropbox')) {
+      const message = 'Esta review todavía tiene archivos locales antiguos. Quitalos o reemplazalos por enlaces de Dropbox antes de compartir.';
+      if ($('#reviewsHome').hidden) showStatus(message); else $('#reviewsHomeCopy').textContent = message;
+      return;
+    }
+    try {
+      const token = await (await cloud()).publishReview(project, version, records);
+      if (!version.shareToken) {
+        const updated = { ...project, versions: project.versions.map(entry => entry.id === version.id ? { ...entry, shareToken: token } : entry) };
+        await saveProject(updated);
+        state.projects = state.projects.map(entry => entry.id === project.id ? updated : entry);
+      }
+      const link = new URL(location.href); link.hash = new URLSearchParams({ share: token }).toString();
+      $('#reviewsCopyInput').value = link.href;
+      $('#reviewsCopyModal').hidden = false;
+      $('#reviewsCopyInput').focus(); $('#reviewsCopyInput').select();
+      try { await navigator.clipboard.writeText(link.href); $('#reviewsCopyDescription').textContent = 'Enlace copiado. El cliente solo verá esta review; podrá comentar y dibujar luego de escribir su nombre.'; }
+      catch { $('#reviewsCopyDescription').textContent = 'Copiá el enlace para enviárselo al cliente. Solo podrá entrar a esta review.'; }
+      if (!$('#reviewsHome').hidden) renderHome();
+    } catch (error) {
+      console.error('Review sharing failed', error);
+      const message = 'No se pudo publicar la review. Revisá que Firestore esté activo y que tengas permiso de acceso.';
+      if ($('#reviewsHome').hidden) showStatus(message); else $('#reviewsHomeCopy').textContent = message;
+    }
+  }
   async function deleteProject(id) {
     const project = state.projects.find(entry => entry.id === id); if (!project) return;
-    if (!await askConfirmation('¿Eliminar este proyecto?', `Se van a quitar “${project.title}”, sus reviews, archivos y comentarios de este navegador. Los originales de Dropbox no se borrarán.`)) return;
+    if (!await askConfirmation('¿Eliminar este proyecto?', `Se van a quitar “${project.title}”, sus reviews y comentarios. Los enlaces compartidos dejarán de funcionar. Los originales de Dropbox no se borrarán.`)) return;
     try {
+      if (project.versions.some(version => version.shareToken)) {
+        const api = await cloud();
+        for (const version of project.versions) if (version.shareToken) await api.deleteSharedReview(version.shareToken);
+      }
+      if (window.STUDIO_SIGNED_IN) {
+        const api = await cloud();
+        for (const record of state.records.filter(entry => entry.projectId === id)) await api.deleteStaffFile(record.id);
+        await api.deleteStaffProject(id);
+      }
       const db = await openDatabase();
       await new Promise((resolve, reject) => { const tx = db.transaction(['projects', 'items', 'media'], 'readwrite'); tx.objectStore('projects').delete(id); for (const record of state.records.filter(entry => entry.projectId === id)) { tx.objectStore('items').delete(record.id); tx.objectStore('media').delete(record.id); } tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); });
       state.projects = state.projects.filter(entry => entry.id !== id); state.records = state.records.filter(entry => entry.projectId !== id);
@@ -169,21 +231,29 @@
   }
   async function deleteVersion(id) {
     const project = currentProject(), version = project?.versions.find(entry => entry.id === id); if (!version) return;
-    if (!await askConfirmation('¿Eliminar esta review?', `Se van a quitar “${version.title}” y sus archivos y comentarios de este navegador. Las otras reviews del proyecto se conservan.`)) return;
+    if (!await askConfirmation('¿Eliminar esta review?', `Se van a quitar “${version.title}”, sus archivos y comentarios. Su enlace compartido dejará de funcionar. Las otras reviews se conservan.`)) return;
     const updated = { ...project, versions: project.versions.filter(entry => entry.id !== id), updatedAt: new Date().toISOString() };
     try {
+      if (version.shareToken) await (await cloud()).deleteSharedReview(version.shareToken);
+      if (window.STUDIO_SIGNED_IN) {
+        const api = await cloud();
+        for (const record of state.records.filter(entry => entry.versionId === id)) await api.deleteStaffFile(record.id);
+        await api.saveStaffProject(updated);
+      }
       const db = await openDatabase();
       await new Promise((resolve, reject) => { const tx = db.transaction(['projects', 'items', 'media'], 'readwrite'); tx.objectStore('projects').put(updated); for (const record of state.records.filter(entry => entry.versionId === id)) { tx.objectStore('items').delete(record.id); tx.objectStore('media').delete(record.id); } tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); });
       state.projects = state.projects.map(entry => entry.id === project.id ? updated : entry); state.records = state.records.filter(entry => entry.versionId !== id); renderHome();
     } catch (error) { console.error(error); $('#reviewsHomeCopy').textContent = 'No se pudo eliminar esta review. Revisá el almacenamiento del navegador.'; }
   }
-  function isGuestReview() { return document.body.classList.contains('public-review') && !window.STUDIO_SIGNED_IN; }
+  function isGuestReview() { return document.body.classList.contains('public-review'); }
+  function canComment() { return !isGuestReview() || Boolean(state.shareToken && (state.guestName || window.STUDIO_SIGNED_IN)); }
   function applyReviewPermissions() {
     const guest = isGuestReview();
-    $('#reviewsGuestPrompt').hidden = !guest;
-    $('#reviewsCommentForm').hidden = guest || !state.active;
-    $('#reviewsAnnotationBar').hidden = guest || !state.active;
+    $('#reviewsGuestPrompt').hidden = !guest || canComment() || !state.shareToken;
+    $('#reviewsCommentForm').hidden = !canComment() || !state.active;
+    $('#reviewsAnnotationBar').hidden = !canComment() || !state.active;
     $('#reviewsRemoveMedia').hidden = guest || !state.active;
+    $('#reviewsCommentStorageNote').textContent = state.shareToken || currentVersion()?.shareToken ? 'Los comentarios y dibujos de esta review se comparten con quienes tengan el enlace.' : 'Este comentario se guarda solo en este navegador hasta que compartas la review.';
     renderCommentList();
   }
   function isVideo() { return state.active?.kind === 'video'; }
@@ -199,7 +269,7 @@
   function frameMode() { return state.active?.timelineMode === 'frames'; }
   function seekFrame(index) { if (!isVideo() || !Number.isFinite(video.duration)) return; video.pause(); video.currentTime = Math.min(video.duration, Math.max(0, Math.min(lastFrameIndex(), Math.round(index))) / fps()); updateClock(); }
   function isMp4() { return isVideo() && /\.mp4$/i.test(state.active?.name || ''); }
-  async function saveActiveSettings() { if (!state.active || state.active.ephemeral) return; state.active.updatedAt = new Date().toISOString(); try { await saveRecord(state.active); } catch { showStatus('No se pudieron guardar los ajustes en este navegador.'); } }
+  async function saveActiveSettings() { if (!state.active || isGuestReview() || state.active.ephemeral) return; state.active.updatedAt = new Date().toISOString(); try { await saveRecord(state.active); } catch { showStatus('No se pudieron guardar los ajustes.'); } }
   function resetView() { state.view = { scale: 1, x: 0, y: 0 }; applyView(); state.model?.fit(); }
   function applyView() { $('#reviewsMediaSurface').style.transform = `translate(${state.view.x}px, ${state.view.y}px) scale(${state.view.scale})`; $('#reviewsZoomValue').textContent = `${Math.round(state.view.scale * 100)}%`; }
   function zoomAt(factor, clientX, clientY) {
@@ -270,6 +340,8 @@
     if (sourceSectionId !== targetSectionId) applyOrder(sourceIds, sourceSectionId);
     applyOrder(targetIds, targetSectionId);
     try {
+      const token = currentVersion()?.shareToken;
+      if (token || window.STUDIO_SIGNED_IN) { const api = await cloud(); for (const updated of updates.values()) { if (token) await api.upsertSharedFile(token, updated); if (window.STUDIO_SIGNED_IN) await api.saveStaffFile(updated); } }
       const db = await openDatabase();
       await new Promise((resolve, reject) => { const tx = db.transaction('items', 'readwrite'); for (const updated of updates.values()) tx.objectStore('items').put(updated); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); });
       state.records = state.records.map(entry => updates.get(entry.id) || entry);
@@ -286,6 +358,11 @@
     const updatedProject = { ...project, versions: project.versions.map(entry => entry.id === version.id ? { ...entry, sections: entry.sections.filter(item => item.id !== id) } : entry) };
     const moved = orderedRecords(id).map((record, index) => ({ ...record, sectionId: 'default', sortIndex: orderedRecords('default').length + index }));
     try {
+      if (version.shareToken) {
+        const api = await cloud(); await api.updateShareMetadata(updatedProject, updatedProject.versions.find(entry => entry.id === id));
+        for (const record of moved) await api.upsertSharedFile(version.shareToken, record);
+      }
+      if (window.STUDIO_SIGNED_IN) { const api = await cloud(); await api.saveStaffProject(updatedProject); for (const record of moved) await api.saveStaffFile(record); }
       const db = await openDatabase();
       await new Promise((resolve, reject) => { const tx = db.transaction(['projects', 'items'], 'readwrite'); tx.objectStore('projects').put(updatedProject); moved.forEach(record => tx.objectStore('items').put(record)); tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error); });
       state.projects = state.projects.map(entry => entry.id === project.id ? updatedProject : entry);
@@ -297,7 +374,7 @@
   function renderList() {
     const list = $('#reviewsList');
     list.replaceChildren();
-    const records = document.body.classList.contains('public-review') ? state.active ? [state.active] : [] : versionRecords();
+    const records = sharedReview ? state.active ? [state.active] : [] : versionRecords();
     $('#reviewsCount').textContent = records.length;
     $('#reviewsAddSection').hidden = !currentVersion() || isGuestReview();
     if (!records.length && !currentVersion()) { const empty = document.createElement('p'); empty.className = 'reviews-list-empty'; empty.textContent = 'Todavía no hay archivos.'; list.append(empty); return; }
@@ -309,7 +386,7 @@
       const sectionRecords = currentVersion() ? orderedRecords(section.id) : records;
       const count = document.createElement('span'); count.textContent = String(sectionRecords.length);
       heading.append(title, count);
-      if (section.id !== 'default') {
+      if (section.id !== 'default' && !isGuestReview()) {
         const edit = cardAction('✎', `Renombrar sección ${section.title}`, () => openSectionForm(section));
         const remove = cardAction('×', `Eliminar sección ${section.title}`, () => deleteSection(section.id));
         heading.append(edit, remove);
@@ -317,7 +394,7 @@
       const files = document.createElement('div'); files.className = 'reviews-section-files'; files.dataset.sectionId = section.id;
       if (!sectionRecords.length) { const empty = document.createElement('p'); empty.className = 'reviews-section-empty'; empty.textContent = records.length ? 'Arrastrá acá un archivo de esta review' : 'Vinculá un archivo de Dropbox'; files.append(empty); }
       for (const record of sectionRecords) {
-        const button = document.createElement('button'); button.type = 'button'; button.className = `reviews-file${record.id === state.active?.id ? ' is-active' : ''}`; button.dataset.recordId = record.id; button.draggable = Boolean(currentVersion());
+        const button = document.createElement('button'); button.type = 'button'; button.className = `reviews-file${record.id === state.active?.id ? ' is-active' : ''}`; button.dataset.recordId = record.id; button.draggable = Boolean(currentVersion()) && !isGuestReview();
         const icon = document.createElement('span'); icon.className = 'reviews-file-icon'; icon.textContent = record.kind === 'video' ? '▶' : record.kind === 'model' ? '◇' : '▧';
         const copy = document.createElement('span'); copy.className = 'reviews-file-copy';
         const name = document.createElement('strong'); name.textContent = record.name;
@@ -340,7 +417,7 @@
   }
   function renderCommentList() {
     const list = $('#reviewsCommentList'); list.replaceChildren();
-    if (isGuestReview()) { $('#reviewsCommentCount').textContent = '0'; const empty = document.createElement('p'); empty.className = 'reviews-comment-empty'; empty.textContent = 'Iniciá sesión para ver y dejar comentarios. Los comentarios aún no se sincronizan entre personas.'; list.append(empty); return; }
+    if (sharedReview) { $('#reviewsCommentCount').textContent = '0'; const empty = document.createElement('p'); empty.className = 'reviews-comment-empty'; empty.textContent = 'Este enlace antiguo muestra un archivo individual. Pedí el enlace nuevo de la review para compartir comentarios.'; list.append(empty); return; }
     const comments = state.active?.comments || [];
     $('#reviewsCommentCount').textContent = comments.length;
     if (!state.active) return;
@@ -350,13 +427,17 @@
     for (const comment of [...comments].sort((a, b) => a.time - b.time || a.createdAt.localeCompare(b.createdAt))) {
       const card = document.createElement('article'); card.className = `reviews-comment${comment.id === state.activeCommentId ? ' is-selected' : ''}${comment.resolved ? ' is-resolved' : ''}`;
       const open = document.createElement('button'); open.type = 'button'; open.className = 'reviews-comment-open';
-      const meta = document.createElement('span'); meta.className = 'reviews-comment-meta'; meta.textContent = `${isVideo() ? formatTime(comment.time) : 'FOTO'}${comment.strokes?.length ? ' · ✎ Anotación' : ''}`;
+      const meta = document.createElement('span'); meta.className = 'reviews-comment-meta'; meta.textContent = `${comment.authorName ? `${comment.authorName} · ` : ''}${isVideo() ? formatTime(comment.time) : 'FOTO'}${comment.strokes?.length ? ' · ✎ Anotación' : ''}`;
       const text = document.createElement('span'); text.className = 'reviews-comment-text'; text.textContent = comment.text || 'Anotación visual';
       open.append(meta, text); open.addEventListener('click', () => selectComment(comment.id));
-      const actions = document.createElement('div'); actions.className = 'reviews-comment-actions';
-      const resolve = document.createElement('button'); resolve.type = 'button'; resolve.textContent = comment.resolved ? 'Reabrir' : 'Resolver'; resolve.addEventListener('click', () => updateComment(comment.id, entry => { entry.resolved = !entry.resolved; }));
-      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Eliminar'; remove.addEventListener('click', () => updateComment(comment.id, null));
-      actions.append(resolve, remove); card.append(open, actions); list.append(card);
+      card.append(open);
+      if (!state.shareToken && !currentVersion()?.shareToken || window.STUDIO_SIGNED_IN || comment.authorUid && comment.authorUid === state.guestUid) {
+        const actions = document.createElement('div'); actions.className = 'reviews-comment-actions';
+        const resolve = document.createElement('button'); resolve.type = 'button'; resolve.textContent = comment.resolved ? 'Reabrir' : 'Resolver'; resolve.addEventListener('click', () => updateComment(comment.id, entry => { entry.resolved = !entry.resolved; }));
+        const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Eliminar'; remove.addEventListener('click', () => updateComment(comment.id, null));
+        actions.append(resolve, remove); card.append(actions);
+      }
+      list.append(card);
     }
   }
   function updateClock() {
@@ -391,6 +472,7 @@
   }
   async function selectRecord(id) {
     const record = state.records.find(entry => entry.id === id); if (!record) return;
+    state.stopComments?.(); state.stopComments = null;
     stopMedia(); state.active = record; state.draft = []; state.scratch = []; state.sketchMode = false; state.activeCommentId = null; state.drawing = false; resetView();
     localStorage.setItem(ACTIVE_KEY, id);
     renderList(); renderCommentList();
@@ -399,7 +481,7 @@
     $('#reviewsMediaSurface').style.setProperty('--review-aspect', String(16 / 9));
     $('#reviewsMediaError').hidden = true;
     $('#reviewsOpenSource').hidden = record.source !== 'dropbox';
-    $('#reviewsShareBtn').hidden = record.source !== 'dropbox';
+    $('#reviewsShareBtn').hidden = record.source !== 'dropbox' || isGuestReview();
     if (record.source === 'dropbox') { $('#reviewsOpenSource').href = record.sourceUrl; $('#reviewsErrorSource').href = record.sourceUrl; }
     $('#reviewsEmpty').hidden = true; $('#reviewsMediaSurface').hidden = false;
     $('#reviewsAnnotationBar').hidden = false; $('#reviewsCommentForm').hidden = false; $('#reviewsRemoveMedia').hidden = false;
@@ -411,6 +493,14 @@
     image.hidden = record.kind !== 'image'; video.hidden = record.kind !== 'video'; $('#reviewsModel').hidden = record.kind !== 'model'; canvas.hidden = record.kind === 'model';
     renderPlaybackSettings(); requestAnimationFrame(fitSurface);
     applyReviewPermissions();
+    const token = state.shareToken || currentVersion()?.shareToken;
+    if (token) {
+      state.stopComments = (await cloud()).watchComments(token, id, comments => {
+        if (state.active?.id !== id) return;
+        state.active.comments = comments;
+        renderCommentList(); renderMarkers(); renderList(); redraw();
+      }, error => { console.error('Could not load shared comments', error); showStatus('No se pudieron cargar los comentarios compartidos.'); });
+    }
     try {
       if (record.source === 'dropbox') {
         const link = parseDropboxLink(record.sourceUrl);
@@ -453,11 +543,19 @@
   }
   async function updateComment(id, mutate) {
     if (!state.active) return;
+    const previous = structuredClone(state.active.comments);
     if (mutate) { const entry = state.active.comments.find(comment => comment.id === id); if (!entry) return; mutate(entry); }
     else state.active.comments = state.active.comments.filter(comment => comment.id !== id);
     if (state.activeCommentId === id && !mutate) state.activeCommentId = null;
     state.active.updatedAt = new Date().toISOString();
-    try { await saveRecord(state.active); } catch { showStatus('No se pudo guardar el cambio. Revisá el espacio disponible.'); }
+    try {
+      const token = state.shareToken || currentVersion()?.shareToken;
+      if (token) {
+        const api = await cloud();
+        if (mutate) await api.changeSharedComment(token, state.active.id, state.active.comments.find(comment => comment.id === id));
+        else await api.deleteSharedComment(token, state.active.id, id);
+      } else await saveRecord(state.active);
+    } catch (error) { state.active.comments = previous; showStatus('No se pudo guardar el cambio.'); console.error(error); }
     renderCommentList(); renderList(); renderMarkers(); redraw();
   }
   async function addDropboxLink(event) {
@@ -479,6 +577,7 @@
     } catch (error) { message.textContent = 'No se pudo guardar el enlace en este navegador.'; message.classList.add('is-error'); console.error(error); }
   }
   function clearViewer() {
+    state.stopComments?.(); state.stopComments = null;
     stopMedia(); state.active = null; localStorage.removeItem(ACTIVE_KEY);
     $('#reviewsMediaTitle').textContent = 'Elegí un archivo'; $('#reviewsMediaDetails').textContent = 'Vinculá un archivo de Dropbox para empezar.';
     $('#reviewsEmpty').hidden = false; $('#reviewsMediaSurface').hidden = true; $('#reviewsTimeline').hidden = true;
@@ -488,6 +587,9 @@
   async function removeActive() {
     const record = state.active; if (!record || !await askConfirmation('¿Quitar este archivo?', `Se van a quitar “${record.name}” y sus comentarios de este navegador.${record.source === 'dropbox' ? ' El archivo original de Dropbox se conserva.' : ''}`, 'Quitar archivo')) return;
     try {
+      const token = currentVersion()?.shareToken;
+      if (token) await (await cloud()).removeSharedFile(token, record.id);
+      if (window.STUDIO_SIGNED_IN) await (await cloud()).deleteStaffFile(record.id);
       const db = await openDatabase();
       await new Promise((resolve, reject) => {
         const tx = db.transaction(['items', 'media'], 'readwrite');
@@ -513,6 +615,26 @@
     requestAnimationFrame(fitSurface);
   }
   async function initialize() {
+    if (sharedToken) {
+      try {
+        const share = await (await cloud()).getSharedReview(sharedToken);
+        const project = { id: share.projectId, title: share.projectTitle, client: share.client, agency: share.agency, director: share.director,
+          versions: [{ id: share.versionId, title: share.versionTitle, category: share.category, sections: share.sections || [], shareToken: sharedToken }] };
+        state.projects = [project]; state.projectId = project.id; state.versionId = share.versionId;
+        state.records = share.files;
+        showReviews();
+        const first = share.files.sort((a, b) => (a.sortIndex || 0) - (b.sortIndex || 0))[0];
+        if (first) await selectRecord(first.id); else clearViewer();
+        if (state.guestName) (await cloud()).guestIdentity().then(user => { state.guestUid = user.uid; renderCommentList(); }).catch(error => console.error('Guest session could not resume', error));
+      } catch (error) {
+        console.error('Could not load shared review', error);
+        showReviews(); clearViewer();
+        $('#reviewsMediaTitle').textContent = 'Review no disponible';
+        $('#reviewsMediaDetails').textContent = 'El enlace puede estar vencido o la review fue retirada.';
+        $('#reviewsEmpty p').textContent = 'Pedí un enlace nuevo al equipo de GB Studio.';
+      }
+      return;
+    }
     try {
       state.records = await databaseRequest('items', 'readonly', store => store.getAll()) || [];
       state.projects = await databaseRequest('projects', 'readonly', store => store.getAll()) || [];
@@ -589,7 +711,38 @@
   function toggleHud() { const hidden = document.body.classList.toggle('reviews-hud-hidden'); $('#reviewsHudRestore').hidden = !hidden; requestAnimationFrame(fitSurface); }
   function isEditingText(target) { return target?.closest?.('input,textarea,select,[contenteditable="true"]'); }
 
-  $('#reviewsNav').addEventListener('click', () => sharedReview && !window.STUDIO_SIGNED_IN ? showReviews() : showReviewsHome());
+  async function refreshStaffList() {
+    const list = $('#reviewsStaffList'); list.replaceChildren();
+    const people = await (await cloud()).staffList();
+    if (!people.length) { const empty = document.createElement('p'); empty.textContent = 'Todavía no hay otras cuentas autorizadas.'; list.append(empty); }
+    for (const person of people) {
+      const row = document.createElement('div'); row.className = 'reviews-staff-row';
+      const email = document.createElement('span'); email.textContent = person.email;
+      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Quitar acceso';
+      remove.addEventListener('click', async () => {
+        if (!await askConfirmation('¿Quitar el acceso?', `${person.email} dejará de poder entrar a GB Studio con Google.`)) return;
+        try { await (await cloud()).removeStaff(person.email); await refreshStaffList(); }
+        catch (error) { console.error(error); $('#reviewsStaffStatus').textContent = 'No se pudo quitar el acceso.'; }
+      });
+      row.append(email, remove); list.append(row);
+    }
+  }
+  $('#reviewsAdminBtn').addEventListener('click', async () => {
+    if (window.STUDIO_ROLE !== 'admin') return;
+    $('#reviewsAdminModal').hidden = false; $('#reviewsStaffStatus').textContent = '';
+    try { await refreshStaffList(); } catch (error) { console.error(error); $('#reviewsStaffStatus').textContent = 'No se pudieron cargar los accesos. Revisá Firestore.'; }
+  });
+  $('#reviewsAdminClose').addEventListener('click', () => { $('#reviewsAdminModal').hidden = true; });
+  $('#reviewsAdminModal').addEventListener('click', event => { if (event.target === $('#reviewsAdminModal')) $('#reviewsAdminModal').hidden = true; });
+  $('#reviewsStaffForm').addEventListener('submit', async event => {
+    event.preventDefault(); if (window.STUDIO_ROLE !== 'admin') return;
+    const input = $('#reviewsStaffEmail'), submit = $('#reviewsStaffForm button[type=submit]'); submit.disabled = true;
+    try { await (await cloud()).addStaff(input.value); input.value = ''; $('#reviewsStaffStatus').textContent = 'Cuenta autorizada. Ya puede iniciar sesión con Google.'; await refreshStaffList(); }
+    catch (error) { console.error(error); $('#reviewsStaffStatus').textContent = error.message || 'No se pudo dar acceso.'; }
+    finally { submit.disabled = false; }
+  });
+
+  $('#reviewsNav').addEventListener('click', () => isGuestReview() ? showReviews() : showReviewsHome());
   $('#dashboardReviewsBtn').addEventListener('click', () => showReviewsHome());
   $('#reviewsBackVersions').addEventListener('click', () => showReviewsHome(state.projectId));
   $('#reviewsBackProjects').addEventListener('click', () => showReviewsHome());
@@ -627,6 +780,10 @@
   $('#reviewsConfirmAccept').addEventListener('click', () => closeConfirmation(true));
   $('#reviewsCopyClose').addEventListener('click', () => { $('#reviewsCopyModal').hidden = true; });
   $('#reviewsCopyDone').addEventListener('click', () => { $('#reviewsCopyModal').hidden = true; });
+  $('#reviewsCopyLink').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('#reviewsCopyInput').value); $('#reviewsCopyDescription').textContent = 'Enlace copiado. El cliente solo verá esta review.'; }
+    catch { $('#reviewsCopyInput').focus(); $('#reviewsCopyInput').select(); $('#reviewsCopyDescription').textContent = 'Seleccioná el enlace y copialo con Ctrl+C.'; }
+  });
   for (const id of ['#reviewsFormModal', '#reviewsConfirmModal', '#reviewsCopyModal']) $(id).addEventListener('click', event => { if (event.target !== $(id)) return; if (id === '#reviewsFormModal') closeForm(); else if (id === '#reviewsConfirmModal') closeConfirmation(false); else $(id).hidden = true; });
   document.addEventListener('keydown', event => { if (event.key !== 'Escape') return; if (!$('#reviewsConfirmModal').hidden) closeConfirmation(false); else if (!$('#reviewsFormModal').hidden) closeForm(); else $('#reviewsCopyModal').hidden = true; });
   $('#storyboardsNav').addEventListener('click', () => video.pause());
@@ -654,20 +811,64 @@
   $('#reviewsList').addEventListener('dragover', event => { if (!draggedRecordId) return; const section = event.target.closest('[data-section-id]'); if (!section) return; event.preventDefault(); event.dataTransfer.dropEffect = 'move'; $('#reviewsList').querySelectorAll('.is-drop-target').forEach(element => element.classList.remove('is-drop-target')); section.classList.add('is-drop-target'); });
   $('#reviewsList').addEventListener('drop', event => { if (!draggedRecordId) return; const target = event.target.closest('[data-section-id]'); if (!target) return; event.preventDefault(); const sectionId = target.dataset.sectionId; const beforeId = event.target.closest('[data-record-id]')?.dataset.recordId || null; const recordId = draggedRecordId; draggedRecordId = null; moveRecord(recordId, sectionId, beforeId); });
   $('#reviewsRemoveMedia').addEventListener('click', removeActive);
-  $('#reviewsGuestLogin').addEventListener('click', () => $('#authGateButton').click());
+  $('#reviewsGuestNameForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!state.shareToken) return;
+    const name = $('#reviewsGuestName').value.trim(); if (!name) return;
+    $('#reviewsGuestLogin').disabled = true; $('#reviewsGuestNameError').textContent = '';
+    try {
+      const user = await (await cloud()).guestIdentity();
+      state.guestUid = user.uid; state.guestName = name;
+      sessionStorage.setItem(`gb-review-guest:${state.shareToken}`, name);
+      applyReviewPermissions();
+    } catch (error) {
+      console.error('Guest sign-in failed', error);
+      $('#reviewsGuestNameError').textContent = 'No se pudo habilitar el comentario. Verificá que el acceso de invitado esté activo e intentá de nuevo.';
+    } finally { $('#reviewsGuestLogin').disabled = false; }
+  });
   window.addEventListener('studio-auth-change', () => {
+    $('#reviewsAdminBtn').hidden = window.STUDIO_ROLE !== 'admin';
     if (sharedReview && window.STUDIO_SIGNED_IN) {
       const existing = state.records.find(record => !record.ephemeral && record.source === 'dropbox' && record.sourceUrl === sharedReview.sourceUrl);
       if (existing && state.active?.id !== existing.id) selectRecord(existing.id);
     }
     applyReviewPermissions();
+    if (window.STUDIO_SIGNED_IN && !isGuestReview() && window.STUDIO_USER?.uid !== hydratedUserUid) {
+      hydratedUserUid = window.STUDIO_USER.uid;
+      Promise.resolve(initialized).then(async () => {
+        const api = await cloud();
+        const [remoteProjects, remoteFiles] = await Promise.all([api.listStaffProjects(), api.listStaffFiles()]);
+        const remoteProjectIds = new Set(remoteProjects.map(project => project.id));
+        const remoteFileIds = new Set(remoteFiles.map(record => record.id));
+        // One-time migration of pre-cloud browser data. Existing cloud copies always win.
+        for (const project of state.projects) if (!remoteProjectIds.has(project.id)) await api.saveStaffProject(project);
+        for (const record of state.records) if (record.source === 'dropbox' && !remoteFileIds.has(record.id)) await api.saveStaffFile(record);
+        state.projects = [...state.projects.filter(project => !remoteProjectIds.has(project.id)), ...remoteProjects];
+        state.records = [...state.records.filter(record => !remoteFileIds.has(record.id)), ...remoteFiles];
+        const shares = await api.listSharedReviews();
+        for (const share of shares) {
+          let project = state.projects.find(entry => entry.id === share.projectId);
+          const version = { id: share.versionId, title: share.versionTitle, category: share.category,
+            sections: share.sections || [], shareToken: share.token, createdAt: share.updatedAt, updatedAt: share.updatedAt };
+          if (project) {
+            project = { ...project, title: share.projectTitle, client: share.client, agency: share.agency, director: share.director,
+              versions: project.versions.some(entry => entry.id === version.id) ? project.versions.map(entry => entry.id === version.id ? { ...entry, ...version } : entry) : [...project.versions, version] };
+            state.projects = state.projects.map(entry => entry.id === project.id ? project : entry);
+          } else state.projects.push({ id: share.projectId, title: share.projectTitle, client: share.client, agency: share.agency,
+            director: share.director, createdAt: share.updatedAt, updatedAt: share.updatedAt, versions: [version] });
+          for (const file of share.files) {
+            const index = state.records.findIndex(record => record.id === file.id);
+            if (index >= 0) state.records[index] = { ...state.records[index], ...file, comments: state.records[index].comments || [], projectId: share.projectId, versionId: share.versionId };
+            else state.records.push({ ...file, projectId: share.projectId, versionId: share.versionId });
+          }
+        }
+        if (state.active) state.active = state.records.find(record => record.id === state.active.id) || state.active;
+        if (!$('#reviewsHome').hidden) renderHome();
+      }).catch(error => { hydratedUserUid = null; console.error('Could not load shared reviews', error); });
+    } else if (!window.STUDIO_SIGNED_IN) hydratedUserUid = null;
   });
-  $('#reviewsShareBtn').addEventListener('click', async () => {
-    if (state.active?.source !== 'dropbox') return;
-    const link = new URL(location.href); link.hash = new URLSearchParams({ review: state.active.sourceUrl, kind: state.active.kind }).toString();
-    try { await navigator.clipboard.writeText(link.href); showStatus('Enlace de vista copiado. La otra persona podrá ver el archivo; los comentarios todavía no se comparten.'); }
-    catch { $('#reviewsCopyInput').value = link.href; $('#reviewsCopyModal').hidden = false; $('#reviewsCopyInput').focus(); $('#reviewsCopyInput').select(); }
-  });
+  $('#reviewsShareBtn').textContent = 'Compartir review ↗';
+  $('#reviewsShareBtn').addEventListener('click', () => shareVersion());
   $('#reviewsInBtn').addEventListener('click', () => setRangePoint('in'));
   $('#reviewsOutBtn').addEventListener('click', () => setRangePoint('out'));
   $('#reviewsClearRange').addEventListener('click', () => { if (!isVideo()) return; state.active.inPoint = null; state.active.outPoint = null; renderPlaybackSettings(); saveActiveSettings(); });
@@ -733,20 +934,25 @@
   const endStroke = event => { if (state.pointerId !== event.pointerId) return; state.pointerId = null; if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId); };
   canvas.addEventListener('pointerup', endStroke); canvas.addEventListener('pointercancel', endStroke);
   $('#reviewsCommentForm').addEventListener('submit', async event => {
-    event.preventDefault(); if (!state.active || state.saving) return;
+    event.preventDefault(); if (!state.active || state.saving || !canComment()) return;
     const text = $('#reviewsCommentText').value.trim(); if (!text && (!state.draft.length || state.sketchMode)) { $('#reviewsCommentText').focus(); return; }
     const comment = { id: crypto.randomUUID(), text, time: currentTime(), strokes: state.sketchMode ? [] : structuredClone(state.draft), resolved: false, createdAt: new Date().toISOString() };
+    const token = state.shareToken || currentVersion()?.shareToken;
     state.saving = true; $('#reviewsCommentForm button[type=submit]').disabled = true;
     const wasEphemeral = Boolean(state.active.ephemeral);
     if (wasEphemeral) delete state.active.ephemeral;
     state.active.comments.push(comment); state.active.updatedAt = comment.createdAt;
     try {
-      await saveRecord(state.active); $('#reviewsCommentText').value = ''; state.draft = []; if (!state.sketchMode) { state.activeCommentId = comment.id; state.drawing = false; canvas.classList.remove('is-drawing'); $('#reviewsDrawBtn').classList.remove('is-active'); $('#reviewsDrawBtn').setAttribute('aria-pressed', 'false'); }
+      if (token) {
+        const author = isGuestReview() ? state.guestName || window.STUDIO_USER?.displayName || 'Invitado' : window.STUDIO_USER?.displayName || window.STUDIO_USER?.email || 'Equipo';
+        await (await cloud()).addSharedComment(token, state.active.id, comment, author);
+      } else await saveRecord(state.active);
+      $('#reviewsCommentText').value = ''; state.draft = []; if (!state.sketchMode) { state.activeCommentId = comment.id; state.drawing = false; canvas.classList.remove('is-drawing'); $('#reviewsDrawBtn').classList.remove('is-active'); $('#reviewsDrawBtn').setAttribute('aria-pressed', 'false'); }
       renderCommentList(); renderMarkers(); renderList(); redraw();
-    } catch (error) { state.active.comments.pop(); if (wasEphemeral) state.active.ephemeral = true; showStatus('No se pudo guardar el comentario. Revisá el espacio disponible.'); console.error(error); }
+    } catch (error) { state.active.comments.pop(); if (wasEphemeral) state.active.ephemeral = true; showStatus(token ? 'No se pudo compartir el comentario. Revisá tu conexión o los permisos de la review.' : 'No se pudo guardar el comentario. Revisá el espacio disponible.'); console.error(error); }
     finally { state.saving = false; $('#reviewsCommentForm button[type=submit]').disabled = false; }
   });
   new ResizeObserver(resizeCanvas).observe($('#reviewsMediaSurface'));
   new ResizeObserver(fitSurface).observe($('#reviewsStage'));
-  initialize();
+  initialized = initialize();
 })();

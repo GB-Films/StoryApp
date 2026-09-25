@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function googleUser() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+    function admin() {
+      return googleUser() && request.auth.token.email.lower() == 'info@granbertafilms.com';
+    }
+    function staff() {
+      return googleUser() && (admin() || exists(/databases/$(database)/documents/reviewStaff/$(request.auth.token.email.lower())));
+    }
+    function activeShare(token) {
+      return exists(/databases/$(database)/documents/reviewShares/$(token))
+        && get(/databases/$(database)/documents/reviewShares/$(token)).data.active == true;
+    }
+    function parentFile(token, fileId) {
+      return exists(/databases/$(database)/documents/reviewShares/$(token)/files/$(fileId));
+    }
+
+    match /reviewStaff/{email} {
+      allow get: if admin() || (googleUser() && request.auth.token.email.lower() == email);
+      allow list, create, update, delete: if admin();
+    }
+
+    // Private working library for the Google-authorized team. Guests never read these.
+    match /reviewProjects/{projectId} {
+      allow read, write: if staff();
+    }
+    match /reviewItems/{fileId} {
+      allow read, write: if staff();
+    }
+
+    match /reviewShares/{token} {
+      // A 256-bit unguessable URL token is the guest's capability. No collection listing.
+      allow get: if staff() || resource.data.active == true;
+      allow list: if staff();
+      allow create, update, delete: if staff();
+
+      match /files/{fileId} {
+        allow get, list: if staff() || activeShare(token);
+        allow create, update: if staff()
+          && request.resource.data.source == 'dropbox'
+          && request.resource.data.sourceUrl is string
+          && request.resource.data.sourceUrl.matches('^https://(www[.])?dropbox[.]com/(s|scl)/.*')
+          && request.resource.data.kind in ['video', 'image', 'model'];
+        allow delete: if staff();
+
+        match /comments/{commentId} {
+          allow get, list: if staff() || (activeShare(token) && parentFile(token, fileId));
+          allow create: if request.auth != null && (staff() || activeShare(token)) && parentFile(token, fileId)
+            && request.resource.data.keys().hasOnly(['id', 'text', 'time', 'strokesJson', 'resolved', 'createdAt', 'authorUid', 'authorName'])
+            && request.resource.data.id == commentId
+            && request.resource.data.authorUid == request.auth.uid
+            && request.resource.data.authorName is string && request.resource.data.authorName.size() > 0 && request.resource.data.authorName.size() <= 60
+            && request.resource.data.text is string && request.resource.data.text.size() <= 5000
+            && request.resource.data.time is number && request.resource.data.time >= 0
+            && request.resource.data.strokesJson is string && request.resource.data.strokesJson.size() <= 200000
+            && request.resource.data.resolved is bool
+            && (staff() || request.resource.data.resolved == false);
+          allow update: if staff() || (request.auth != null && activeShare(token)
+            && resource.data.authorUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'strokesJson', 'resolved'])
+            && request.resource.data.text is string && request.resource.data.text.size() <= 5000
+            && request.resource.data.strokesJson is string && request.resource.data.strokesJson.size() <= 200000);
+          allow delete: if staff() || (request.auth != null && activeShare(token) && resource.data.authorUid == request.auth.uid);
+        }
+      }
+    }
+  }
+}
