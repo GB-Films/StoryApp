@@ -3,12 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="GB Studio: herramientas visuales para organizar storyboards y preparar tus proyectos de preproducción." />
+    <meta name="description" content="GB Studio: storyboards y revisiones de fotos y videos para tus proyectos." />
     <meta name="theme-color" content="#111111" />
-    <title>GB Studio · Preproducción</title>
+    <title>GB Studio · Storyboards y Reviews</title>
     <link rel="icon" type="image/png" href="assets/gb-films-logo-white.png?v=2" />
     <link rel="apple-touch-icon" href="assets/gb-films-logo-white.png?v=2" />
-    <link rel="stylesheet" href="styles.css?v=48" />
+    <link rel="stylesheet" href="styles.css?v=49" />
+    <link rel="stylesheet" href="reviews.css?v=1" />
   </head>
   <body>
     <div class="auth-gate" id="authGate" role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
@@ -24,16 +25,34 @@
     <div class="app-shell">
       <header class="topbar">
         <a class="brand" href="#" aria-label="GB Studio"><img class="brand-logo" src="assets/gb-films-logo-white.png" alt="GB Films" /><span class="brand-divider"></span><span class="brand-product">GB<br /><em>STUDIO</em></span></a>
+        <nav class="studio-nav" aria-label="Secciones de GB Studio"><button class="studio-nav-link is-active" id="storyboardsNav" type="button">Storyboards</button><button class="studio-nav-link" id="reviewsNav" type="button">Reviews</button></nav>
         <div class="breadcrumbs"><span>PROYECTOS</span><b>/</b><strong id="breadcrumbTitle">Todos los proyectos</strong></div>
         <div class="top-actions"><button class="button button-ghost" id="backToDashboardBtn" type="button" hidden>← Proyectos</button><button class="button button-ghost" id="manageVersionsBtn" type="button" hidden>Versiones</button><button class="button button-ghost" id="createVersionBtn" type="button" hidden>＋ Crear versión</button><button class="button button-primary" id="exportBtn" type="button" hidden><span>↗</span> Exportar</button><button class="account-button" id="accountButton" type="button" aria-label="Iniciar sesión con Google"><span class="account-avatar" id="accountAvatar">G</span><span class="account-label" id="accountLabel">Iniciar sesión</span></button></div>
       </header>
 
       <main class="dashboard-view" id="dashboardView">
         <section class="dashboard-hero">
-          <div class="dashboard-hero-copy"><div class="eyebrow"><span class="eyebrow-line"></span> GB FILMS · PREPRODUCCIÓN</div><h1>Todo lo que necesitás<br /><em>para preparar tu rodaje.</em></h1><p>Empezá con un storyboard y sumá nuevas herramientas de preproducción a medida que las necesites.</p></div>
+          <div class="dashboard-hero-copy"><div class="eyebrow"><span class="eyebrow-line"></span> GB FILMS · ESTUDIO</div><h1>Storyboards y reviews<br /><em>en un mismo lugar.</em></h1><p>Organizá las tomas de tu proyecto y revisá fotos o videos con comentarios sobre cada cuadro.</p><button class="dashboard-review-link" id="dashboardReviewsBtn" type="button">Ir a Reviews <span>↗</span></button></div>
           <button class="dashboard-create-card" id="dashboardCreateBtn" type="button"><span class="dashboard-create-mark">＋</span><span><strong>Nuevo proyecto</strong><small>Comenzá un storyboard desde cero</small></span><span class="dashboard-create-arrow">→</span></button>
         </section>
         <section class="projects-section"><div class="projects-section-heading"><div><div class="eyebrow">ARCHIVO DE PROYECTOS</div><h2>Proyectos recientes</h2></div><div class="projects-toolbar"><span class="project-count" id="projectCount">0 proyectos</span><label class="project-sort-label" for="projectSort">ORDENAR POR</label><select class="project-sort-select" id="projectSort"><option value="updated">Últimos modificados</option><option value="title">Título</option><option value="client">Cliente</option></select></div></div><div class="project-grid" id="projectGrid"></div><div class="dashboard-empty" id="dashboardEmpty" hidden><div class="dashboard-empty-icon">▱</div><strong>Todavía no hay proyectos</strong><p>Creá tu primer storyboard para empezar a ordenar las tomas.</p><button class="button button-primary" type="button" id="dashboardEmptyCreateBtn">＋ Crear proyecto</button></div></section>
+      </main>
+
+      <main class="reviews-view" id="reviewsView" hidden>
+        <aside class="reviews-library" aria-label="Archivos en revisión">
+          <div class="reviews-library-head"><span class="eyebrow">REVISIÓN DE MATERIAL</span><h1>Reviews<span class="reviews-count" id="reviewsCount">0</span></h1><p>Comentarios y anotaciones sobre tus fotos y videos.</p></div>
+          <button class="reviews-upload" id="reviewsUploadBtn" type="button"><span>＋</span><strong>Cargar foto o video</strong><small>Se guarda en este navegador</small></button>
+          <input id="reviewsFileInput" type="file" accept="image/*,video/*" multiple hidden />
+          <div class="reviews-list-heading">ARCHIVOS</div><div class="reviews-list" id="reviewsList"></div>
+          <p class="reviews-storage-note">Archivos y comentarios guardados en esta computadora. Todavía no se sincronizan con otras cuentas ni equipos.</p>
+        </aside>
+        <section class="reviews-main" aria-label="Visor de revisión">
+          <div class="reviews-main-head"><div><span class="eyebrow">VISOR</span><h2 id="reviewsMediaTitle">Elegí un archivo</h2><p id="reviewsMediaDetails">Subí una foto o un video para empezar.</p></div><button class="reviews-remove-media" id="reviewsRemoveMedia" type="button" hidden>Eliminar archivo</button></div>
+          <div class="reviews-stage" id="reviewsStage"><div class="reviews-empty" id="reviewsEmpty"><span>▧</span><strong>Tu espacio de revisión</strong><p>Cargá material para reproducirlo, señalar correcciones y dejar comentarios.</p><button class="reviews-empty-action" id="reviewsEmptyUpload" type="button">＋ Cargar archivo</button></div><div class="reviews-media-surface" id="reviewsMediaSurface" hidden><img id="reviewsImage" alt="Archivo en revisión" hidden /><video id="reviewsVideo" preload="metadata" playsinline hidden></video><canvas id="reviewsCanvas" aria-label="Anotaciones sobre el archivo"></canvas></div></div>
+          <div class="reviews-timeline" id="reviewsTimeline" hidden><button id="reviewsPlayBtn" class="reviews-play" type="button" aria-label="Reproducir">▶</button><button id="reviewsMuteBtn" class="reviews-play" type="button" aria-label="Silenciar">♪</button><span id="reviewsCurrentTime">00:00</span><div class="reviews-seek-wrap"><input id="reviewsSeek" type="range" min="0" max="1000" value="0" aria-label="Posición del video" /><div id="reviewsMarkers" class="reviews-markers"></div></div><span id="reviewsDuration">00:00</span></div>
+          <div class="reviews-annotation-bar" id="reviewsAnnotationBar" hidden><button id="reviewsDrawBtn" class="reviews-tool" type="button" aria-pressed="false">✎ Dibujar</button><label class="reviews-color-label">Color <input id="reviewsColor" type="color" value="#ff3b30" aria-label="Color del dibujo" /></label><button id="reviewsUndoBtn" class="reviews-tool" type="button">↶ Deshacer trazo</button><button id="reviewsClearBtn" class="reviews-tool" type="button">Limpiar</button><span id="reviewsAnnotationHint">Pausá en un cuadro y dibujá para señalar la corrección.</span></div>
+        </section>
+        <aside class="reviews-comments" aria-label="Comentarios de revisión"><div class="reviews-comments-head"><span class="eyebrow">FEEDBACK</span><h2>Comentarios <span id="reviewsCommentCount">0</span></h2><p id="reviewsCommentContext">Elegí un archivo para ver sus comentarios.</p></div><div class="reviews-comment-list" id="reviewsCommentList"></div><form id="reviewsCommentForm" class="reviews-comment-form" hidden><label for="reviewsCommentText">NUEVA CORRECCIÓN <span id="reviewsCommentTime"></span></label><textarea id="reviewsCommentText" rows="3" placeholder="Describí qué hay que ajustar…"></textarea><button type="submit">Guardar comentario <span>→</span></button><small>Podés sumar un dibujo sobre la imagen antes de guardarlo.</small></form></aside>
       </main>
 
       <main class="workspace-app" id="editorView" hidden>
@@ -121,7 +140,8 @@
     <div class="modal-backdrop" id="exportModal" hidden><div class="modal" role="dialog" aria-modal="true" aria-labelledby="exportTitle"><button class="modal-close" data-close-modal type="button" aria-label="Cerrar">×</button><div class="eyebrow"><span class="eyebrow-line"></span> SALIDA</div><h2 id="exportTitle">Exportar storyboard</h2><p class="modal-copy">Elegí si querés exportar la hoja actual, todas las páginas como imágenes o imprimir el storyboard completo.</p><div class="export-options"><button class="export-option" data-export="png" type="button"><span class="option-icon orange">▧</span><span><strong>Esta hoja como PNG</strong><small>Exporta el artboard tal como lo ves</small></span><span class="option-arrow">→</span></button><button class="export-option" data-export="png-all" type="button"><span class="option-icon orange">▤</span><span><strong>Todas las páginas como PNG</strong><small>Descarga un ZIP con una imagen PNG por página</small></span><span class="option-arrow">→</span></button><button class="export-option" data-export="jpg" type="button"><span class="option-icon blue">▧</span><span><strong>Esta hoja como JPG</strong><small>Archivo liviano para compartir</small></span><span class="option-arrow">→</span></button><button class="export-option" data-export="print" type="button"><span class="option-icon purple">▤</span><span><strong>PDF / Imprimir todas</strong><small>Plancha de rodaje con todas las páginas</small></span><span class="option-arrow">→</span></button></div></div></div>
     <div class="toast" id="toast" role="status"></div>
     <script src="layout.js?v=6"></script>
-    <script src="app.js?v=60"></script>
+    <script src="app.js?v=61"></script>
+    <script src="reviews.js?v=1"></script>
     <script src="firebase-config.js?v=2"></script>
     <script>
       window.STORYBOARD_FIREBASE_CONFIG = window.STORYBOARD_FIREBASE_CONFIG || {

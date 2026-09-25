@@ -700,6 +700,10 @@ function showDashboard() {
   currentProjectId = null;
   $('#dashboardView').hidden = false;
   $('#editorView').hidden = true;
+  $('#reviewsView').hidden = true;
+  document.body.classList.remove('reviews-open');
+  $('#storyboardsNav').classList.add('is-active');
+  $('#reviewsNav').classList.remove('is-active');
   $('#backToDashboardBtn').hidden = true;
   $('#manageVersionsBtn').hidden = true;
   $('#createVersionBtn').hidden = true;
@@ -711,6 +715,10 @@ function showDashboard() {
 function showEditor() {
   $('#dashboardView').hidden = true;
   $('#editorView').hidden = false;
+  $('#reviewsView').hidden = true;
+  document.body.classList.remove('reviews-open');
+  $('#storyboardsNav').classList.add('is-active');
+  $('#reviewsNav').classList.remove('is-active');
   $('#backToDashboardBtn').hidden = false;
   $('#manageVersionsBtn').hidden = false;
   $('#createVersionBtn').hidden = false;
@@ -2210,6 +2218,8 @@ $('#deletePhotoBtn').addEventListener('click', deleteSelected); $('#duplicatePho
 
 $('#dashboardCreateBtn').addEventListener('click', resetProject);
 $('#dashboardEmptyCreateBtn').addEventListener('click', resetProject);
+$('#storyboardsNav').addEventListener('click', showDashboard);
+document.querySelector('.brand').addEventListener('click', event => { event.preventDefault(); showDashboard(); });
 $('#backToDashboardBtn').addEventListener('click', showDashboard);
 $('#manageVersionsBtn').addEventListener('click', openVersionsModal);
 $('#createVersionBtn').addEventListener('click', openVersionModal);
