@@ -78,7 +78,6 @@
   let confirmResolve = null;
   let sectionEditId = null;
   let draggedRecordId = null;
-  let seekPointer = null;
   function closeForm() { $('#reviewsFormModal').hidden = true; formMode = null; }
   function askConfirmation(title, copy, label = 'Eliminar') {
     $('#reviewsConfirmTitle').textContent = title;
@@ -716,10 +715,7 @@
   $('#reviewsMuteBtn').addEventListener('click', () => { video.muted = !video.muted; updateClock(); });
   video.addEventListener('click', () => { if (state.drawing || state.zHeld) return; togglePlayback(); });
   $('#reviewsSeek').addEventListener('input', event => { if (!Number.isFinite(video.duration)) return; if (frameMode()) seekFrame(Number(event.target.value)); else video.currentTime = video.duration * Number(event.target.value) / 1000; state.activeCommentId = null; redraw(); updateClock(); renderCommentList(); });
-  $('#reviewsSeek').addEventListener('pointerdown', event => { if (!frameMode() || event.button !== 0 || !isVideo()) return; event.preventDefault(); seekPointer = { id: event.pointerId, x: event.clientX, frame: frameIndex() }; $('#reviewsSeek').setPointerCapture(event.pointerId); });
-  $('#reviewsSeek').addEventListener('pointermove', event => { if (!seekPointer || seekPointer.id !== event.pointerId) return; seekFrame(seekPointer.frame + Math.round((event.clientX - seekPointer.x) / 8)); state.activeCommentId = null; redraw(); renderCommentList(); });
-  const endSeek = event => { if (!seekPointer || seekPointer.id !== event.pointerId) return; seekPointer = null; if ($('#reviewsSeek').hasPointerCapture(event.pointerId)) $('#reviewsSeek').releasePointerCapture(event.pointerId); };
-  $('#reviewsSeek').addEventListener('pointerup', endSeek); $('#reviewsSeek').addEventListener('pointercancel', endSeek);
+  $('#reviewsSeek').addEventListener('change', event => { if (frameMode() && Number.isFinite(video.duration)) seekFrame(Number(event.target.value)); });
   video.addEventListener('loadedmetadata', () => { $('#reviewsMediaSurface').style.setProperty('--review-aspect', String((video.videoWidth || 16) / (video.videoHeight || 9))); renderPlaybackSettings(); renderMarkers(); fitSurface(); });
   image.addEventListener('load', () => { $('#reviewsMediaSurface').style.setProperty('--review-aspect', String((image.naturalWidth || 16) / (image.naturalHeight || 9))); fitSurface(); });
   video.addEventListener('timeupdate', () => { if (!video.paused && Number.isFinite(state.active?.outPoint) && currentTime() >= state.active.outPoint) { video.pause(); video.currentTime = state.active.outPoint; } updateClock(); });
