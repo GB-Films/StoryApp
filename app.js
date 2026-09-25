@@ -702,6 +702,8 @@ function showDashboard() {
   $('#editorView').hidden = true;
   $('#reviewsView').hidden = true;
   document.body.classList.remove('reviews-open');
+  document.body.classList.remove('reviews-hud-hidden');
+  document.body.classList.remove('public-review');
   $('#storyboardsNav').classList.add('is-active');
   $('#reviewsNav').classList.remove('is-active');
   $('#backToDashboardBtn').hidden = true;
@@ -717,6 +719,8 @@ function showEditor() {
   $('#editorView').hidden = false;
   $('#reviewsView').hidden = true;
   document.body.classList.remove('reviews-open');
+  document.body.classList.remove('reviews-hud-hidden');
+  document.body.classList.remove('public-review');
   $('#storyboardsNav').classList.add('is-active');
   $('#reviewsNav').classList.remove('is-active');
   $('#backToDashboardBtn').hidden = false;

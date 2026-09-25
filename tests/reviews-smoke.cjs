@@ -149,6 +149,56 @@ const server = http.createServer((request, response) => {
       const request = indexedDB.open('gb-studio-reviews-v1');
       request.onsuccess = () => { const tx = request.result.transaction('items'); const get = tx.objectStore('items').getAll(); get.onsuccess = () => resolve(get.result.find(item => item.kind === 'video').comments.some(comment => comment.strokes.length)); };
     })), true, 'video annotation is saved with its comment');
+    await page.locator('#reviewsFrameStart').fill('1001');
+    await page.locator('#reviewsFrameStart').dispatchEvent('change');
+    await page.evaluate(() => { document.querySelector('#reviewsVideo').currentTime = 0; });
+    await page.waitForFunction(() => document.querySelector('#reviewsFrameNumber').textContent.includes('1001'));
+    assert.match(await page.locator('#reviewsFrameNumber').textContent(), /1001/);
+    await page.evaluate(() => { document.activeElement.blur(); document.querySelector('#reviewsVideo').currentTime = .2; });
+    await page.keyboard.press('I');
+    assert.notEqual(await page.locator('#reviewsInValue').textContent(), '—');
+    await page.evaluate(() => { document.querySelector('#reviewsVideo').currentTime = .8; });
+    await page.keyboard.press('O');
+    assert.notEqual(await page.locator('#reviewsOutValue').textContent(), '—');
+    await page.keyboard.press('ArrowLeft');
+    const steppedTime = await page.evaluate(() => document.querySelector('#reviewsVideo').currentTime);
+    assert.ok(steppedTime < .8 && steppedTime > .6, 'left arrow steps back one estimated frame');
+    await page.keyboard.press('Home');
+    assert.ok(await page.evaluate(() => document.querySelector('#reviewsVideo').currentTime) < .05);
+    await page.keyboard.press('End');
+    assert.ok(await page.evaluate(() => document.querySelector('#reviewsVideo').currentTime) > .9);
+    await page.keyboard.press('ArrowUp');
+    assert.ok(await page.evaluate(() => document.querySelector('#reviewsVideo').currentTime) < .9, 'up arrow jumps to a note');
+    await page.locator('#reviewsStage').hover();
+    await page.mouse.wheel(0, -300);
+    assert.notEqual(await page.locator('#reviewsZoomValue').textContent(), '100%', 'wheel zooms');
+    await page.keyboard.press('H');
+    assert.equal(await page.locator('#reviewsZoomValue').textContent(), '100%', 'H fits the media');
+    const zoomBox = await page.locator('#reviewsMediaSurface').boundingBox();
+    await page.keyboard.down('z');
+    await page.mouse.click(zoomBox.x + zoomBox.width / 2, zoomBox.y + zoomBox.height / 2);
+    await page.keyboard.up('z');
+    assert.notEqual(await page.locator('#reviewsZoomValue').textContent(), '100%', 'Z + pointer click zooms for tablet input');
+    await page.keyboard.press('H');
+    await page.keyboard.press('Q');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('reviews-hud-hidden')), true);
+    await page.keyboard.press('Q');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('reviews-hud-hidden')), false);
+    await page.keyboard.press('F');
+    await page.waitForFunction(() => document.fullscreenElement?.id === 'reviewsView');
+    await page.keyboard.press('F');
+    await page.waitForFunction(() => !document.fullscreenElement);
+    const screenshotDownload = page.waitForEvent('download');
+    await page.locator('#reviewsScreenshotBtn').click();
+    assert.match((await screenshotDownload).suggestedFilename(), /fotograma-.*\.png$/);
+    await page.locator('#reviewsSketchBtn').click();
+    const scratchBox = await page.locator('#reviewsCanvas').boundingBox();
+    await page.mouse.move(scratchBox.x + 30, scratchBox.y + 30); await page.mouse.down(); await page.mouse.move(scratchBox.x + 100, scratchBox.y + 80, { steps: 4 }); await page.mouse.up();
+    assert.equal(await page.locator('#reviewsSketchBtn').getAttribute('aria-pressed'), 'true');
+    await page.locator('#reviewsCommentText').fill('Solo texto, dibujo temporal');
+    await page.locator('#reviewsCommentForm button[type=submit]').click();
+    await page.waitForFunction(() => document.querySelector('#reviewsCommentCount').textContent === '3');
+    assert.equal(await page.evaluate(async () => new Promise(resolve => { const open = indexedDB.open('gb-studio-reviews-v1'); open.onsuccess = () => { const request = open.result.transaction('items').objectStore('items').getAll(); request.onsuccess = () => resolve(request.result.find(item => item.kind === 'video').comments.at(-1).strokes.length); }; })), 0, 'temporary drawing is not saved with a comment');
     await page.route('https://www.dropbox.com/scl/fi/**', route => route.request().url().includes('revision.webm')
       ? route.fulfill({ status: 200, contentType: 'video/webm', body: Buffer.from(videoFixture, 'base64') })
       : route.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg }));
@@ -159,10 +209,22 @@ const server = http.createServer((request, response) => {
     await page.waitForFunction(() => document.querySelector('#reviewsVideo').getAttribute('src')?.includes('dropbox.com'));
     await page.waitForFunction(() => document.querySelector('#reviewsVideo').duration > .5);
     assert.match(await page.locator('#reviewsVideo').getAttribute('src'), /rlkey=xyz&raw=1/);
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.locator('#reviewsShareBtn').click();
+    const copiedLink = await page.evaluate(() => navigator.clipboard.readText());
+    assert.match(copiedLink, /#review=/);
+    assert.equal(new URLSearchParams(new URL(copiedLink).hash.slice(1)).get('review'), 'https://www.dropbox.com/scl/fi/videoid/revision.webm?rlkey=xyz');
     await page.locator('#reviewsCommentText').fill('Cambio en video de Dropbox');
     await page.locator('#reviewsCommentForm button[type=submit]').click();
     await page.waitForFunction(() => document.querySelector('#reviewsCommentCount').textContent === '1');
     assert.equal(await page.locator('.reviews-marker').count(), 1, 'Dropbox video has timed comments');
+    if (process.env.REVIEW_TEST_FBX) {
+      const fixture = await page.request.get('https://raw.githubusercontent.com/mrdoob/three.js/r186/examples/models/fbx/stanford-bunny.fbx');
+      assert.equal(fixture.ok(), true, 'official FBX example is available');
+      await page.locator('#reviewsFileInput').setInputFiles({ name: 'stanford-bunny.fbx', mimeType: 'application/octet-stream', buffer: await fixture.body() });
+      await page.locator('#reviewsModel canvas').waitFor({ state: 'visible', timeout: 30000 });
+      assert.equal(await page.locator('#reviewsMediaError').isVisible(), false, 'FBX model renders without an error');
+    }
     if (process.env.REVIEW_SCREENSHOT) await page.screenshot({ path: process.env.REVIEW_SCREENSHOT, fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.locator('#reviewsNav').isVisible(), true);
@@ -174,6 +236,26 @@ const server = http.createServer((request, response) => {
     const mobileOverflow = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: window.innerWidth, elements: [...document.querySelectorAll('#reviewsView *')].filter(element => element.getBoundingClientRect().right > window.innerWidth + 1).slice(0, 8).map(element => ({ tag: element.tagName, id: element.id, className: String(element.className), right: element.getBoundingClientRect().right })) }));
     assert.ok(mobileOverflow.width <= mobileOverflow.viewport + 1, `mobile review layout fits viewport width: ${JSON.stringify(mobileOverflow)}`);
     assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
+    const guest = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    try {
+      await guest.route('https://www.gstatic.com/firebasejs/**', route => route.abort());
+      await guest.route('https://www.dropbox.com/scl/fi/**', route => route.fulfill({ status: 200, contentType: 'video/webm', body: Buffer.from(videoFixture, 'base64') }));
+      const shareHash = new URLSearchParams({ review: 'https://www.dropbox.com/scl/fi/videoid/revision.webm?rlkey=xyz', kind: 'video' });
+      await guest.goto(`${url}/#${shareHash}`);
+      await guest.waitForFunction(() => document.querySelector('#reviewsVideo').duration > .5);
+      assert.equal(await guest.locator('#reviewsView').isVisible(), true, 'a shared link opens directly on the video');
+      const guestBounds = await guest.evaluate(() => ({ stage: document.querySelector('#reviewsStage').getBoundingClientRect().toJSON(), media: document.querySelector('#reviewsMediaSurface').getBoundingClientRect().toJSON() }));
+      assert.ok(guestBounds.media.bottom <= guestBounds.stage.bottom - 10 && guestBounds.media.top >= guestBounds.stage.top + 10, `guest video fits stage: ${JSON.stringify(guestBounds)}`);
+      assert.equal(await guest.locator('#authGate').isVisible(), false, 'the video can be viewed without login');
+      assert.equal(await guest.locator('#reviewsGuestPrompt').isVisible(), true, 'login is requested only for comments');
+      assert.equal(await guest.locator('#reviewsCommentForm').isVisible(), false);
+      if (process.env.REVIEW_GUEST_SCREENSHOT) await guest.screenshot({ path: process.env.REVIEW_GUEST_SCREENSHOT, fullPage: true });
+      await guest.setViewportSize({ width: 390, height: 844 });
+      assert.equal(await guest.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, 'guest player fits a phone');
+      assert.equal(await guest.locator('#reviewsGuestPrompt').isVisible(), true);
+      await guest.locator('#storyboardsNav').click();
+      assert.equal(await guest.locator('#authGate').isVisible(), true, 'storyboards remain protected');
+    } finally { await guest.close(); }
     console.log('Reviews smoke passed: local and Dropbox image/video, drawing, comments, timeline, reload, and resolve.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

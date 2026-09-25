@@ -27,15 +27,18 @@ function showAuthMessage(message) {
 }
 
 function renderSignedOut() {
+  window.STUDIO_SIGNED_IN = false;
   accountAvatar.textContent = 'G';
   accountAvatar.style.backgroundImage = '';
   accountLabel.textContent = 'Iniciar sesión';
   accountButton?.setAttribute('aria-label', 'Iniciar sesión con Google');
   accountButton?.classList.remove('is-authenticated');
   setAuthGate(true, 'Iniciá sesión para entrar.', 'Tu espacio de preproducción está protegido. Continuá con tu cuenta de Google para ver tus proyectos.');
+  window.dispatchEvent(new Event('studio-auth-change'));
 }
 
 function renderSignedIn(user) {
+  window.STUDIO_SIGNED_IN = true;
   const name = user.displayName || user.email || 'Cuenta';
   accountLabel.textContent = name;
   accountButton?.setAttribute('aria-label', `Cerrar sesión de ${name}`);
@@ -48,6 +51,7 @@ function renderSignedIn(user) {
     accountAvatar.style.backgroundImage = '';
   }
   setAuthGate(false);
+  window.dispatchEvent(new Event('studio-auth-change'));
 }
 
 if (!firebaseConfig?.apiKey || !firebaseConfig?.authDomain || !firebaseConfig?.projectId) {

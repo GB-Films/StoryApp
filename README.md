@@ -7,8 +7,14 @@ Un espacio de trabajo visual de GB Films con dos secciones: Storyboards para org
 - Para revisar un archivo ya guardado en Dropbox, compartí **ese archivo** y pegá su enlace en «Vincular desde Dropbox». Reviews conserva el enlace y reproduce el original; no lo sube ni crea otra copia. Dropbox recomienda `raw=1` para mostrar directamente el contenido de un enlace compartido, y la app lo aplica al reproducir. También se puede abrir el enlace original desde el visor.
 - La vista directa sin conexión OAuth requiere un enlace accesible para cualquiera que lo tenga, sin contraseña ni restricción de equipo. Quien obtenga ese enlace podrá abrir el archivo en Dropbox. Si la política de la productora exige enlaces privados, hará falta una integración autenticada de Dropbox; esta modalidad por enlace no evita sus permisos ni garantiza que todos los formatos de video se reproduzcan en el navegador.
 - Cargá una foto o un video desde la sección Reviews; cada archivo tiene sus propios comentarios.
+- También podés subir un archivo `.fbx` desde el equipo y orbitar/inspeccionar el modelo 3D. El visor utiliza Three.js y su FBXLoader; el FBX se guarda localmente en el navegador como los demás archivos cargados desde el equipo. Los FBX con texturas externas pueden necesitar esos archivos aparte.
 - En video, cada comentario queda asociado al segundo actual y aparece como marca en la línea de tiempo. Hacer clic en un comentario vuelve a ese momento.
 - Dibujá sobre el cuadro antes de publicar un comentario. El trazo se guarda con ese comentario y se muestra al seleccionarlo; el archivo original no se modifica.
+- «Dibujo temporal» permite marcar la imagen sin guardar esos trazos con el comentario. «Limpiar» los quita.
+- Scroll hace zoom; `Z` + clic con mouse o lápiz acerca, y `Z` + arrastre vertical ajusta el zoom de forma continua. `H` vuelve a encuadrar. `F` alterna pantalla completa y `Q` oculta/muestra los controles.
+- Los botones y atajos `I`/`O` marcan un rango de reproducción, sin recortar ni modificar el archivo original. La numeración de fotogramas usa el FPS seleccionado (estimado) y permite que el primer fotograma sea 1001. `←`/`→` avanzan o retroceden un fotograma estimado, `↑`/`↓` saltan entre tiempos de comentarios, `Inicio`/`Fin` van a los extremos del video.
+- «Captura PNG» descarga el cuadro visible con la anotación superpuesta cuando el navegador permite leer los píxeles del archivo. Enlaces externos de Dropbox normalmente no habilitan esa lectura por CORS: en ese caso la app muestra un aviso y no promete una captura inexistente. «Descargar MP4» ofrece el original únicamente cuando el archivo ya es MP4; no convierte ni recorta otros formatos.
+- «Copiar enlace de vista» crea una URL de esta app con el enlace compartido de Dropbox. Al abrirla, el video se muestra sin iniciar sesión y Google se solicita recién para comentar. Por ahora ese enlace es largo y los comentarios **no se sincronizan entre personas**: quedan en el navegador de quien los escribió. Se necesita una base compartida con reglas de acceso y un dominio configurado para enlaces cortos como `gb-films.com/archivo-x`.
 - Podés resolver, reabrir o eliminar comentarios, y eliminar un archivo con todos sus comentarios.
 - Esta primera versión guarda la lista, los enlaces y comentarios en IndexedDB, dentro del navegador y el perfil donde se cargaron. Los archivos cargados desde el equipo también se guardan ahí; los vinculados a Dropbox **no**. No hay sincronización de reviews o comentarios entre computadoras todavía. La capacidad local depende del espacio disponible en el navegador. Para video, usá un formato compatible con el navegador (por ejemplo, MP4/H.264 o WebM).
 
@@ -43,7 +49,7 @@ Abrí `index.html` en el navegador. No requiere instalación ni servidor.
 
 ## Acceso con Google
 
-La app está conectada al proyecto Firebase `GB Studio` (`gb-studio-260bc`) mediante `firebase-config.js`. La configuración web de Firebase contiene identificadores públicos; la seguridad del acceso depende de Authentication y sus reglas. El acceso es obligatorio: la interfaz y los proyectos quedan bloqueados hasta completar el inicio de sesión con Google.
+La app está conectada al proyecto Firebase `GB Studio` (`gb-studio-260bc`) mediante `firebase-config.js`. La configuración web de Firebase contiene identificadores públicos; la seguridad del acceso depende de Authentication y sus reglas. El acceso es obligatorio para abrir Storyboards y editar Reviews. Una URL de vista de Dropbox puede reproducir el archivo sin login porque ese enlace ya debe permitir acceso a cualquiera que lo tenga; los comentarios siguen locales, no están protegidos ni compartidos por Firebase.
 
 Para completar la activación en Firebase:
 
