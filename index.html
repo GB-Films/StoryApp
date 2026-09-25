@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" href="assets/gb-films-logo-white.png?v=2" />
     <link rel="apple-touch-icon" href="assets/gb-films-logo-white.png?v=2" />
     <link rel="stylesheet" href="styles.css?v=49" />
-    <link rel="stylesheet" href="reviews.css?v=1" />
+    <link rel="stylesheet" href="reviews.css?v=2" />
   </head>
   <body>
     <div class="auth-gate" id="authGate" role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
@@ -41,14 +41,16 @@
       <main class="reviews-view" id="reviewsView" hidden>
         <aside class="reviews-library" aria-label="Archivos en revisión">
           <div class="reviews-library-head"><span class="eyebrow">REVISIÓN DE MATERIAL</span><h1>Reviews<span class="reviews-count" id="reviewsCount">0</span></h1><p>Comentarios y anotaciones sobre tus fotos y videos.</p></div>
-          <button class="reviews-upload" id="reviewsUploadBtn" type="button"><span>＋</span><strong>Cargar foto o video</strong><small>Se guarda en este navegador</small></button>
+          <button class="reviews-upload" id="reviewsLinkBtn" type="button" aria-expanded="false" aria-controls="reviewsLinkForm"><span>↗</span><strong>Vincular desde Dropbox</strong><small>Sin duplicar el archivo</small></button>
+          <form class="reviews-link-form" id="reviewsLinkForm" hidden><label for="reviewsLinkUrl">ENLACE COMPARTIDO DEL ARCHIVO</label><input id="reviewsLinkUrl" type="url" required placeholder="https://www.dropbox.com/scl/fi/…" autocomplete="off" /><label for="reviewsLinkKind">TIPO DE ARCHIVO</label><select id="reviewsLinkKind"><option value="video">Video</option><option value="image">Foto</option></select><p id="reviewsLinkMessage" role="status">En Dropbox: Compartir → Copiar enlace del archivo. Para verlo acá, debe permitir acceso a cualquiera con el enlace.</p><div class="reviews-link-actions"><button type="button" id="reviewsLinkCancel">Cancelar</button><button type="submit">Vincular</button></div></form>
+          <button class="reviews-local-upload" id="reviewsUploadBtn" type="button">O cargar desde este equipo <span>＋</span></button>
           <input id="reviewsFileInput" type="file" accept="image/*,video/*" multiple hidden />
           <div class="reviews-list-heading">ARCHIVOS</div><div class="reviews-list" id="reviewsList"></div>
-          <p class="reviews-storage-note">Archivos y comentarios guardados en esta computadora. Todavía no se sincronizan con otras cuentas ni equipos.</p>
+          <p class="reviews-storage-note">Los enlaces de Dropbox apuntan al archivo original. La lista, los comentarios y dibujos siguen guardados solo en este navegador.</p>
         </aside>
         <section class="reviews-main" aria-label="Visor de revisión">
-          <div class="reviews-main-head"><div><span class="eyebrow">VISOR</span><h2 id="reviewsMediaTitle">Elegí un archivo</h2><p id="reviewsMediaDetails">Subí una foto o un video para empezar.</p></div><button class="reviews-remove-media" id="reviewsRemoveMedia" type="button" hidden>Eliminar archivo</button></div>
-          <div class="reviews-stage" id="reviewsStage"><div class="reviews-empty" id="reviewsEmpty"><span>▧</span><strong>Tu espacio de revisión</strong><p>Cargá material para reproducirlo, señalar correcciones y dejar comentarios.</p><button class="reviews-empty-action" id="reviewsEmptyUpload" type="button">＋ Cargar archivo</button></div><div class="reviews-media-surface" id="reviewsMediaSurface" hidden><img id="reviewsImage" alt="Archivo en revisión" hidden /><video id="reviewsVideo" preload="metadata" playsinline hidden></video><canvas id="reviewsCanvas" aria-label="Anotaciones sobre el archivo"></canvas></div></div>
+          <div class="reviews-main-head"><div><span class="eyebrow">VISOR</span><h2 id="reviewsMediaTitle">Elegí un archivo</h2><p id="reviewsMediaDetails">Vinculá Dropbox o cargá un archivo para empezar.</p></div><div class="reviews-main-actions"><a id="reviewsOpenSource" href="#" target="_blank" rel="noopener noreferrer" hidden>Ver en Dropbox ↗</a><button class="reviews-remove-media" id="reviewsRemoveMedia" type="button" hidden>Quitar de Reviews</button></div></div>
+          <div class="reviews-stage" id="reviewsStage"><div class="reviews-empty" id="reviewsEmpty"><span>▧</span><strong>Tu espacio de revisión</strong><p>Vinculá un archivo de Dropbox para señalar correcciones sin duplicar el video.</p><button class="reviews-empty-action" id="reviewsEmptyUpload" type="button">↗ Vincular Dropbox</button></div><div class="reviews-media-surface" id="reviewsMediaSurface" hidden><img id="reviewsImage" alt="Archivo en revisión" hidden /><video id="reviewsVideo" preload="metadata" playsinline hidden></video><canvas id="reviewsCanvas" aria-label="Anotaciones sobre el archivo"></canvas></div><div class="reviews-media-error" id="reviewsMediaError" hidden>Dropbox no permitió mostrar este archivo acá. Revisá que sea un enlace compartido con acceso para cualquiera y que el formato sea compatible. <a id="reviewsErrorSource" href="#" target="_blank" rel="noopener noreferrer">Abrir en Dropbox ↗</a></div></div>
           <div class="reviews-timeline" id="reviewsTimeline" hidden><button id="reviewsPlayBtn" class="reviews-play" type="button" aria-label="Reproducir">▶</button><button id="reviewsMuteBtn" class="reviews-play" type="button" aria-label="Silenciar">♪</button><span id="reviewsCurrentTime">00:00</span><div class="reviews-seek-wrap"><input id="reviewsSeek" type="range" min="0" max="1000" value="0" aria-label="Posición del video" /><div id="reviewsMarkers" class="reviews-markers"></div></div><span id="reviewsDuration">00:00</span></div>
           <div class="reviews-annotation-bar" id="reviewsAnnotationBar" hidden><button id="reviewsDrawBtn" class="reviews-tool" type="button" aria-pressed="false">✎ Dibujar</button><label class="reviews-color-label">Color <input id="reviewsColor" type="color" value="#ff3b30" aria-label="Color del dibujo" /></label><button id="reviewsUndoBtn" class="reviews-tool" type="button">↶ Deshacer trazo</button><button id="reviewsClearBtn" class="reviews-tool" type="button">Limpiar</button><span id="reviewsAnnotationHint">Pausá en un cuadro y dibujá para señalar la corrección.</span></div>
         </section>
@@ -141,7 +143,7 @@
     <div class="toast" id="toast" role="status"></div>
     <script src="layout.js?v=6"></script>
     <script src="app.js?v=61"></script>
-    <script src="reviews.js?v=1"></script>
+    <script src="reviews.js?v=2"></script>
     <script src="firebase-config.js?v=2"></script>
     <script>
       window.STORYBOARD_FIREBASE_CONFIG = window.STORYBOARD_FIREBASE_CONFIG || {

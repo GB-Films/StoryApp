@@ -45,6 +45,22 @@
     return hours ? `${hours}:${minutes}:${rest}` : `${minutes}:${rest}`;
   }
   function readableSize(bytes) { return bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`; }
+  function parseDropboxLink(input) {
+    let url;
+    try { url = new URL(input.trim()); } catch { throw new Error('Pegá un enlace válido de Dropbox.'); }
+    if (url.protocol !== 'https:' || !['dropbox.com', 'www.dropbox.com'].includes(url.hostname) || url.username || url.password || url.port || !/^\/(?:s\/[^/]+|scl\/fi\/[^/]+)(?:\/[^/]+)?\/?$/.test(url.pathname)) {
+      throw new Error('Usá un enlace compartido de un archivo de dropbox.com, no una carpeta ni otra página.');
+    }
+    url.hash = '';
+    url.searchParams.delete('dl'); url.searchParams.delete('raw');
+    const sourceUrl = url.href;
+    url.searchParams.set('raw', '1');
+    const pathParts = url.pathname.split('/').filter(Boolean);
+    let name = pathParts.length > (pathParts[0] === 's' ? 2 : 3) ? pathParts.at(-1) : 'Archivo de Dropbox';
+    if (name) { try { name = decodeURIComponent(name); } catch { /* Keep the safe encoded name. */ } }
+    if (!name || name === 'fi' || name === 's') name = 'Archivo de Dropbox';
+    return { sourceUrl, streamUrl: url.href, name };
+  }
   function isVideo() { return state.active?.kind === 'video'; }
   function currentTime() { return isVideo() ? Math.max(0, video.currentTime || 0) : 0; }
   function showStatus(message) { $('#reviewsCommentContext').textContent = message; }
@@ -93,7 +109,7 @@
       const icon = document.createElement('span'); icon.className = 'reviews-file-icon'; icon.textContent = record.kind === 'video' ? '▶' : '▧';
       const copy = document.createElement('span'); copy.className = 'reviews-file-copy';
       const name = document.createElement('strong'); name.textContent = record.name;
-      const details = document.createElement('small'); details.textContent = `${record.kind === 'video' ? 'VIDEO' : 'FOTO'} · ${record.comments.length} comentario${record.comments.length === 1 ? '' : 's'}`;
+      const details = document.createElement('small'); details.textContent = `${record.source === 'dropbox' ? 'DROPBOX · ' : ''}${record.kind === 'video' ? 'VIDEO' : 'FOTO'} · ${record.comments.length} comentario${record.comments.length === 1 ? '' : 's'}`;
       copy.append(name, details); button.append(icon, copy); button.addEventListener('click', () => selectRecord(record.id)); list.append(button);
     }
   }
@@ -144,22 +160,32 @@
     localStorage.setItem(ACTIVE_KEY, id);
     renderList(); renderCommentList();
     $('#reviewsMediaTitle').textContent = record.name;
-    $('#reviewsMediaDetails').textContent = `${record.kind === 'video' ? 'Video' : 'Foto'} · ${readableSize(record.size)}`;
+    $('#reviewsMediaDetails').textContent = record.source === 'dropbox' ? `${record.kind === 'video' ? 'Video' : 'Foto'} · Dropbox · sin copia local` : `${record.kind === 'video' ? 'Video' : 'Foto'} · ${readableSize(record.size)}`;
+    $('#reviewsMediaSurface').style.setProperty('--review-aspect', String(16 / 9));
+    $('#reviewsMediaError').hidden = true;
+    $('#reviewsOpenSource').hidden = record.source !== 'dropbox';
+    if (record.source === 'dropbox') { $('#reviewsOpenSource').href = record.sourceUrl; $('#reviewsErrorSource').href = record.sourceUrl; }
     $('#reviewsEmpty').hidden = true; $('#reviewsMediaSurface').hidden = false;
     $('#reviewsAnnotationBar').hidden = false; $('#reviewsCommentForm').hidden = false; $('#reviewsRemoveMedia').hidden = false;
     $('#reviewsTimeline').hidden = record.kind !== 'video';
     $('#reviewsDrawBtn').classList.remove('is-active'); $('#reviewsDrawBtn').setAttribute('aria-pressed', 'false');
     canvas.classList.remove('is-drawing');
     showStatus(record.kind === 'video' ? 'Los comentarios se guardan en el segundo actual.' : 'Los comentarios se guardan sobre esta foto.');
+    image.hidden = record.kind !== 'image'; video.hidden = record.kind !== 'video';
     try {
+      if (record.source === 'dropbox') {
+        const link = parseDropboxLink(record.sourceUrl);
+        if (record.kind === 'video') video.src = link.streamUrl; else image.src = link.streamUrl;
+        updateClock(); renderMarkers(); requestAnimationFrame(resizeCanvas);
+        return;
+      }
       const blob = await getMedia(id);
       if (state.active?.id !== id) return;
       if (!blob) throw new Error('El archivo ya no está disponible en este navegador');
       state.mediaUrl = URL.createObjectURL(blob);
-      image.hidden = record.kind !== 'image'; video.hidden = record.kind !== 'video';
       if (record.kind === 'video') video.src = state.mediaUrl; else image.src = state.mediaUrl;
       updateClock(); renderMarkers(); requestAnimationFrame(resizeCanvas);
-    } catch (error) { showStatus(error.message || 'No se pudo abrir el archivo'); }
+    } catch (error) { showStatus(error.message || 'No se pudo abrir el archivo'); $('#reviewsMediaError').hidden = false; }
   }
   function selectComment(id) {
     const comment = state.active?.comments.find(entry => entry.id === id); if (!comment) return;
@@ -195,8 +221,25 @@
       } catch (error) { showStatus(`No se pudo guardar ${file.name}. Puede faltar espacio en este navegador.`); console.error(error); }
     }
   }
+  async function addDropboxLink(event) {
+    event.preventDefault();
+    const message = $('#reviewsLinkMessage'); message.classList.remove('is-error');
+    let link;
+    try { link = parseDropboxLink($('#reviewsLinkUrl').value); }
+    catch (error) { message.textContent = error.message; message.classList.add('is-error'); return; }
+    const existing = state.records.find(record => record.source === 'dropbox' && record.sourceUrl === link.sourceUrl);
+    if (existing) { await selectRecord(existing.id); message.textContent = 'Este archivo ya estaba vinculado; lo abrimos en el visor.'; return; }
+    const now = new Date().toISOString();
+    const record = { id: crypto.randomUUID(), name: link.name, kind: $('#reviewsLinkKind').value, source: 'dropbox', sourceUrl: link.sourceUrl, size: 0, createdAt: now, updatedAt: now, comments: [] };
+    try {
+      await saveRecord(record);
+      state.records.unshift(record); await selectRecord(record.id);
+      $('#reviewsLinkUrl').value = ''; setLinkFormOpen(false);
+      message.textContent = 'En Dropbox: Compartir → Copiar enlace del archivo. Para verlo acá, debe permitir acceso a cualquiera con el enlace.';
+    } catch (error) { message.textContent = 'No se pudo guardar el enlace en este navegador.'; message.classList.add('is-error'); console.error(error); }
+  }
   async function removeActive() {
-    const record = state.active; if (!record || !confirm(`¿Eliminar “${record.name}” y todos sus comentarios de este navegador?`)) return;
+    const record = state.active; if (!record || !confirm(`¿Quitar “${record.name}” y sus comentarios de este navegador?${record.source === 'dropbox' ? ' El archivo original de Dropbox no se eliminará.' : ''}`)) return;
     try {
       const db = await openDatabase();
       await new Promise((resolve, reject) => {
@@ -207,9 +250,9 @@
       stopMedia(); state.records = state.records.filter(entry => entry.id !== record.id); state.active = null; localStorage.removeItem(ACTIVE_KEY);
       if (state.records.length) await selectRecord(state.records[0].id);
       else {
-        $('#reviewsMediaTitle').textContent = 'Elegí un archivo'; $('#reviewsMediaDetails').textContent = 'Subí una foto o un video para empezar.';
+        $('#reviewsMediaTitle').textContent = 'Elegí un archivo'; $('#reviewsMediaDetails').textContent = 'Vinculá Dropbox o cargá un archivo para empezar.';
         $('#reviewsEmpty').hidden = false; $('#reviewsMediaSurface').hidden = true; $('#reviewsTimeline').hidden = true;
-        $('#reviewsAnnotationBar').hidden = true; $('#reviewsCommentForm').hidden = true; $('#reviewsRemoveMedia').hidden = true;
+        $('#reviewsAnnotationBar').hidden = true; $('#reviewsCommentForm').hidden = true; $('#reviewsRemoveMedia').hidden = true; $('#reviewsOpenSource').hidden = true; $('#reviewsMediaError').hidden = true;
         showStatus('Elegí un archivo para ver sus comentarios.'); renderList(); renderCommentList();
       }
     } catch (error) { showStatus('No se pudo eliminar el archivo.'); console.error(error); }
@@ -237,7 +280,12 @@
   $('#storyboardsNav').addEventListener('click', () => video.pause());
   document.querySelector('.brand').addEventListener('click', () => video.pause());
   $('#reviewsUploadBtn').addEventListener('click', () => $('#reviewsFileInput').click());
-  $('#reviewsEmptyUpload').addEventListener('click', () => $('#reviewsFileInput').click());
+  function setLinkFormOpen(open) { $('#reviewsLinkForm').hidden = !open; $('#reviewsLinkBtn').setAttribute('aria-expanded', String(open)); $('#reviewsView .reviews-library').classList.toggle('is-linking', open); if (open) $('#reviewsLinkUrl').focus(); }
+  $('#reviewsLinkBtn').addEventListener('click', () => setLinkFormOpen($('#reviewsLinkForm').hidden));
+  $('#reviewsEmptyUpload').addEventListener('click', () => setLinkFormOpen(true));
+  $('#reviewsLinkCancel').addEventListener('click', () => setLinkFormOpen(false));
+  $('#reviewsLinkForm').addEventListener('submit', addDropboxLink);
+  $('#reviewsLinkUrl').addEventListener('input', () => { const message = $('#reviewsLinkMessage'); message.classList.remove('is-error'); message.textContent = 'En Dropbox: Compartir → Copiar enlace del archivo. Para verlo acá, debe permitir acceso a cualquiera con el enlace.'; const value = $('#reviewsLinkUrl').value.toLowerCase().split('?')[0]; if (/\.(?:jpg|jpeg|png|webp|gif|avif|heic|bmp)$/.test(value)) $('#reviewsLinkKind').value = 'image'; else if (/\.(?:mp4|mov|m4v|webm|mkv)$/.test(value)) $('#reviewsLinkKind').value = 'video'; });
   $('#reviewsFileInput').addEventListener('change', event => { addFiles([...event.target.files]); event.target.value = ''; });
   $('#reviewsRemoveMedia').addEventListener('click', removeActive);
   $('#reviewsStage').addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) { event.preventDefault(); $('#reviewsStage').classList.add('is-drop-target'); } });
@@ -252,7 +300,9 @@
   video.addEventListener('timeupdate', updateClock);
   video.addEventListener('play', () => { state.activeCommentId = null; state.drawing = false; canvas.classList.remove('is-drawing'); $('#reviewsDrawBtn').classList.remove('is-active'); $('#reviewsDrawBtn').setAttribute('aria-pressed', 'false'); redraw(); renderCommentList(); updateClock(); });
   video.addEventListener('pause', updateClock);
-  video.addEventListener('error', () => showStatus('El formato del video no se puede reproducir en este navegador. Probá con MP4 (H.264) o WebM.'));
+  const mediaError = () => { if (state.active?.source === 'dropbox') { $('#reviewsMediaError').hidden = false; showStatus('No se pudo abrir el enlace de Dropbox. Revisá el acceso y el formato del archivo.'); } else showStatus('El formato no se puede reproducir en este navegador. Probá con MP4 (H.264), WebM o una foto compatible.'); };
+  video.addEventListener('error', mediaError);
+  image.addEventListener('error', mediaError);
   $('#reviewsDrawBtn').addEventListener('click', () => { if (!state.active) return; video.pause(); state.activeCommentId = null; state.drawing = !state.drawing; canvas.classList.toggle('is-drawing', state.drawing); $('#reviewsDrawBtn').classList.toggle('is-active', state.drawing); $('#reviewsDrawBtn').setAttribute('aria-pressed', String(state.drawing)); redraw(); });
   $('#reviewsUndoBtn').addEventListener('click', () => { state.draft.pop(); redraw(); });
   $('#reviewsClearBtn').addEventListener('click', clearAnnotation);

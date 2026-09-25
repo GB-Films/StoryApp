@@ -4,11 +4,13 @@ Un espacio de trabajo visual de GB Films con dos secciones: Storyboards para org
 
 ## Reviews
 
+- Para revisar un archivo ya guardado en Dropbox, compartí **ese archivo** y pegá su enlace en «Vincular desde Dropbox». Reviews conserva el enlace y reproduce el original; no lo sube ni crea otra copia. Dropbox recomienda `raw=1` para mostrar directamente el contenido de un enlace compartido, y la app lo aplica al reproducir. También se puede abrir el enlace original desde el visor.
+- La vista directa sin conexión OAuth requiere un enlace accesible para cualquiera que lo tenga, sin contraseña ni restricción de equipo. Quien obtenga ese enlace podrá abrir el archivo en Dropbox. Si la política de la productora exige enlaces privados, hará falta una integración autenticada de Dropbox; esta modalidad por enlace no evita sus permisos ni garantiza que todos los formatos de video se reproduzcan en el navegador.
 - Cargá una foto o un video desde la sección Reviews; cada archivo tiene sus propios comentarios.
 - En video, cada comentario queda asociado al segundo actual y aparece como marca en la línea de tiempo. Hacer clic en un comentario vuelve a ese momento.
 - Dibujá sobre el cuadro antes de publicar un comentario. El trazo se guarda con ese comentario y se muestra al seleccionarlo; el archivo original no se modifica.
 - Podés resolver, reabrir o eliminar comentarios, y eliminar un archivo con todos sus comentarios.
-- Esta primera versión guarda archivos y comentarios en IndexedDB, dentro del navegador y el perfil donde se cargaron. No hay sincronización entre computadoras ni acceso compartido por enlace todavía. La capacidad depende del espacio disponible en el navegador. Para video, usá un formato compatible con el navegador (por ejemplo, MP4/H.264 o WebM).
+- Esta primera versión guarda la lista, los enlaces y comentarios en IndexedDB, dentro del navegador y el perfil donde se cargaron. Los archivos cargados desde el equipo también se guardan ahí; los vinculados a Dropbox **no**. No hay sincronización de reviews o comentarios entre computadoras todavía. La capacidad local depende del espacio disponible en el navegador. Para video, usá un formato compatible con el navegador (por ejemplo, MP4/H.264 o WebM).
 
 ## Funciones
 

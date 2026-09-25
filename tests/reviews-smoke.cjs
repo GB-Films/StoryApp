@@ -66,8 +66,44 @@ const server = http.createServer((request, response) => {
     assert.equal(await page.locator('#dashboardView').isVisible(), true);
     await page.locator('#reviewsNav').click();
     assert.equal(await page.locator('#reviewsCommentCount').textContent(), '1');
-    const videoSupported = await page.evaluate(async () => {
-      if (!window.MediaRecorder || !MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) return false;
+    await page.route('https://www.dropbox.com/scl/fi/**', route => route.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg }));
+    await page.locator('#reviewsLinkBtn').click();
+    await page.locator('#reviewsLinkUrl').fill('https://notdropbox.com/scl/fi/id/plano.jpg');
+    await page.locator('#reviewsLinkForm button[type=submit]').click();
+    assert.match(await page.locator('#reviewsLinkMessage').textContent(), /dropbox.com/);
+    assert.equal(await page.locator('#reviewsCount').textContent(), '1', 'invalid domains cannot be linked');
+    await page.locator('#reviewsLinkUrl').fill('https://www.dropbox.com/scl/fo/folderid?rlkey=abc123');
+    await page.locator('#reviewsLinkForm button[type=submit]').click();
+    assert.equal(await page.locator('#reviewsCount').textContent(), '1', 'folder links cannot be linked as media');
+    await page.locator('#reviewsLinkUrl').fill('https://www.dropbox.com/scl/fi/id/plano.jpg?rlkey=abc123&dl=0');
+    assert.equal(await page.locator('#reviewsLinkKind').inputValue(), 'image');
+    await page.locator('#reviewsLinkForm button[type=submit]').click();
+    await page.waitForFunction(() => document.querySelector('#reviewsCount').textContent === '2');
+    await page.waitForFunction(() => document.querySelector('#reviewsImage').naturalWidth === 360);
+    assert.match(await page.locator('#reviewsImage').getAttribute('src'), /rlkey=abc123&raw=1/);
+    assert.equal(await page.locator('#reviewsOpenSource').isVisible(), true);
+    assert.match(await page.locator('#reviewsOpenSource').getAttribute('href'), /rlkey=abc123$/);
+    assert.equal(await page.locator('#reviewsMediaError').isVisible(), false);
+    await page.locator('#reviewsLinkBtn').click();
+    await page.locator('#reviewsLinkUrl').fill('https://www.dropbox.com/scl/fi/id/plano.jpg?rlkey=abc123&raw=1');
+    await page.locator('#reviewsLinkForm button[type=submit]').click();
+    assert.equal(await page.locator('#reviewsCount').textContent(), '2', 'the same Dropbox file is not linked twice');
+    await page.locator('#reviewsLinkCancel').click();
+    await page.locator('#reviewsCommentText').fill('Corrección sobre Dropbox');
+    await page.locator('#reviewsCommentForm button[type=submit]').click();
+    await page.waitForFunction(() => document.querySelector('#reviewsCommentCount').textContent === '1');
+    await page.reload(); await unlock(); await page.locator('#reviewsNav').click();
+    await page.waitForFunction(() => document.querySelector('#reviewsImage').naturalWidth === 360);
+    assert.match(await page.locator('.reviews-comment-text').first().textContent(), /Corrección sobre Dropbox/);
+    const dropboxStorage = await page.evaluate(async () => new Promise((resolve, reject) => {
+      const request = indexedDB.open('gb-studio-reviews-v1');
+      request.onsuccess = () => { const tx = request.result.transaction(['items', 'media']); const item = tx.objectStore('items').getAll(); const media = tx.objectStore('media').getAll(); tx.oncomplete = () => resolve({ item: item.result.find(record => record.source === 'dropbox'), mediaCount: media.result.length }); tx.onerror = () => reject(tx.error); };
+      request.onerror = () => reject(request.error);
+    }));
+    assert.equal(dropboxStorage.item.comments[0].text, 'Corrección sobre Dropbox');
+    assert.equal(dropboxStorage.mediaCount, 1, 'the Dropbox asset is not copied to IndexedDB');
+    const videoFixture = await page.evaluate(async () => {
+      if (!window.MediaRecorder || !MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) return null;
       const source = document.createElement('canvas'); source.width = 320; source.height = 180;
       const graphics = source.getContext('2d'); graphics.fillStyle = '#547d8e'; graphics.fillRect(0, 0, 320, 180);
       const stream = source.captureStream(10);
@@ -79,11 +115,12 @@ const server = http.createServer((request, response) => {
       recorder.start(); await new Promise(resolve => setTimeout(resolve, 1100)); clearInterval(animation); recorder.stop(); await done;
       stream.getTracks().forEach(track => track.stop());
       const input = document.querySelector('#reviewsFileInput'); const transfer = new DataTransfer();
-      transfer.items.add(new File(chunks, 'revision.webm', { type: 'video/webm' }));
+      const file = new File(chunks, 'revision.webm', { type: 'video/webm' });
+      transfer.items.add(file);
       input.files = transfer.files; input.dispatchEvent(new Event('change', { bubbles: true }));
-      return true;
+      return new Promise(resolve => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(',')[1]); reader.readAsDataURL(file); });
     });
-    assert.equal(videoSupported, true, 'the test browser can generate a video fixture');
+    assert.ok(videoFixture, 'the test browser can generate a video fixture');
     await page.locator('#reviewsVideo').waitFor({ state: 'visible' });
     await page.waitForFunction(() => document.querySelector('#reviewsVideo').readyState >= 1);
     await page.locator('#reviewsCommentText').fill('Revisar el corte');
@@ -112,13 +149,31 @@ const server = http.createServer((request, response) => {
       const request = indexedDB.open('gb-studio-reviews-v1');
       request.onsuccess = () => { const tx = request.result.transaction('items'); const get = tx.objectStore('items').getAll(); get.onsuccess = () => resolve(get.result.find(item => item.kind === 'video').comments.some(comment => comment.strokes.length)); };
     })), true, 'video annotation is saved with its comment');
+    await page.route('https://www.dropbox.com/scl/fi/**', route => route.request().url().includes('revision.webm')
+      ? route.fulfill({ status: 200, contentType: 'video/webm', body: Buffer.from(videoFixture, 'base64') })
+      : route.fulfill({ status: 200, contentType: 'image/svg+xml', body: svg }));
+    await page.locator('#reviewsLinkBtn').click();
+    await page.locator('#reviewsLinkUrl').fill('https://www.dropbox.com/scl/fi/videoid/revision.webm?rlkey=xyz&dl=0');
+    assert.equal(await page.locator('#reviewsLinkKind').inputValue(), 'video');
+    await page.locator('#reviewsLinkForm button[type=submit]').click();
+    await page.waitForFunction(() => document.querySelector('#reviewsVideo').getAttribute('src')?.includes('dropbox.com'));
+    await page.waitForFunction(() => document.querySelector('#reviewsVideo').duration > .5);
+    assert.match(await page.locator('#reviewsVideo').getAttribute('src'), /rlkey=xyz&raw=1/);
+    await page.locator('#reviewsCommentText').fill('Cambio en video de Dropbox');
+    await page.locator('#reviewsCommentForm button[type=submit]').click();
+    await page.waitForFunction(() => document.querySelector('#reviewsCommentCount').textContent === '1');
+    assert.equal(await page.locator('.reviews-marker').count(), 1, 'Dropbox video has timed comments');
     if (process.env.REVIEW_SCREENSHOT) await page.screenshot({ path: process.env.REVIEW_SCREENSHOT, fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     assert.equal(await page.locator('#reviewsNav').isVisible(), true);
     assert.equal(await page.locator('#reviewsCommentForm').isVisible(), true);
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true, 'mobile review layout fits viewport width');
+    await page.locator('#reviewsLinkBtn').click();
+    assert.equal(await page.locator('#reviewsLinkForm').isVisible(), true);
+    assert.equal(await page.evaluate(() => document.querySelector('#reviewsLinkForm').getBoundingClientRect().bottom <= document.querySelector('.reviews-library').getBoundingClientRect().bottom + 1), true, 'Dropbox link form fits inside its library panel');
     if (process.env.REVIEW_MOBILE_SCREENSHOT) await page.screenshot({ path: process.env.REVIEW_MOBILE_SCREENSHOT, fullPage: true });
+    const mobileOverflow = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: window.innerWidth, elements: [...document.querySelectorAll('#reviewsView *')].filter(element => element.getBoundingClientRect().right > window.innerWidth + 1).slice(0, 8).map(element => ({ tag: element.tagName, id: element.id, className: String(element.className), right: element.getBoundingClientRect().right })) }));
+    assert.ok(mobileOverflow.width <= mobileOverflow.viewport + 1, `mobile review layout fits viewport width: ${JSON.stringify(mobileOverflow)}`);
     assert.deepEqual(errors, [], `browser errors: ${errors.join('; ')}`);
-    console.log('Reviews smoke passed: image and video upload, drawing, comments, timeline, reload, and resolve.');
+    console.log('Reviews smoke passed: local and Dropbox image/video, drawing, comments, timeline, reload, and resolve.');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
